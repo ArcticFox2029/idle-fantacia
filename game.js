@@ -48,7 +48,7 @@ let pendingWrites = 0;
 const I18N_TABLES = () => [
   MONTH_NAMES, SEASONS, EQUIP_SLOTS, ITEMS, SHOP, SKILLS, LOCATIONS, SEED_SHOP,
   MOMENTUM_TIERS, EVENTS, VILLAGERS, REL_STAGES, REL_BONUS, CHILD_TRACKS, TITLES,
-  TITLES_SPECIAL, ACHIEVEMENTS, ARMOR_SETS, SLAYER_TIERS, SLAYER_REWARDS, ELITE_MODES,
+  ACHIEVEMENTS, ARMOR_SETS, SLAYER_TIERS, SLAYER_REWARDS, ELITE_MODES,
   COMBAT_STATS, AUTO_EAT_OPTIONS, PET_SPECIES, PET_GRADES, COMPANY_SIZES, COMPANIES,
   SHOP_TYPES, SHOP_TIERS, STAFF_ROLES, PROPERTIES, FURNITURE, TAX_KINDS, AUTO_CATEGORIES,
   GUILD_TIERS, GUILD_RANKS, NOTIF_KINDS,
@@ -675,6 +675,13 @@ function migrate(p) {
 
   repairOverpopulatedFamily(p);
 
+  if (p.v === 51) {
+    p.v = 52;
+    /* Nothing to migrate. The version moves because ?v= in index.html is the ONLY cache-buster the
+     * published site has, and this batch changed game.js without changing the save format — leaving
+     * it at 51 would serve every existing player the old code from cache. estateMonth defaults
+     * through `|| 0`, and the title rewrite reads the same fields it always did. */
+  }
   return p.v === GAME_VERSION ? p : null;
 }
 
@@ -1382,6 +1389,13 @@ function familyUpkeepDay() {
     P.family.noteDay = Math.floor(P.gameDays);
     toast(`👨‍👩‍👧 ค่าเลี้ยงดูครอบครัววันนี้ ${due.toLocaleString()} 💰`, "", "family");
   }
+
+  /* 🐛 [owner 2026-08-22: "ตอนแรกเงินติดลบขึ้นข้อมูลแดง พอเงินกลับมาปกติ ตัวแดงไม่หาย"] The arrears
+   * DID clear — the first fully-paid day zeroes them. What did not clear was the screen: onNewDay
+   * repaints only the bank view, and every other daily system repaints its own (runShopsDay and
+   * runEstatesDay both end this way). This one did not, so the family page kept showing a debt that
+   * had been settled, which reads as the game refusing to let go of it. */
+  if (view.kind === "family") renderView();
 }
 
 function childBirthRoll() {
@@ -1623,28 +1637,61 @@ function completeQuest(qid) {
 
 /* The player's current title. Computed, never stored — see the TITLES note in data.js.
  *
- * A special title outranks the counted one: it says something the number cannot, and a player who
- * has cleared every slayer mark should not read as "นักเดินทางผู้ช่ำชอง" like everyone else on six. */
-function titleFor(p = P) {
-  if (!p) return null;
-  const pr = achievementProgress();
+ * Each track is measured against its OWN pool, which is the whole point of the rewrite: achievements
+ * are 18, marks are 196, and species-mastered is 49. Mixing them is what let the crown arrive at 8%
+ * of the game. */
+function titleProgress(p = P) {
+  const rows = slayerRows();
+  const marksDone = rows.filter((r) => p.slayer?.[r.mark]).length;
   const ach = p.achieved || {};
-  for (const s of TITLES_SPECIAL) {
-    try {
-      if (s.test(pr, ach, p, baneCount(p))) return { name: s.name, icon: s.icon, special: true, desc: s.desc, done: pr.done };
-    } catch (e) { /* a broken test must not cost the player their name */ }
-  }
-  const tier = TITLES.find((x) => pr.done >= x.at) || TITLES[TITLES.length - 1];
-  return { name: tier.name, icon: tier.icon, special: false, at: tier.at, done: pr.done };
+  const species = new Set(rows.map((r) => `${r.loc.id}:${r.i}`)).size;
+  return {
+    rows, marksDone, marksTotal: rows.length,
+    ach: Object.keys(ach).length, achTotal: ACHIEVEMENTS.length,
+    bane: baneCount(p), baneTotal: species,
+    work: ["first_steps", "worker", "tireless"].every((id) => ach[id]) ? 1 : 0,
+    reb: p.rebirths || 0,
+  };
 }
 
-/* What it takes to reach the next counted tier, for the achievements page. Null once the top is
- * held — "อีก 0 รายการ" reads as a bug rather than as a finished set. */
-function nextTitle(p = P) {
-  const done = achievementProgress().done;
-  const higher = TITLES.filter((x) => x.at > done).sort((a, b) => a.at - b.at)[0];
-  return higher ? { ...higher, need: higher.at - done } : null;
+/* What one title asks for, and how far along it is — so a caller never has to know which pool a
+ * given track is measured against. `need: null` means "all of them", whatever that is today. */
+function titleTrack(tt, pr) {
+  const at = { ach: pr.ach, mark: pr.marksDone, bane: pr.bane, work: pr.work, reb: pr.reb }[tt.track];
+  const total = { ach: pr.achTotal, mark: pr.marksTotal, bane: pr.baneTotal, work: 1, reb: null }[tt.track];
+  const need = tt.need == null ? total : tt.need;
+  return { at: at || 0, need, total, held: (at || 0) >= need };
 }
+
+function titleFor(p = P) {
+  if (!p) return null;
+  const pr = titleProgress(p);
+  let best = null;
+  for (const tt of TITLES) {
+    if (!titleTrack(tt, pr).held) continue;
+    if (!best || tt.rank > best.rank) best = tt;
+  }
+  /* Rank 0 is held by everyone, so this only fires on a profile with no TITLES at all. */
+  if (!best) return null;
+  const tr = titleTrack(best, pr);
+  return { ...best, at: tr.at, need: tr.need, progress: pr };
+}
+
+/* The cheapest title not yet held — "cheapest" by how much is still missing on its own track, not
+ * by rank, because the three ladders are not comparable in units. Null once everything is held. */
+function nextTitle(p = P) {
+  const pr = titleProgress(p);
+  let best = null;
+  for (const tt of TITLES) {
+    const tr = titleTrack(tt, pr);
+    if (tr.held) continue;
+    const left = tr.need - tr.at;
+    if (!best || left < best.need) best = { ...tt, need: left, at: tr.at, of: tr.need };
+  }
+  return best;
+}
+
+
 
 /* Slayer marks: one per monster per difficulty, each worth a permanent stat. Summed on demand, so
  * nothing but the flag is stored and retuning the table retunes every save at once — but totalDmg()
@@ -2821,6 +2868,16 @@ function onNewDay(date) {
 
 function onNewMonth(date) {
   familyUpkeepPost();
+  estateRentPost();
+}
+
+/* One ledger line a month for rent, the counterpart of familyUpkeepPost. Posts what actually
+ * arrived, and posts nothing at all in a month without property rather than a zero. */
+function estateRentPost() {
+  const earned = Math.round(P.estateMonth || 0);
+  P.estateMonth = 0;
+  if (earned <= 0) return;
+  ledger("🏘️", `ค่าเช่าอสังหา (ทั้งเดือน)`, earned);
 }
 
 /* One ledger line a month for the household, instead of one a day drowning the dividends beside it.
@@ -2841,6 +2898,7 @@ function familyUpkeepPost() {
 
 function onNewYear(date) {
   familyUpkeepPost();   // day 1 of month 1 comes here instead of onNewMonth, so the month still closes
+  estateRentPost();
   bankTidySlips();
   toast(`🎆 ขึ้นปีใหม่ — ปีที่ ${date.year} ของมิธวูด`, "levelup");
   settleTaxYear(date);
@@ -5197,14 +5255,20 @@ function vitalsModel() {
     /* Named `epithet`, not `title`: this object already carries a `title` for the page heading, and
      * the later key silently won — the vitals row read the view's name and the tooltip vanished. A
      * collision that produces plausible output rather than an error is worth the longer word. */
-    epithet: ti && {
-      icon: ti.icon, name: ti.name, special: !!ti.special,
-      title: ti.special
-        ? `ฉายาพิเศษ — ${ti.desc}\nปลดความสำเร็จแล้ว ${ti.done} รายการ`
-        : (() => { const nx = nextTitle();
-                   return `ปลดความสำเร็จแล้ว ${ti.done} รายการ`
-                        + (nx ? `\nอีก ${nx.need} รายการเป็น ${nx.icon} ${nx.name}` : "\nสูงสุดแล้ว"); })(),
-    },
+      epithet: ti && {
+        icon: ti.icon, name: ti.name,
+        /* Every title states what earned it, and the tooltip carries all three tracks separately —
+           collapsing them into one number is the bug this replaced. */
+        special: ti.track === "bane",
+        title: (() => {
+          const pr = ti.progress, nx = nextTitle();
+          return `${ti.desc}\n`
+            + `📖 ความสำเร็จ ${pr.ach}/${pr.achTotal}`
+            + ` · 🗡️ รอยล่า ${pr.marksDone}/${pr.marksTotal}`
+            + ` · ☠️ สายพันธุ์ที่ล่าจนสุด ${pr.bane}/${pr.baneTotal}`
+            + (nx ? `\nอีก ${nx.need} เป็น ${nx.icon} ${nx.name}` : "\nถือครบทุกฉายาแล้ว");
+        })(),
+      },
     hp: { now: Math.max(0, P.hp), max, pct: hpPct,
           // The three-step colour is the one signal that says "stop and eat" without reading a
           // number, so it stays exactly as it was rather than becoming a theme colour.
@@ -6035,8 +6099,11 @@ function renderFarm() {
             · ได้ ×${yieldN} (❤️${ITEMS[cropId].heal}) · เมล็ดคืน ${a.seedBack[0]}-${a.seedBack[1]}</span>
         </span></button>`;
   }).join("");
-  picker.innerHTML = `<div class="seed-head">🌱 เลือกเมล็ดที่จะปลูก</div>
-    <div class="seed-list">${opts}</div>
+  /* 🎯 [owner 2026-08-22] "ที่พับได้ มันต้องมี เลือกเมล็ดที่จะปลูก และแผงเมล็ดพันธุ์ที่ซื้อ" — both
+     lists fold away together, because both are things you set occasionally and then leave alone.
+     What stays out in the open is plant-all and harvest-all: those are the page's actual verbs, and
+     burying them behind a caret to save room would cost more than the room is worth. */
+  picker.innerHTML = `<div class="seed-fold"></div>
     <div class="farm-actions">
       <button class="farm-btn plant"${pick ? "" : " disabled"} data-plant-all>🌱 ปลูกทุกแปลงที่ว่าง</button>
       <button class="farm-btn harvest"${ready ? "" : " disabled"} data-harvest-all>🌻 เก็บเกี่ยวทั้งหมด (${ready})</button>
@@ -6060,6 +6127,7 @@ function renderFarm() {
       }).join("") : ""}
     </div>`;
   extra.appendChild(picker);
+  renderSeedPanel(picker.querySelector(".seed-fold"), lvl, opts, pick);
   picker.querySelectorAll("[data-seed]").forEach((b) => b.onclick = () => {
     farmSeed = b.dataset.seed;
     renderFarm();
@@ -6132,31 +6200,84 @@ function renderFarm() {
     grid.appendChild(card);
   }
 
-  // --- seed stall ---
-  const stallHead = document.createElement("div");
-  stallHead.className = "area-head";
-  stallHead.textContent = "🌱 แผงเมล็ดพันธุ์ — หรือจะไปล่ามอนสเตอร์เอาเมล็ดฟรีก็ได้";
-  grid.appendChild(stallHead);
-  for (const entry of SEED_SHOP) {
-    const item = ITEMS[entry.item];
-    const open = lvl >= entry.level;
-    const card = document.createElement("div");
-    card.className = "action-card seed-card" + (open ? "" : " locked");
-    const where = sourceLabel(entry.item);
-    card.innerHTML = `
-      <div class="head"><div class="name">${item.icon} ${item.name}</div>
-        <div class="req">${open ? `${entry.price.toLocaleString()} 💰` : `🔒 เลเวล ${entry.level}`}</div></div>
-      <div class="detail">มีอยู่ ${P.inv[entry.item] || 0} เมล็ด${where ? ` · ดรอปจาก${escapeHtml(where)}` : ""}</div>
-      ${open ? `<div class="seed-buy">
-        <button data-buy="1">ซื้อ 1</button>
-        <button data-buy="10">ซื้อ 10 (${(entry.price * 10).toLocaleString()} 💰)</button></div>` : ""}`;
-    card.querySelectorAll("[data-buy]").forEach((b) => b.onclick = (e) => {
-      e.stopPropagation();
-      buySeed(entry.item, Number(b.dataset.buy));
-    });
-    grid.appendChild(card);
-  }
+  /* 🎯 [owner 2026-08-22] "หน้าปลูกพืช ตรงเมล็ดพันธุ์ อยากให้ปรับเป็น bullet เหมือนอาหาร เพราะเราไม่ได้
+   * ปรับบ่อยๆ" — the stall used to be one full action-card per seed, right here, pushing the plots
+   * themselves off a phone screen. It now lives in the collapsible panel above, next to the
+   * what-to-plant list, so this end of the page is nothing but the plots. */
   highlightAction = null;
+}
+
+let seedOpen = false;
+
+/* Both seed lists in one collapsible panel: what to plant, and what to buy. Collapsed by default —
+ * the summary answers the question asked in passing (what am I planting, and do I have any), and
+ * the two lists are long enough together to push the plots themselves off a phone screen. */
+function renderSeedPanel(host, lvl, opts, pick) {
+  if (!host) return;
+  const panel = document.createElement("div");
+  panel.className = "equip-panel" + (seedOpen ? " open" : "");
+  const held = SEED_SHOP.filter((e) => (P.inv[e.item] || 0) > 0).length;
+  const chosen = pick ? farmAction(pick) : null;
+  const chosenCrop = chosen ? ITEMS[Object.entries(chosen.outputs)[0][0]] : null;
+  const seedOfPick = chosen ? Object.keys(chosen.inputs)[0] : null;
+  const haveOfPick = seedOfPick ? (P.inv[seedOfPick] || 0) : 0;
+
+  const summary = `
+    <button class="equip-summary" id="seed-toggle">
+      <span class="caret">${seedOpen ? "▾" : "▸"}</span>
+      <span class="worn-row">
+        <span class="worn${chosenCrop ? " on" : ""}"
+          title="${chosenCrop ? `กำลังจะปลูก ${escapeHtml(chosen.name)}` : "ยังไม่ได้เลือกเมล็ด"}">${chosenCrop ? chosenCrop.icon : "🌱"}</span>
+      </span>
+      ${seedOpen ? `
+      <span class="sum-stats">
+        <span class="stat-chip${chosenCrop ? "" : " missing"}">🌱 ${chosen ? escapeHtml(chosen.name) : "ยังไม่ได้เลือก"}</span>
+        <span class="stat-chip${haveOfPick ? "" : " missing"}">มีเมล็ด ${haveOfPick}</span>
+        <span class="stat-chip">🏪 ถือไว้ ${held}/${SEED_SHOP.length} ชนิด</span>
+      </span>
+      <span class="expand-hint">ย่อ</span>` : `
+      <span class="sum-stats">
+        <span class="stat-chip${chosenCrop ? "" : " missing"}">${chosen ? escapeHtml(chosen.name) : "เลือกเมล็ด"}</span>
+        <span class="stat-chip${haveOfPick ? "" : " missing"}">เมล็ด ${haveOfPick}</span>
+      </span>`}
+    </button>`;
+
+  if (!seedOpen) {
+    panel.innerHTML = summary;
+    host.appendChild(panel);
+    panel.querySelector("#seed-toggle").onclick = () => { seedOpen = true; renderView(); };
+    return;
+  }
+
+  panel.innerHTML = summary + `
+    <div class="seed-head">🌱 เลือกเมล็ดที่จะปลูก</div>
+    <div class="seed-list">${opts}</div>
+    <div class="seed-head">🏪 แผงเมล็ดพันธุ์ — หรือจะไปล่ามอนสเตอร์เอาเมล็ดฟรีก็ได้</div>
+    <div class="equip-slots">
+      ${SEED_SHOP.map((entry) => {
+        const item = ITEMS[entry.item];
+        const open = lvl >= entry.level;
+        const where = sourceLabel(entry.item);
+        return `<div class="equip-slot-box seed-box${open ? "" : " locked"}">
+          <div class="slot-face">${item.icon}</div>
+          <div class="slot-name">${escapeHtml(item.name)}</div>
+          <div class="detail">มีอยู่ ${P.inv[entry.item] || 0} เมล็ด${where ? `<br>ดรอปจาก${escapeHtml(where)}` : ""}</div>
+          ${open ? `<div class="seed-buy">
+            <button data-buy="1" data-buyseed="${entry.item}">ซื้อ 1 · ${entry.price.toLocaleString()} 💰</button>
+            <button data-buy="10" data-buyseed="${entry.item}">ซื้อ 10 · ${(entry.price * 10).toLocaleString()} 💰</button>
+          </div>` : `<div class="detail">🔒 เลเวล ${entry.level}</div>`}
+        </div>`;
+      }).join("")}
+    </div>`;
+  host.appendChild(panel);
+  panel.querySelector("#seed-toggle").onclick = () => { seedOpen = false; renderView(); };
+  /* 🐛 data-seed was already taken: the plot picker uses it for "which crop to plant", and reusing
+     it here put a buy button and a plant button behind the same selector. Renamed rather than
+     scoped, because a selector that only works from the right root is a trap for the next reader. */
+  panel.querySelectorAll("[data-buyseed]").forEach((b) => b.onclick = (e) => {
+    e.stopPropagation();
+    buySeed(b.dataset.buyseed, Number(b.dataset.buy));
+  });
 }
 
 /* --- Bag view -----------------------------------------------------------------------
@@ -6310,8 +6431,12 @@ function runEstatesDay() {
    * ledger is the only record of where a year's profit came from, and rent was leaving no trace in
    * it at all — so the page that answers "where did my money come from" could not answer it for the
    * income the player deliberately bought a building to get. */
+  /* 🎯 [owner 2026-08-22] "ให้โชว์ข้อมูลค่าเช่ารวมเป็นเดือน ไม่ต้องโชว์เป็นรายวัน" — the same call the
+   * family upkeep got, and for the same reason: rent arrives every game-day, which is every 100 real
+   * seconds, and a line each buried everything else on the page. The toast still fires daily, so the
+   * money is still visible as it lands; it is the permanent record that is monthly. */
   if (Math.round(total) >= 1) {
-    ledger("🏘️", `ค่าเช่า ${P.estates.length} แห่ง`, Math.round(total));
+    P.estateMonth = (P.estateMonth || 0) + Math.round(total);
     toast(`🏘️ ค่าเช่า ${Math.round(total).toLocaleString()} 💰`, "", "money");
   }
   if (view.kind === "shops") renderView();
@@ -8483,10 +8608,9 @@ function renderAchievements() {
       <span class="t-icon">${ti.icon}</span>
       <span class="t-body">
         <b>${escapeHtml(ti.name)}</b>
-        <small>${ti.special
-          ? `ฉายาพิเศษ — ${escapeHtml(ti.desc)}`
-          : nx ? `อีก ${nx.need} รายการเป็น ${nx.icon} ${escapeHtml(nx.name)}`
-               : "ฉายาสูงสุดแล้ว ไม่มีอะไรเหนือกว่านี้"}</small>
+          <small>${escapeHtml(ti.desc)}${nx
+            ? ` · อีก ${nx.need} เป็น ${nx.icon} ${escapeHtml(nx.name)}`
+            : " · ถือครบทุกฉายาแล้ว ไม่มีอะไรเหนือกว่านี้"}</small>
       </span>
     </div>` : "";
   $("#view-extra").innerHTML = titleBlock + `

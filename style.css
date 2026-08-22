@@ -1800,3 +1800,10 @@ body::after {
 
 /* The parent line on a child's card: quieter than the name, louder than nothing. */
 .kid-parent { color: var(--gold); opacity: .85; }
+
+/* 🎯 [owner 2026-08-22] Seeds moved into the same collapsible panel the food slots use. The box is
+   wider than an equipment slot because a seed carries a price, a count and where it drops. */
+.equip-slot-box.seed-box { min-width: 150px; }
+.equip-slot-box.seed-box .detail { font-size: 11.5px; line-height: 1.5; }
+.equip-slot-box.seed-box .seed-buy { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; }
+.equip-slot-box.seed-box.locked { opacity: .55; }

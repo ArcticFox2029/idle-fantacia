@@ -6,7 +6,7 @@
  * v5 combat-stat split shipped with this left at 4: freshProfile stamped v4, migrate pushed
  * it to v5, and the `p.v === GAME_VERSION` guard then rejected every profile — the game
  * silently refused to create or load anything. balance_check.mjs now fails if the two drift. */
-const GAME_VERSION = 51;
+const GAME_VERSION = 52;
 /* 🎯 [owner 2026-08-22] "avatar คน เพดานน่าจะไม่กำหนด เพราะวางไว้ว่าให้โตได้เรื่อยๆ ... จริงๆ อยากให้ถึง 999"
  *
  * 99 was reachable in about four hours of the best XP route, which is the whole reason it felt like
@@ -1465,37 +1465,64 @@ const QUEST_MAX_QTY = 12;
  *
  * Ordered high-to-low; titleFor walks down and takes the first the player clears.
  */
+/* 🎯 [owner 2026-08-22] "ฉายา มองว่าได้มาง่าย และไม่ครอบคลุม ทั้งต่อมอนสเตอร์ตัวนั้นๆ และมุมมอง
+ * มอนสเตอร์ทั้งหมด ลองออกแบบฉายาใหม่" — and the diagnosis under it: "มันควรแยกการนับ".
+ *
+ * 🐛 The old ladder compared one number against a pool of two different things. `done` was
+ * achievements PLUS slayer marks, and the top rung asked for 18 — the count of achievements alone,
+ * against a pool of 18 + 196 = 214. The crown therefore arrived at 8% of the game. The owner reached
+ * it holding 16 achievements and 12 marks, with not one species hunted to its last tier.
+ *
+ * So the counts are separated, and each measures the thing it is named after:
+ *
+ *   ach   — 18 achievements. Have you SEEN the game.
+ *   mark  — 196 slayer marks (49 species × 4 tiers). Have you hunted BROADLY.
+ *   bane  — species taken all the way to ☠️ โกลาหล. Have you hunted DEEPLY.
+ *
+ * Breadth and depth are deliberately different ladders, because 196 marks spread thin and 10 species
+ * mastered are different achievements and one should not stand in for the other. `rank` is what the
+ * display sorts by: the player wears the most demanding title they hold, whichever ladder it came
+ * from, and the ladders interleave on purpose so progress on any of them can be the next thing.
+ *
+ * 👑 ผู้พิชิตมิธวูด now sits where its name always claimed it did: every species in Mythwood mastered. */
 const TITLES = [
-  { at: 18, name: "ผู้พิชิตมิธวูด",        icon: "👑" },
-  { at: 14, name: "ตำนานที่ยังมีลมหายใจ",  icon: "🔥" },
-  { at: 10, name: "ผู้เป็นที่รู้จักทั้งหุบเขา", icon: "⭐" },
-  { at: 6,  name: "นักเดินทางผู้ช่ำชอง",   icon: "🧭" },
-  { at: 3,  name: "ผู้มาใหม่แห่งมิธวูด",    icon: "🌱" },
-  { at: 0,  name: "คนแปลกหน้าจากนอกป่า",   icon: "🚪" },
-];
-
-/* Earned from a SET rather than a count, so two players on the same total can wear different
- * names. Checked in order; the first match wins and replaces the counted title.
- * `test` receives the same progress object the achievements page already builds. */
-const TITLES_SPECIAL = [
-  { id: "purifier", name: "ผู้ชำระล้าง", icon: "🗡️",
-    desc: "เก็บรอยล่าครบทุกชั้น",
-    test: (pr) => pr.rows.length > 0 && pr.marksDone === pr.rows.length },
-  { id: "restless", name: "มือที่ไม่เคยว่าง", icon: "♾️",
-    desc: "ครบทั้งสายทำงาน",
-    test: (pr, ach) => ["first_steps", "worker", "tireless"].every((id) => ach[id]) },
-  { id: "returner", name: "ผู้กลับมาเสมอ", icon: "🌀",
-    desc: "จุติครบ 5 ครั้ง",
-    test: (pr, ach, p) => (p.rebirths || 0) >= 5 },
+  { id: "stranger", rank: 0,  track: "ach",  need: 0,
+    name: "คนแปลกหน้าจากนอกป่า", icon: "🚪", desc: "เพิ่งมาถึงมิธวูด" },
+  { id: "newcomer", rank: 1,  track: "ach",  need: 3,
+    name: "ผู้มาใหม่แห่งมิธวูด",   icon: "🌱", desc: "ปลดความสำเร็จ 3 รายการ" },
+  { id: "firstmark", rank: 2, track: "mark", need: 10,
+    name: "ผู้เริ่มสะสมรอยล่า",    icon: "🔪", desc: "เก็บรอยล่า 10 ดวง" },
+  { id: "seasoned", rank: 3,  track: "ach",  need: 7,
+    name: "นักเดินทางผู้ช่ำชอง",   icon: "🧭", desc: "ปลดความสำเร็จ 7 รายการ" },
+  { id: "restless", rank: 4,  track: "work",
+    name: "มือที่ไม่เคยว่าง",      icon: "♾️", desc: "ครบทั้งสายทำงาน" },
+  { id: "known",    rank: 5,  track: "ach",  need: 12,
+    name: "ผู้เป็นที่รู้จักทั้งหุบเขา", icon: "⭐", desc: "ปลดความสำเร็จ 12 รายการ" },
+  { id: "hunter",   rank: 6,  track: "mark", need: 40,
+    name: "นักล่าประจำหุบเขา",     icon: "🏹", desc: "เก็บรอยล่า 40 ดวง" },
+  { id: "returner", rank: 7,  track: "reb",  need: 5,
+    name: "ผู้กลับมาเสมอ",         icon: "🌀", desc: "จุติครบ 5 ครั้ง" },
+  { id: "firstbane", rank: 8, track: "bane", need: 1,
+    name: "ผู้ปราบสายพันธุ์แรก",   icon: "☠️", desc: "ล่าสายพันธุ์หนึ่งจนถึงชั้นโกลาหล" },
+  { id: "chronicle", rank: 9, track: "ach",  need: 18,
+    name: "ผู้เก็บครบทุกเรื่องเล่า", icon: "📖", desc: "ปลดความสำเร็จครบทั้ง 18 รายการ" },
+  { id: "relentless", rank: 10, track: "mark", need: 90,
+    name: "ผู้ไล่ล่าไม่เลือกหน้า",  icon: "🩸", desc: "เก็บรอยล่า 90 ดวง" },
+  { id: "feared",   rank: 11, track: "bane", need: 3,
+    name: "ชื่อที่ถูกเอ่ยด้วยความกลัว", icon: "👁️", desc: "ล่า 3 สายพันธุ์จนถึงชั้นโกลาหล" },
   /* 🎯 [owner 2026-08-22] Named for what the world does when it sees you, not for a count you
-   * cleared. Sits above the others on purpose: this one is also a mechanic — every species listed
-   * here flinches when it fights you (see BANE above). */
-  { id: "dread", name: "ผู้ที่มอนสเตอร์หวาดกลัว", icon: "😱",
-    desc: "ล่าครบ 1,000 ตัว ใน 5 สายพันธุ์",
-    test: (pr, ach, p, bane) => bane >= 5 },
-  { id: "feared", name: "ชื่อที่ถูกเอ่ยด้วยความกลัว", icon: "👁️",
-    desc: "ล่าครบ 1,000 ตัว ใน 2 สายพันธุ์",
-    test: (pr, ach, p, bane) => bane >= 2 },
+   * cleared. This one is also a mechanic — every species at this tier flinches when it fights you
+   * (see BANE above), so the title and the effect arrive together. */
+  { id: "dread",    rank: 12, track: "bane", need: 8,
+    name: "ผู้ที่มอนสเตอร์หวาดกลัว", icon: "😱", desc: "ล่า 8 สายพันธุ์จนถึงชั้นโกลาหล" },
+  { id: "shadow",   rank: 13, track: "mark", need: 150,
+    name: "เงาที่ทุกป่าจดจำ",      icon: "🌘", desc: "เก็บรอยล่า 150 ดวง" },
+  { id: "nightmare", rank: 14, track: "bane", need: 20,
+    name: "ฝันร้ายของทั้งหุบเขา",  icon: "🔥", desc: "ล่า 20 สายพันธุ์จนถึงชั้นโกลาหล" },
+  { id: "purifier", rank: 15, track: "mark", need: null,   // null = every mark there is
+    name: "ผู้ชำระล้าง",           icon: "🗡️", desc: "เก็บรอยล่าครบทุกดวง" },
+  { id: "conqueror", rank: 16, track: "bane", need: null,  // null = every species there is
+    name: "ผู้พิชิตมิธวูด",         icon: "👑", desc: "ล่าครบทุกสายพันธุ์จนถึงชั้นโกลาหล" },
 ];
 
 const ACHIEVEMENTS = [
