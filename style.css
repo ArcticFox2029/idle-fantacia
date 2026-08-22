@@ -1,0 +1,1762 @@
+/* Dark-fantasy palette, system fonts only (no webfont download — the game must work fully
+ * offline). Animations lean on CSS transitions so the JS loop stays coarse and cheap. */
+
+:root {
+  --bg: #12162a;
+  --bg-deep: #0c0f1f;
+  --card: #1b2138;
+  --card-hi: #232b48;
+  --line: #2c355a;
+  --text: #e8e9f2;
+  --text-dim: #9aa1c0;
+  --gold: #e8b64c;
+  --danger: #e86a6a;
+  --radius: 14px;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body { height: 100%; }
+
+body {
+  font-family: "Sukhumvit Set", "Kanit", -apple-system, "Segoe UI", sans-serif;
+  background:
+    radial-gradient(1100px 500px at 85% -10%, #232b5533, transparent),
+    radial-gradient(900px 500px at -10% 110%, #1c355133, transparent),
+    var(--bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+.screen { height: 100vh; display: none; }
+.screen.active { display: flex; }
+
+/* ---------- Profile screen ---------- */
+
+#screen-profiles { flex-direction: column; align-items: center; justify-content: center; gap: 28px; }
+
+.game-title { font-size: 44px; font-weight: 700; letter-spacing: 1px;
+  background: linear-gradient(120deg, #f3d489, var(--gold), #c98c2e);
+  -webkit-background-clip: text; background-clip: text; color: transparent; }
+.game-subtitle { color: var(--text-dim); margin-top: -20px; }
+
+.profile-row { display: flex; gap: 20px; }
+
+.profile-card {
+  width: 250px; padding: 24px; border-radius: var(--radius);
+  background: linear-gradient(160deg, var(--card-hi), var(--card));
+  border: 1px solid var(--line); text-align: center;
+  transition: transform .15s ease, border-color .15s ease;
+}
+.profile-card:hover { transform: translateY(-3px); border-color: var(--gold); }
+.profile-card .slot-icon { font-size: 40px; }
+.profile-card h3 { margin: 10px 0 4px; font-size: 20px; }
+.profile-card .meta { color: var(--text-dim); font-size: 13px; min-height: 34px; }
+.profile-card input {
+  width: 100%; margin: 8px 0; padding: 10px 12px; border-radius: 10px;
+  border: 1px solid var(--line); background: var(--bg-deep); color: var(--text);
+  font-size: 15px; text-align: center; outline: none;
+}
+.profile-card input:focus { border-color: var(--gold); }
+
+.btn {
+  display: inline-block; border: none; cursor: pointer; font-family: inherit;
+  padding: 10px 18px; border-radius: 10px; font-size: 15px; font-weight: 600;
+  background: linear-gradient(120deg, var(--gold), #c98c2e); color: #211a08;
+  transition: filter .12s ease, transform .1s ease;
+}
+.btn:hover { filter: brightness(1.1); }
+.btn:active { transform: scale(.97); }
+.btn.ghost { background: transparent; border: 1px solid var(--line); color: var(--text-dim); }
+.btn.ghost:hover { border-color: var(--danger); color: var(--danger); }
+.btn.small { padding: 6px 12px; font-size: 13px; }
+.btn:disabled { filter: grayscale(.8) brightness(.7); cursor: not-allowed; }
+
+/* ---------- Game layout ---------- */
+
+#screen-game { flex-direction: row; }
+
+.sidebar {
+  width: 240px; min-width: 240px; height: 100%; padding: 18px 14px;
+  background: var(--bg-deep); border-right: 1px solid var(--line);
+  display: flex; flex-direction: column; gap: 10px;
+}
+.sidebar .brand { font-size: 20px; font-weight: 700; color: var(--gold); padding: 0 6px 8px; }
+
+#skill-tabs {
+  flex: 1; min-height: 0; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 8px;
+  padding-right: 4px; scrollbar-width: thin;
+}
+#skill-tabs::-webkit-scrollbar { width: 6px; }
+#skill-tabs::-webkit-scrollbar-thumb { background: var(--line); border-radius: 3px; }
+
+.skill-tab {
+  display: flex; align-items: center; gap: 10px; padding: 10px 12px;
+  border-radius: 12px; cursor: pointer; border: 1px solid transparent;
+  transition: background .12s ease, border-color .12s ease;
+}
+.skill-tab:hover { background: var(--card); }
+.skill-tab.active { background: var(--card-hi); border-color: var(--line); }
+.skill-tab .icon { font-size: 22px; }
+.skill-tab .info { flex: 1; }
+.skill-tab .name { font-size: 14px; font-weight: 600; }
+.skill-tab .lvl { font-size: 12px; color: var(--text-dim); }
+.skill-tab .xpbar { height: 4px; border-radius: 2px; background: var(--line); margin-top: 4px; overflow: hidden; }
+.skill-tab .xpbar > div { height: 100%; border-radius: 2px; transition: width .4s ease; }
+
+.sidebar .spacer { height: 6px; }
+.sidebar .save-box { font-size: 12px; color: var(--text-dim); padding: 0 6px; }
+.sidebar .save-box .btn { width: 100%; margin-top: 6px; }
+
+.main { flex: 1; height: 100%; overflow-y: auto; padding: 26px 30px; }
+
+.topbar { display: flex; align-items: center; gap: 16px; margin-bottom: 18px; }
+.topbar h2 { font-size: 26px; }
+.topbar .flavor { color: var(--text-dim); font-size: 14px; }
+.topbar .gold-chip {
+  background: var(--card); border: 1px solid var(--line);
+  padding: 8px 16px; border-radius: 999px; font-weight: 700; color: var(--gold);
+}
+
+/* Active action banner */
+.active-banner {
+  display: none; align-items: center; gap: 14px; margin-bottom: 18px;
+  background: linear-gradient(120deg, var(--card-hi), var(--card));
+  border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 18px;
+}
+.active-banner.on { display: flex; }
+.active-banner .what { font-weight: 600; }
+.active-banner .bar { flex: 1; height: 10px; background: var(--bg-deep); border-radius: 6px; overflow: hidden; }
+.active-banner .bar > div { height: 100%; width: 0%; border-radius: 6px; }
+
+.action-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; }
+
+.action-card {
+  background: linear-gradient(160deg, var(--card-hi), var(--card));
+  border: 1px solid var(--line); border-radius: var(--radius); padding: 16px;
+  cursor: pointer; position: relative; overflow: hidden;
+  transition: transform .13s ease, border-color .13s ease;
+}
+.action-card:hover { transform: translateY(-2px); }
+.action-card.running { border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold) inset; }
+.action-card.locked { opacity: .45; cursor: not-allowed; }
+.action-card .head { display: flex; justify-content: space-between; align-items: baseline; }
+.action-card .name { font-weight: 700; font-size: 16px; }
+.action-card .req { font-size: 12px; color: var(--text-dim); }
+.action-card .detail { margin-top: 8px; font-size: 13px; color: var(--text-dim); line-height: 1.7; }
+.action-card .io { margin-top: 6px; font-size: 14px; }
+.action-card .missing { color: var(--danger); }
+.action-card .progress {
+  position: absolute; left: 0; bottom: 0; height: 4px; width: 0%;
+}
+
+/* ---------- Mastery on action cards ---------- */
+
+.mastery-row {
+  display: flex; align-items: center; gap: 10px; margin-top: 12px;
+  background: var(--bg-deep); border: 1px solid var(--line);
+  border-radius: 10px; padding: 8px 10px;
+}
+.m-chip {
+  font-size: 13px; font-weight: 700; color: var(--gold); white-space: nowrap;
+}
+.m-track { flex: 1; }
+.m-bar { height: 6px; background: var(--card); border-radius: 3px; overflow: hidden; }
+.m-bar > div { height: 100%; border-radius: 3px; transition: width .4s ease; }
+.m-nums { margin-top: 4px; font-size: 11px; color: var(--text-dim); }
+
+/* ---------- Topbar vitals (always-visible HP + gold) ---------- */
+
+.vitals { margin-left: auto; display: flex; gap: 10px; align-items: center; }
+.hp-chip {
+  background: var(--card); border: 1px solid var(--line); border-radius: 999px;
+  padding: 8px 16px; font-size: 14px; min-width: 150px;
+}
+.hp-chip-bar { height: 5px; background: var(--bg-deep); border-radius: 3px; overflow: hidden; margin-top: 4px; }
+.hp-chip-bar > div { height: 100%; border-radius: 3px; transition: width .3s ease, background .3s ease; }
+.topbar .gold-chip { margin-left: 0; }
+
+/* ---------- Combat: equipment paper-doll ---------- */
+
+.equip-panel {
+  background: linear-gradient(160deg, var(--card-hi), var(--card));
+  border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 16px; margin-bottom: 16px;
+}
+.equip-slots { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; }
+.equip-slot-box {
+  background: var(--bg-deep); border: 1px solid var(--line); border-radius: 12px;
+  padding: 10px; text-align: center; transition: border-color .15s ease;
+}
+.equip-slot-box.filled { border-color: var(--gold); }
+.equip-slot-box.food.filled { border-color: #5fbf77; }
+.equip-slot-box .slot-face { font-size: 30px; line-height: 1.2; filter: grayscale(.6) opacity(.6); }
+.equip-slot-box.filled .slot-face { filter: none; }
+.equip-slot-box .slot-name { font-size: 12px; color: var(--text-dim); margin: 4px 0 6px; }
+.equip-slot-box select {
+  width: 100%; background: var(--card); color: var(--text); border: 1px solid var(--line);
+  border-radius: 8px; padding: 5px 6px; font-family: inherit; font-size: 12px; outline: none;
+}
+.equip-slot-box select:focus { border-color: var(--gold); }
+.equip-slot-box .btn { width: 100%; margin-top: 6px; }
+.equip-stats { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.stat-chip {
+  background: var(--bg-deep); border: 1px solid var(--line); border-radius: 999px;
+  padding: 6px 14px; font-size: 13px; font-weight: 600;
+}
+
+/* ---------- Combat: location & stage browser ---------- */
+
+.loc-card, .stage-card {
+  display: flex; gap: 14px; align-items: center;
+  background: linear-gradient(160deg, var(--card-hi), var(--card));
+  border: 1px solid var(--line); border-radius: var(--radius); padding: 16px;
+  cursor: pointer; transition: transform .13s ease, border-color .13s ease;
+  grid-column: 1 / -1;
+}
+.loc-card:hover, .stage-card:hover { transform: translateY(-2px); border-color: var(--gold); }
+.loc-card.locked, .stage-card.locked { opacity: .45; cursor: not-allowed; }
+.loc-card.locked:hover, .stage-card.locked:hover { transform: none; border-color: var(--line); }
+.loc-icon, .stage-icon { font-size: 42px; width: 60px; text-align: center; }
+.loc-body, .stage-body { flex: 1; }
+.loc-card .head, .stage-card .head { display: flex; justify-content: space-between; align-items: baseline; }
+.loc-card .name, .stage-card .name { font-weight: 700; font-size: 17px; }
+.loc-card .req, .stage-card .req { font-size: 13px; color: var(--text-dim); }
+.loc-card .detail, .stage-card .detail { margin-top: 4px; font-size: 13px; color: var(--text-dim); }
+.loc-mobs { margin-top: 6px; font-size: 20px; letter-spacing: 4px; }
+.loc-mobs .dim { filter: grayscale(1) opacity(.4); }
+.stage-card.boss { border-color: #b5892e; background: linear-gradient(160deg, #2c2745, var(--card)); }
+.stage-card.boss .name { color: var(--gold); }
+.stage-track { margin-top: 8px; height: 5px; background: var(--bg-deep); border-radius: 3px; overflow: hidden; }
+.stage-track > div { height: 100%; background: #e86a6a; border-radius: 3px; }
+.stage-go {
+  font-weight: 700; color: var(--gold); border: 1px solid var(--line);
+  border-radius: 10px; padding: 8px 14px; white-space: nowrap;
+}
+
+/* ---------- Combat: fight scene ---------- */
+
+.fight-scene {
+  position: relative; display: flex; align-items: center; gap: 20px;
+  background: linear-gradient(160deg, #1c2340, #151a30);
+  border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 26px 22px; margin-bottom: 16px; overflow: hidden;
+}
+.fight-scene.boss { border-color: #b5892e; }
+.fight-bg {
+  position: absolute; right: -20px; top: -30px; font-size: 160px; opacity: .05;
+  pointer-events: none;
+}
+.fight-scene .fighter { flex: 1; position: relative; }
+.fight-scene .f-avatar { font-size: 52px; text-align: center; line-height: 1.3; }
+.fight-scene .f-name { font-weight: 700; text-align: center; margin-bottom: 8px; }
+.fight-scene .vs { font-size: 30px; }
+.hp-bar { height: 14px; background: var(--bg-deep); border-radius: 8px; overflow: hidden; }
+.hp-bar > div { height: 100%; width: 100%; border-radius: 8px; transition: width .25s ease; }
+.f-sub { margin-top: 5px; font-size: 13px; color: var(--text-dim); text-align: center; }
+.atk-bar { margin-top: 6px; height: 4px; background: var(--bg-deep); border-radius: 2px; overflow: hidden; }
+.atk-bar > div { height: 100%; width: 0%; background: #8fa8e8; border-radius: 2px; }
+
+.fighter.hit .f-avatar { animation: hit-shake .3s ease; }
+@keyframes hit-shake {
+  25% { transform: translateX(-5px) rotate(-3deg); }
+  75% { transform: translateX(5px) rotate(3deg); }
+}
+.dmg-float {
+  position: absolute; top: 10px; font-weight: 800; font-size: 18px;
+  pointer-events: none; animation: dmg-up .85s ease forwards;
+}
+.dmg-float.dmg-in { color: var(--danger); }
+.dmg-float.dmg-out { color: #ffd66b; }
+@keyframes dmg-up { to { transform: translateY(-34px); opacity: 0; } }
+
+/* ---------- Inventory ---------- */
+
+.inv-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.inv-tab {
+  border: 1px solid var(--line); background: var(--card); color: var(--text-dim);
+  padding: 6px 14px; border-radius: 999px; cursor: pointer; font-family: inherit; font-size: 13px;
+  transition: border-color .12s ease, color .12s ease;
+}
+.inv-tab:hover { border-color: var(--gold); }
+.inv-tab.active { color: var(--gold); border-color: var(--gold); font-weight: 700; }
+.inv-tab.add { border-style: dashed; }
+.inv-tab.del:hover { border-color: var(--danger); color: var(--danger); }
+
+.cat-pick {
+  margin-top: 4px; background: var(--bg-deep); color: var(--text-dim);
+  border: 1px solid var(--line); border-radius: 6px; padding: 2px 6px;
+  font-family: inherit; font-size: 11px; outline: none; max-width: 120px;
+}
+
+.section-title { margin: 26px 0 12px; font-size: 18px; color: var(--text-dim); }
+.inv-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; }
+/* 🎯 [rebuilt 2026-08-15, owner: "เมนูขายมันโดนซ่อน แปลก ๆ ไม่สมดุล"] The row used to be a flat
+ * flex line, so a long Thai item name pushed the quantity and the sell button off the card. Name
+ * and category now share a column that is allowed to shrink, while quantity and the button sit in
+ * a fixed column that can never be squeezed out. */
+/* 🎯 [rebuilt 2026-08-15, owner: "เมนูขายมันโดนซ่อน แปลก ๆ ไม่สมดุล"] The row was a flat flex
+ * line, so a long Thai item name pushed the quantity and the sell button past the card's edge.
+ * Name and category now share a column that is allowed to shrink and ellipsise, while quantity
+ * and the button sit in a fixed column that can never be squeezed out. */
+.inv-item {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px;
+}
+.inv-main { flex: 1; min-width: 0; }
+.inv-main .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.inv-side { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex-shrink: 0; }
+.inv-side .qty { margin-left: 0; }
+.inv-side .btn { white-space: nowrap; }
+.inv-main { flex: 1; min-width: 0; }
+.inv-main .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.inv-side { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex-shrink: 0; }
+.inv-side .qty { margin-left: 0; }
+.inv-side .btn { white-space: nowrap; }
+.inv-item .icon { font-size: 22px; }
+.inv-item .qty { margin-left: auto; font-weight: 700; }
+.inv-item .nm { font-size: 13px; }
+.inv-item .sell { font-size: 12px; color: var(--text-dim); }
+.inv-empty { color: var(--text-dim); font-size: 14px; }
+
+/* ---------- Toasts ---------- */
+
+#toasts { position: fixed; right: 20px; bottom: 20px; display: flex; flex-direction: column; gap: 8px; z-index: 50; }
+.toast {
+  background: var(--card-hi); border: 1px solid var(--line); border-left: 3px solid var(--gold);
+  border-radius: 10px; padding: 10px 16px; font-size: 14px;
+  animation: toast-in .25s ease, toast-out .4s ease 2.6s forwards;
+}
+.toast.levelup { border-left-color: #7ee787; }
+.toast.warn { border-left-color: var(--danger); }
+@keyframes toast-in { from { transform: translateX(30px); opacity: 0; } }
+@keyframes toast-out { to { transform: translateX(30px); opacity: 0; } }
+
+/* Scrollbar cosmetics */
+.main::-webkit-scrollbar { width: 10px; }
+.main::-webkit-scrollbar-thumb { background: var(--line); border-radius: 5px; }
+
+/* Mastery overview panel at the top of each skill page */
+.mastery-summary {
+  display: flex; align-items: center; gap: 12px;
+  background: linear-gradient(160deg, var(--card-hi), var(--card));
+  border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 12px 16px; margin-bottom: 16px;
+}
+
+/* Area headers splitting a skill into sub-zones */
+.area-head {
+  grid-column: 1 / -1; font-size: 15px; font-weight: 700; color: var(--text-dim);
+  padding: 10px 4px 0; letter-spacing: .5px;
+}
+
+/* Combat training-focus selector */
+.train-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; align-items: center; }
+.train-label { font-size: 13px; color: var(--text-dim); }
+.train-chip {
+  display: inline-flex; flex-direction: column; gap: 4px; align-items: flex-start;
+  background: var(--bg-deep); border: 1px solid var(--line); border-radius: 10px;
+  padding: 8px 14px; color: var(--text); font-family: inherit; font-size: 13px; cursor: pointer;
+  transition: border-color .12s ease;
+}
+.train-chip:hover { border-color: var(--gold); }
+.train-chip.active { border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold) inset; }
+.train-chip b { color: var(--gold); }
+.train-bar { display: block; width: 90px; height: 4px; background: var(--card); border-radius: 2px; overflow: hidden; }
+.train-bar > span { display: block; height: 100%; background: var(--gold); border-radius: 2px; }
+
+/* Confirm dialogs (sell quantity, etc.) */
+.modal-back {
+  position: fixed; inset: 0; background: #060812cc; backdrop-filter: blur(3px);
+  display: flex; align-items: center; justify-content: center; z-index: 100;
+  animation: fade-in .15s ease;
+}
+@keyframes fade-in { from { opacity: 0; } }
+.modal {
+  width: min(420px, 92vw); background: linear-gradient(160deg, var(--card-hi), var(--card));
+  border: 1px solid var(--line); border-radius: var(--radius); padding: 22px;
+  box-shadow: 0 20px 60px #0008;
+}
+.modal-head { font-size: 20px; font-weight: 700; }
+.modal-sub { color: var(--text-dim); font-size: 13px; margin-top: 6px; line-height: 1.7; }
+.modal-qty { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.modal-input {
+  width: 100%; margin-top: 12px; padding: 12px; border-radius: 10px;
+  border: 1px solid var(--line); background: var(--bg-deep); color: var(--text);
+  font-family: inherit; font-size: 18px; text-align: center; outline: none;
+}
+.modal-input:focus { border-color: var(--gold); }
+.modal-total { margin-top: 10px; text-align: center; font-weight: 700; color: var(--gold); }
+.modal-actions { display: flex; gap: 10px; margin-top: 18px; }
+.modal-actions .btn { flex: 1; }
+
+/* Difficulty tier picker */
+.elite-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 16px; }
+.elite-chip {
+  display: inline-flex; flex-direction: column; align-items: flex-start; gap: 2px;
+  background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+  padding: 8px 14px; color: var(--text); font-family: inherit; font-size: 13px; cursor: pointer;
+  transition: border-color .12s ease;
+}
+.elite-chip:hover { border-color: var(--gold); }
+.elite-chip.active { border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold) inset; }
+.elite-detail { font-size: 11px; color: var(--text-dim); }
+.elite-tag {
+  font-size: 11px; color: var(--gold); border: 1px solid var(--line);
+  border-radius: 999px; padding: 1px 8px; margin-left: 6px; vertical-align: middle;
+}
+
+.inv-tab.junk { border-color: #7a6a4a; color: var(--gold); }
+.inv-tab.junk:hover { border-color: var(--gold); }
+
+/* Momentum + event buff indicators in the active banner */
+.banner-extra { display: flex; gap: 8px; align-items: center; }
+.momentum { font-size: 13px; color: var(--text-dim); white-space: nowrap; }
+.momentum.on { color: var(--gold); font-weight: 700; }
+.mo-next { color: var(--text-dim); font-weight: 400; font-size: 11px; }
+.buff-chip {
+  font-size: 12px; font-weight: 700; color: #7ee787;
+  border: 1px solid #3c6b46; border-radius: 999px; padding: 3px 10px; white-space: nowrap;
+}
+
+/* Armour set chips */
+.set-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.set-chip {
+  font-size: 11px; color: var(--text-dim); background: var(--bg-deep);
+  border: 1px solid var(--line); border-radius: 999px; padding: 4px 10px;
+}
+.set-chip.on { color: var(--gold); border-color: var(--gold); }
+.set-chip b { color: var(--text); font-weight: 700; }
+
+/* Clickable "you are missing this" material chips */
+.need {
+  display: inline-flex; align-items: center; gap: 2px;
+  background: #3a1f2a; border: 1px solid #7a3f4f; color: var(--danger);
+  border-radius: 8px; padding: 1px 8px; font-family: inherit; font-size: 13px;
+  cursor: pointer; transition: background .12s ease, border-color .12s ease;
+}
+.need:hover { background: #52293a; border-color: var(--danger); }
+
+/* Flash the card a jump landed on */
+.action-card.jumped, .stage-card.jumped {
+  animation: jump-flash 1.4s ease;
+}
+@keyframes jump-flash {
+  0%, 100% { box-shadow: none; }
+  15%, 60% { box-shadow: 0 0 0 2px var(--gold) inset, 0 0 26px #e8b64c55; }
+}
+
+/* Worn copies are locked out of bulk sales */
+.locked-note { color: var(--gold); }
+.lock-badge { font-size: 11px; color: var(--gold); margin-left: 4px; font-weight: 400; }
+
+/* Multi-slot banner: one row per running job */
+.active-banner.on { flex-direction: column; align-items: stretch; gap: 10px; }
+.slot-list { display: flex; flex-direction: column; gap: 8px; }
+.slot-row { display: flex; align-items: center; gap: 12px; }
+.slot-what { font-weight: 600; min-width: 210px; font-size: 14px; }
+.slot-bar { flex: 1; height: 9px; background: var(--bg-deep); border-radius: 5px; overflow: hidden; }
+.slot-bar > span { display: block; height: 100%; width: 0%; border-radius: 5px; }
+.banner-side { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.slot-count {
+  font-size: 12px; font-weight: 700; color: var(--gold);
+  border: 1px solid var(--line); border-radius: 999px; padding: 3px 12px;
+}
+
+/* Wandering trader stall */
+.area-head.trader-head { color: var(--gold); font-size: 16px; }
+.action-card.trader-card { border-color: #7a6a3f; background: linear-gradient(160deg, #2b2740, var(--card)); }
+.action-card.trader-card .name { color: var(--gold); }
+.skill-tab.trader-on { border-color: var(--gold); }
+.skill-tab.trader-on .lvl { color: var(--gold); font-weight: 700; }
+
+/* Sub-zone menu inside a skill page */
+.area-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+.area-tab {
+  display: inline-flex; align-items: center; gap: 7px;
+  background: var(--card); border: 1px solid var(--line); color: var(--text);
+  border-radius: 999px; padding: 7px 15px; font-family: inherit; font-size: 13px;
+  cursor: pointer; transition: border-color .12s ease, color .12s ease;
+}
+.area-tab:hover { border-color: var(--gold); }
+.area-tab.active { border-color: var(--gold); color: var(--gold); font-weight: 700; }
+.area-tab.shut { opacity: .5; }
+.area-count { font-size: 11px; color: var(--text-dim); }
+.area-tab.active .area-count { color: var(--gold); }
+
+/* Collapsed equipment bar — one line until you intend to change something */
+.equip-summary {
+  display: flex; align-items: center; gap: 14px; width: 100%;
+  background: none; border: none; color: var(--text); font-family: inherit;
+  cursor: pointer; padding: 2px; text-align: left; flex-wrap: wrap;
+}
+.equip-summary .caret { color: var(--gold); font-size: 14px; }
+.worn-row { display: flex; gap: 3px; font-size: 21px; }
+.worn { filter: grayscale(1) opacity(.35); }
+.worn.on { filter: none; }
+.sum-stats { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.sum-stats .stat-chip { padding: 4px 11px; font-size: 12px; }
+.stat-chip.set-on { color: var(--gold); border-color: var(--gold); }
+.stat-chip.missing { color: var(--danger); }
+.expand-hint { margin-left: auto; font-size: 12px; color: var(--text-dim); }
+.equip-panel.open .equip-summary { border-bottom: 1px solid var(--line); padding-bottom: 12px; margin-bottom: 12px; }
+
+/* Provisions: the slot that will be eaten next is marked */
+.worn.next { outline: 2px solid #5fbf77; outline-offset: 2px; border-radius: 4px; }
+.equip-slot-box.next { border-color: #5fbf77; }
+
+/* Pets */
+.pet-box .pet-stats { font-size: 11px; color: var(--text-dim); margin-bottom: 6px; }
+.pet-box .m-bar { margin-bottom: 6px; }
+.pet-box.fainted { opacity: .55; border-color: var(--danger); }
+.pet-box.fuse-pick { border-color: #8fd0e8; box-shadow: 0 0 0 1px #8fd0e8 inset; }
+.fuse-forecast { border-left: 2px solid #8fd0e8; padding-left: 10px; }
+.pet-box .btn { width: 100%; margin-top: 4px; }
+.fighter.pet .f-avatar { font-size: 38px; }
+.fighter.pet { flex: 0 0 120px; }
+.dmg-float.dmg-pet { color: #8fd0e8; }
+.dmg-float.heal-mon { color: #7ee787; }
+
+/* Boss trait chips */
+.boss-traits { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.trait-chip {
+  font-size: 11px; color: var(--gold); background: var(--bg-deep);
+  border: 1px solid #7a6a3f; border-radius: 999px; padding: 3px 10px;
+}
+
+/* Statistics cards */
+.stat-card { cursor: default; }
+.stat-card:hover { transform: none; }
+.stat-line {
+  display: flex; justify-content: space-between; gap: 10px;
+  padding: 5px 0; font-size: 13px; color: var(--text-dim);
+  border-bottom: 1px solid #ffffff08;
+}
+.stat-line:last-child { border-bottom: none; }
+.stat-line b { color: var(--text); }
+
+/* Generated artwork, with the emoji underneath as the fallback */
+.icon-art { position: relative; display: inline-flex; align-items: center; justify-content: center; }
+/* 🐛 [fixed 2026-08-15, owner: "เหมือนมันติดขอบ"] The generator bakes a pale frame into every
+ * picture no matter how the prompt is worded, so tools/trim_art.sh crops it off the files
+ * themselves after each fetch. The holder still clips, which keeps rounded corners clean. */
+/* 🐛 [fixed 2026-08-15, owner: "ยังติดกรอบ"] Cropping the square edges was not enough: the
+ * generator composes a CIRCLE inside a lighter square, so trimming the sides still left four pale
+ * corners. Masking the holder to a circle removes them by construction, whatever the frame's
+ * thickness — and it suits art that was already drawn round. */
+.icon-art { overflow: hidden; border-radius: 50%; background: var(--bg-deep); }
+.icon-art .art {
+  width: 100%; height: 100%; object-fit: cover;
+  transform: scale(1.06);      /* nudge past the circle's own soft edge */
+  display: block; position: relative; z-index: 1;
+}
+.icon-art .art + .icon-glyph { display: none; }
+.stage-icon .icon-art, .slot-face .icon-art { width: 54px; height: 54px; }
+.f-avatar .icon-art { width: 84px; height: 84px; }
+.inv-item .icon .icon-art { width: 30px; height: 30px; }
+.icon-art:has(.art.big) { box-shadow: 0 4px 18px #0006; }
+
+/* Per-pet quality */
+.pet-grade { font-size: 12px; font-weight: 700; margin-bottom: 4px; }
+.grade-s { color: #ffd66b; }
+.grade-a { color: #7ee787; }
+.grade-b { color: var(--text); }
+.grade-c { color: var(--text-dim); }
+.grade-d { color: #8a8fa8; }
+.iv { font-size: 10px; }
+.iv-hi { color: #7ee787; }
+.iv-mid { color: var(--text-dim); }
+.iv-lo { color: #c98a8a; }
+
+/* A slot whose data exists but could not be loaded — never offer a fresh start over it */
+.profile-card.broken { border-color: var(--danger); }
+.profile-card.broken:hover { border-color: var(--danger); }
+
+.train-chip .train-sub { font-size: 10px; color: var(--text-dim); font-weight: 400; }
+
+/* Shop: hide what has already been bought */
+.hide-owned {
+  display: inline-flex; align-items: center; gap: 9px; cursor: pointer;
+  background: var(--card); border: 1px solid var(--line); border-radius: 999px;
+  padding: 9px 18px; font-size: 14px; margin-bottom: 16px;
+}
+.hide-owned:hover { border-color: var(--gold); }
+.hide-owned input { width: 16px; height: 16px; accent-color: var(--gold); cursor: pointer; }
+
+/* ---------- Farming: the garden and the seed stall ---------- */
+.seed-picker {
+  background: linear-gradient(160deg, var(--card-hi), var(--card));
+  border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px;
+}
+.seed-head { font-weight: 700; margin-bottom: 10px; }
+.seed-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px; }
+.seed-opt {
+  display: flex; align-items: center; gap: 10px; text-align: left;
+  background: var(--bg-deep); border: 1px solid var(--line); border-radius: 10px;
+  padding: 8px 10px; color: var(--text); cursor: pointer;
+  transition: border-color .13s ease, background .13s ease;
+}
+.seed-opt:hover:not(:disabled) { border-color: var(--gold); }
+.seed-opt.active { border-color: #7cc47f; background: var(--card-hi); box-shadow: 0 0 0 1px #7cc47f inset; }
+.seed-opt.shut { opacity: .4; cursor: not-allowed; }
+.seed-face { font-size: 24px; line-height: 1; }
+.seed-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.seed-name { font-weight: 700; font-size: 14px; }
+.seed-meta { font-size: 11px; color: var(--text-dim); line-height: 1.5; }
+
+.farm-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 12px; }
+.farm-btn {
+  border: none; border-radius: 999px; padding: 9px 18px; font-weight: 700;
+  cursor: pointer; font-family: inherit; font-size: 14px;
+}
+.farm-btn.plant { background: linear-gradient(120deg, #9adf9d, #5aa860); color: #10240f; }
+.farm-btn.harvest { background: linear-gradient(120deg, #f3d489, var(--gold)); color: #211a08; }
+.farm-btn:disabled { opacity: .4; cursor: not-allowed; }
+.farm-note { font-size: 12px; color: var(--text-dim); }
+
+.plot-card.empty-plot { border-style: dashed; opacity: .8; }
+.plot-card.empty-plot:hover { opacity: 1; border-color: #7cc47f; }
+/* A ripe plot has to read as "come get me" from across the page — that is the whole loop. */
+.plot-card.ripe {
+  border-color: #7cc47f; box-shadow: 0 0 0 1px #7cc47f inset, 0 0 18px -6px #7cc47f;
+  animation: ripe-pulse 2.2s ease-in-out infinite;
+}
+@keyframes ripe-pulse { 50% { box-shadow: 0 0 0 1px #7cc47f inset, 0 0 26px -4px #7cc47f; } }
+.plot-bar { margin-top: 10px; height: 6px; border-radius: 3px; background: var(--bg-deep); overflow: hidden; }
+.plot-bar > div { height: 100%; transition: width .25s linear; }
+.plot-pull {
+  position: absolute; top: 10px; right: 12px; font-size: 11px; font-family: inherit;
+  background: transparent; border: 1px solid var(--line); color: var(--text-dim);
+  border-radius: 999px; padding: 2px 9px; cursor: pointer;
+}
+.plot-pull:hover { border-color: var(--danger); color: var(--danger); }
+.seed-card { cursor: default; }
+.seed-buy { display: flex; gap: 8px; margin-top: 10px; }
+.seed-buy button {
+  flex: 1; font-family: inherit; font-size: 12px; cursor: pointer;
+  background: var(--bg-deep); border: 1px solid var(--line); color: var(--text);
+  border-radius: 8px; padding: 6px 8px;
+}
+.seed-buy button:hover { border-color: var(--gold); color: var(--gold); }
+
+/* ---------- Calendar chip ---------- */
+.date-chip {
+  background: var(--card); border: 1px solid var(--line);
+  padding: 8px 16px; border-radius: 999px; font-weight: 700; color: #9ad6f0;
+}
+.gold-chip.debt { color: var(--danger); border-color: var(--danger); }
+
+/* ---------- Bank / market / tax ---------- */
+.money-summary {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px;
+  background: linear-gradient(160deg, var(--card-hi), var(--card));
+  border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px;
+}
+.money-stat { display: flex; flex-direction: column; gap: 3px; }
+.money-stat span { font-size: 11px; color: var(--text-dim); }
+.money-stat b { font-size: 17px; }
+.good { color: #7cc47f; }
+.bad { color: var(--danger); }
+
+.debt-banner {
+  margin-top: 10px; padding: 12px 16px; border-radius: var(--radius);
+  border: 1px solid var(--danger); background: rgba(232, 106, 106, .12);
+  color: #ffd7d7; font-size: 13px; line-height: 1.75;
+}
+
+.bank-row { display: flex; gap: 8px; margin-top: 12px; align-items: center; }
+.bank-row input {
+  flex: 1; padding: 9px 12px; border-radius: 10px; font-family: inherit; font-size: 14px;
+  border: 1px solid var(--line); background: var(--bg-deep); color: var(--text);
+}
+.bank-row input:focus { border-color: var(--gold); outline: none; }
+.bank-row.quick { margin-top: 8px; }
+.bank-row.quick button {
+  flex: 1; font-family: inherit; font-size: 12px; cursor: pointer; padding: 6px 8px;
+  background: var(--bg-deep); border: 1px solid var(--line); color: var(--text-dim); border-radius: 8px;
+}
+.bank-row.quick button:hover { border-color: var(--gold); color: var(--gold); }
+/* Money moving in one direction should never be one glance away from money moving in the other:
+   blue is the partial deposit, green everything in, red everything out. */
+.bank-row.quick .q-half { border-color: #5aa9e6; color: #8ecbf5; }
+.bank-row.quick .q-in   { border-color: #63b96b; color: #93d998; }
+.bank-row.quick .q-out  { border-color: #d4645c; color: #ef9a94; }
+.bank-row.quick .q-half:hover { border-color: #8ecbf5; color: #bfe3ff; }
+.bank-row.quick .q-in:hover   { border-color: #93d998; color: #c2eec6; }
+.bank-row.quick .q-out:hover  { border-color: #ef9a94; color: #ffc7c2; }
+
+/* A company card stays scannable when collapsed — price, yield, frequency, holding. The rest
+   only unfolds for the one you clicked, so 30 companies do not read as a wall of numbers. */
+.company-line { display: flex; flex-wrap: wrap; gap: 14px; align-items: baseline; }
+.company-line .dim { color: var(--text-dim); opacity: .75; margin-left: auto; font-size: 12px; }
+.company-card .req.px-up { color: #7cc47f; }
+.company-card .req.px-down { color: var(--danger); }
+.px-drift { font-size: 11px; opacity: .85; }
+.owner-badge {
+  font-size: 11px; padding: 1px 8px; border-radius: 999px; margin-left: 6px;
+  background: rgba(232, 182, 76, .18); border: 1px solid var(--gold); color: var(--gold);
+}
+.company-card.open { border-color: var(--gold); }
+.company-detail { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 12px; cursor: default; }
+.cd-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.cd-grid > div { display: flex; flex-direction: column; gap: 2px; }
+.cd-grid span { font-size: 11px; color: var(--text-dim); }
+.cd-grid b { font-size: 15px; }
+.cd-note { margin-top: 10px; font-size: 11px; color: var(--text-dim); line-height: 1.8; }
+.cd-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.cd-actions button {
+  font-family: inherit; font-size: 13px; cursor: pointer; padding: 8px 14px;
+  background: var(--bg-deep); border: 1px solid var(--line); color: var(--text); border-radius: 999px;
+}
+.cd-actions button:hover:not(:disabled) { border-color: var(--gold); color: var(--gold); }
+.cd-actions button:disabled { opacity: .35; cursor: not-allowed; }
+
+.tax-table { width: 100%; margin-top: 10px; border-collapse: collapse; font-size: 13px; }
+.tax-table th, .tax-table td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--line); }
+.tax-table th { color: var(--text-dim); font-size: 11px; font-weight: 600; }
+.tax-table tr.band-hit { background: rgba(232, 182, 76, .10); color: var(--gold); }
+
+.ledger-card { cursor: default; }
+/* 🎯 [owner 2026-08-17: "ไม่ต้องทำ scroll เพื่อดูข้อมูลแล้ว"] No inner scroller. It existed to keep
+ * sixty rows from burying the page; the list renders ten now (LEDGER_SHOWN), so a box that scrolls
+ * inside a page that also scrolls is two scrollbars hiding a list short enough to just show. */
+.ledger-list { display: flex; flex-direction: column; gap: 2px; }
+.ledger-row {
+  display: grid; grid-template-columns: 96px 1fr auto; gap: 10px; align-items: baseline;
+  padding: 6px 4px; border-bottom: 1px solid var(--line); font-size: 13px;
+}
+.lr-date { color: var(--text-dim); font-size: 11px; }
+.lr-amt { font-weight: 700; }
+
+/* A card that is alone on its page and full of prose or a table.
+ *
+ * 🐛 .action-grid is repeat(auto-fill, minmax(240px, 1fr)), which is right for a wall of small
+ * action cards and wrong for a single wide one: on a large screen the card kept a 240px column
+ * while the rest of the row sat empty, so its text wrapped one character per line. The area
+ * header above it already spanned, which made it look like the card had simply failed to stretch.
+ * Any single-card view needs this. */
+.full-card { grid-column: 1 / -1; }
+
+/* ---------- Rebirth ---------- */
+.keeps { line-height: 1.9; }
+.reborn-row {
+  display: grid;
+  grid-template-columns: minmax(96px, 1fr) 54px 20px 54px minmax(150px, 2.2fr);
+  gap: 8px; align-items: baseline;
+  padding: 8px 4px; border-bottom: 1px solid var(--line);
+}
+/* Too narrow for five columns: the explanation drops to its own line rather than being crushed. */
+@media (max-width: 620px) {
+  .reborn-row { grid-template-columns: 1fr 48px 18px 48px; row-gap: 2px; }
+  .rb-note { grid-column: 1 / -1; }
+}
+.rb-name { font-weight: 700; }
+.rb-num { font-size: 18px; font-weight: 700; text-align: center; }
+.rb-arrow { color: var(--text-dim); text-align: center; }
+.rb-note { font-size: 11px; color: var(--text-dim); line-height: 1.6; }
+
+.dead-card { border-color: var(--danger); cursor: default; }
+.dead-card .detail { line-height: 1.9; }
+
+/* Shown before a profile can be made, when the browser refuses to store anything. */
+.storage-warning {
+  max-width: 780px; margin: 0 auto 22px; padding: 16px 20px; border-radius: var(--radius);
+  border: 1px solid var(--danger); background: rgba(232, 106, 106, .12);
+  color: #ffd9d9; font-size: 14px; line-height: 1.9; text-align: left;
+}
+.storage-warning code {
+  background: rgba(0, 0, 0, .35); padding: 1px 6px; border-radius: 5px; font-size: 12px;
+}
+
+/* Where the run actually lives, shown when saves are files rather than browser storage. */
+.save-location {
+  max-width: 780px; margin: 0 auto 18px; padding: 11px 18px; border-radius: 12px;
+  border: 1px solid #2c355a; background: rgba(124, 196, 127, .08);
+  color: #cfe6d0; font-size: 13px; line-height: 1.8; text-align: left;
+}
+.save-location code { background: rgba(0,0,0,.35); padding: 1px 6px; border-radius: 5px; }
+.save-location .dim { color: #9aa1c0; }
+
+/* Level beside HP: growth reads as one line. */
+.lvl-chip {
+  background: var(--card); border: 1px solid var(--line);
+  padding: 8px 16px; border-radius: 999px; font-weight: 700; color: #f0a9a9; cursor: help;
+}
+/* The bag is a button now, not a panel welded under every screen. */
+.bag-chip {
+  background: var(--card); border: 1px solid var(--line); color: var(--text);
+  padding: 8px 16px; border-radius: 999px; font-weight: 700; cursor: pointer;
+  font-family: inherit; font-size: 15px;
+}
+.bag-chip:hover { border-color: var(--gold); color: var(--gold); }
+.bag-chip #bag-count { font-size: 13px; color: var(--text-dim); }
+.bag-chip:hover #bag-count { color: var(--gold); }
+
+/* ---------- Pause ---------- */
+.pause-chip {
+  background: var(--card); border: 1px solid var(--line); color: var(--text);
+  padding: 8px 16px; border-radius: 999px; font-weight: 700; cursor: pointer;
+  font-family: inherit; font-size: 15px; white-space: nowrap;
+}
+.pause-chip:hover { border-color: var(--gold); color: var(--gold); }
+.pause-chip.paused { border-color: #e8b64c; color: #211a08; background: linear-gradient(120deg, #f3d489, var(--gold)); }
+.pause-bar {
+  margin-bottom: 14px; padding: 12px 18px; border-radius: var(--radius);
+  border: 1px solid var(--gold); background: rgba(232, 182, 76, .12);
+  color: #ffeec2; font-size: 14px; line-height: 1.7;
+}
+
+/* ---------- Topbar that survives a narrow window ----------
+   The bar was a single non-wrapping row: the title could not shrink, so the chips were pushed
+   off the edge and the HP bar squeezed to nothing. The title block now shrinks and truncates,
+   the chips wrap onto their own line, and the smallest sizes drop what is decoration. */
+.topbar { flex-wrap: wrap; }
+.topbar h2 { min-width: 0; flex: 0 1 auto; overflow-wrap: anywhere; }
+.topbar .flavor { min-width: 0; flex: 1 1 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vitals { flex-wrap: wrap; justify-content: flex-end; }
+.hp-chip { flex: 0 1 auto; }
+
+@media (max-width: 1100px) {
+  .topbar h2 { font-size: 22px; }
+  .topbar .flavor { display: none; }        /* flavour text is the first thing worth losing */
+  .vitals { margin-left: auto; }
+  .hp-chip { min-width: 120px; padding: 7px 13px; }
+  .lvl-chip, .gold-chip, .date-chip, .bag-chip, .pause-chip { padding: 7px 12px; font-size: 14px; }
+}
+@media (max-width: 820px) {
+  .topbar { gap: 10px; }
+  .topbar h2 { font-size: 19px; flex: 1 1 100%; }
+  .vitals { margin-left: 0; width: 100%; justify-content: flex-start; gap: 8px; }
+  .hp-chip { min-width: 104px; font-size: 13px; }
+  .lvl-chip, .gold-chip, .date-chip, .bag-chip, .pause-chip { padding: 6px 11px; font-size: 13px; }
+}
+@media (max-width: 560px) {
+  .date-chip { display: none; }             /* the date is in the tooltip and the bank page */
+  .hp-chip { flex: 1 1 auto; min-width: 92px; }
+}
+
+/* Offline-earnings popup: one line per kind of reward, readable at a glance on a phone. */
+.offline-lines {
+  display: grid; gap: 6px; margin: 12px 0;
+  background: var(--bg-deep); border: 1px solid var(--line);
+  border-radius: 12px; padding: 10px 12px; text-align: left; font-size: 14px;
+}
+
+/* ---------- Phone layout ----------------------------------------------------------------
+ * 🎯 [added 2026-08-19, owner wants this playable on a phone / as an APK] Until now the only
+ * responsive rules shrank topbar chips; the LAYOUT never changed. `.sidebar` is a fixed 240px
+ * next to `#screen-game { flex-direction: row }`, so on a 390px phone the sidebar took 240 and
+ * left ~150px for the game — narrower than one action card's own 240px minimum. Unusable, and
+ * no amount of packaging would have fixed it.
+ *
+ * Below 760px the sidebar becomes a slide-in drawer instead: off-canvas by default, over the
+ * content when open, closing on a backdrop tap or after picking a tab. 760 rather than 560
+ * because the break is about "does a 240px column plus a 240px card fit", not about phones. */
+.menu-chip { display: none; }               /* desktop keeps the always-on sidebar */
+.sidebar-backdrop { display: none; }
+
+@media (max-width: 760px) {
+  .menu-chip {
+    display: inline-flex; align-items: center; justify-content: center;
+    /* 44px is the smallest reliably tappable target; the chips around it are smaller because
+       they are read, not pressed. */
+    min-width: 44px; min-height: 44px; padding: 0 12px;
+    background: var(--card); color: var(--text); font-size: 20px; line-height: 1;
+    border: 1px solid var(--line); border-radius: 12px; cursor: pointer;
+  }
+  .menu-chip:active { border-color: var(--gold); }
+
+  .sidebar {
+    position: fixed; top: 0; left: 0; bottom: 0; z-index: 60;
+    width: 82vw; max-width: 300px; min-width: 0;
+    transform: translateX(-100%);
+    transition: transform .22s ease;
+    box-shadow: 2px 0 18px rgba(0, 0, 0, .5);
+  }
+  .sidebar.open { transform: translateX(0); }
+
+  .sidebar-backdrop {
+    display: block; position: fixed; inset: 0; z-index: 55;
+    background: rgba(0, 0, 0, .55);
+    opacity: 0; pointer-events: none; transition: opacity .22s ease;
+  }
+  .sidebar-backdrop.open { opacity: 1; pointer-events: auto; }
+
+  /* The main column now owns the full width — without this it keeps computing against a
+     sidebar that is no longer in the flow. */
+  .main { width: 100%; min-width: 0; }
+  .topbar { flex-wrap: wrap; gap: 8px; }
+  .topbar h2 { font-size: 17px; }
+
+  /* One card per row rather than a 240px grid that cannot fit: auto-fill would otherwise
+     overflow the viewport on the narrowest phones. */
+  .action-grid { grid-template-columns: 1fr; gap: 10px; }
+  .inv-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+  .seed-list { grid-template-columns: 1fr; }
+  .cd-grid, .equip-slots { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }
+
+  /* Modals were sized for a desktop window and ran off the screen edges. */
+  .modal { width: calc(100vw - 24px); max-width: 420px; }
+  .profile-row { flex-direction: column; align-items: stretch; }
+  .profile-card { width: auto; }
+}
+
+/* Difficulty as a dropdown: closed it is one line naming the tier in play, and the tiers not in
+   use stay out of the way until asked for. */
+.elite-drop { margin-bottom: 12px; }
+.elite-summary {
+  display: flex; align-items: center; gap: 10px; cursor: pointer; list-style: none;
+  background: linear-gradient(160deg, var(--card-hi), var(--card));
+  border: 1px solid var(--line); border-radius: 999px; padding: 8px 16px; width: fit-content;
+  max-width: 100%;
+}
+.elite-summary::-webkit-details-marker { display: none; }
+.elite-summary:hover { border-color: var(--gold); }
+.elite-summary .train-label { color: var(--text-dim); font-size: 13px; }
+.elite-current { font-weight: 700; color: var(--gold); }
+.elite-mult { font-size: 12px; color: var(--text-dim); }
+.elite-caret { color: var(--text-dim); transition: transform .15s ease; }
+.elite-drop[open] .elite-caret { transform: rotate(180deg); }
+
+.elite-list {
+  margin-top: 8px; display: grid; gap: 6px; width: fit-content; max-width: 100%;
+  background: var(--bg-deep); border: 1px solid var(--line); border-radius: 12px; padding: 8px;
+}
+.elite-opt {
+  display: flex; align-items: center; gap: 10px; text-align: left; cursor: pointer;
+  background: transparent; border: 1px solid transparent; border-radius: 9px;
+  padding: 8px 12px; color: var(--text); font-family: inherit;
+}
+.elite-opt:hover:not(:disabled) { border-color: var(--gold); background: var(--card); }
+.elite-opt.active { border-color: var(--gold); color: var(--gold); background: var(--card-hi); }
+.elite-opt.shut { opacity: .45; cursor: not-allowed; }
+.eo-bullet { color: #e8b64c; }
+.eo-face { font-size: 18px; }
+.eo-body { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.eo-name { font-weight: 700; font-size: 14px; }
+.eo-detail { font-size: 11px; color: var(--text-dim); }
+/* The one line on the rebirth page that costs real money if it goes unread. */
+.rb-warn { display: block; margin-top: 6px; color: var(--gold); font-size: 12px; line-height: 1.7; }
+/* Two complementary company filters, side by side and wrapping on a narrow screen. */
+.money-filters { display: flex; flex-wrap: wrap; gap: 8px 18px; margin: 4px 0 2px; }
+
+/* Notification settings popup — reached mid-play when the toast strip gets noisy. */
+.notif-list { display: flex; flex-direction: column; gap: 2px; margin-top: 14px; }
+.notif-row {
+  display: grid; grid-template-columns: 22px 1fr; gap: 4px 10px; align-items: center;
+  padding: 9px 6px; border-bottom: 1px solid var(--line); cursor: pointer;
+}
+.notif-row:hover { background: rgba(255, 255, 255, .03); }
+.notif-name { font-weight: 700; font-size: 14px; }
+.notif-note { grid-column: 2; color: var(--text-dim); font-size: 11px; line-height: 1.6; }
+
+/* Shop floor: price and wage pickers, and the ship-materials list. */
+.price-steps { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.price-steps .btn.on { border-color: var(--gold); color: var(--gold); }
+.ship-list { display: flex; flex-direction: column; gap: 2px; margin-top: 14px; max-height: 340px; overflow-y: auto; }
+.ship-row {
+  display: flex; justify-content: space-between; align-items: center; gap: 10px;
+  padding: 9px 8px; border: 0; border-bottom: 1px solid var(--line);
+  background: none; color: inherit; font: inherit; text-align: left; cursor: pointer;
+}
+.ship-row:hover { background: rgba(255, 255, 255, .05); }
+
+/* Property: the furniture picker, one button per production line. */
+.furn-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.furn-row .btn.on { border-color: var(--gold); color: var(--gold); }
+.furn-note { font-size: 11px; margin-top: 6px; }
+.karma-now { background: rgba(232, 182, 76, .08); }
+.karma-now .rb-name { color: var(--gold); }
+
+/* Hired gardener: the contract row under the seed picker. */
+.gardener-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px;
+  padding-top: 10px; border-top: 1px solid var(--line); }
+.gardener-on { color: var(--gold); font-size: 13px; font-weight: 700; }
+.farm-btn.hire-gardener { background: #2f3b52; color: #cfe0f5; font-size: 13px; }
+.farm-btn.hire-gardener.locked { opacity: .45; cursor: not-allowed; }
+.farm-btn.hire-gardener { display: inline-flex; flex-direction: column; align-items: flex-start;
+  gap: 1px; line-height: 1.3; padding-top: 7px; padding-bottom: 7px; }
+.hire-real { font-size: 10px; opacity: .7; font-weight: 400; }
+
+/* Slayer marks: four difficulty chips under a monster, one per permanent-stat milestone. */
+.slay-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 4px; }
+.slay-chip {
+  display: inline-flex; align-items: center; gap: 4px; padding: 1px 7px;
+  border: 1px solid var(--line); border-radius: 999px; font-size: 11px; color: var(--text-dim);
+}
+.slay-chip.on { border-color: #7cc47f; color: #7ee787; }
+.slay-chip b { color: #ffd66b; }
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════════
+ * Polish layer (2026-08-21)
+ *
+ * Appended rather than woven in, so every rule above still reads as it was written and this can be
+ * deleted in one block if it ever gets in the way. It adds depth, motion and per-skill colour; it
+ * does not change a single layout dimension, and it touches no artwork — the monster, avatar and
+ * pet images render exactly as before.
+ *
+ * Two constraints from the top of this file still hold and shaped everything here:
+ *   - system fonts only, no webfont download, because the game must work fully offline
+ *   - animation stays in CSS so the JS loop can remain coarse and cheap
+ *
+ * `--accent` is set per sidebar tab and `--skill-accent` on :root by game.js, both read straight
+ * from the colour already in data.js. Nothing here hardcodes a skill colour, so adding a skill
+ * tints itself.
+ * ═══════════════════════════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  --skill-accent: var(--gold);
+  --shadow-soft: 0 1px 2px #0006, 0 6px 16px -6px #0009;
+  --shadow-lift: 0 2px 4px #0006, 0 16px 34px -10px #000b;
+  --edge-hi: inset 0 1px 0 #ffffff14;
+  --ease-out: cubic-bezier(.22, 1, .36, 1);
+}
+
+/* ---------- depth ----------
+ * A flat card on a flat background gives the eye nothing to sit on. One soft shadow plus a
+ * one-pixel highlight along the top edge reads as a lit surface, which is most of what "polished"
+ * means before anything moves at all. */
+
+.action-card, .profile-card, .active-banner, .mastery-row {
+  box-shadow: var(--shadow-soft), var(--edge-hi);
+}
+
+.action-card {
+  transition: transform .18s var(--ease-out), border-color .18s ease, box-shadow .18s ease;
+}
+.action-card:hover {
+  transform: translateY(-3px);
+  border-color: color-mix(in srgb, var(--skill-accent) 55%, var(--line));
+  box-shadow: var(--shadow-lift), var(--edge-hi),
+              0 0 0 1px color-mix(in srgb, var(--skill-accent) 30%, transparent);
+}
+.action-card:active { transform: translateY(-1px); transition-duration: .06s; }
+/* A locked card must not pretend to be pressable. */
+.action-card.locked:hover { transform: none; box-shadow: var(--shadow-soft), var(--edge-hi); }
+
+/* The running card gets a slow travelling sheen rather than a brighter border, so the eye is drawn
+ * by movement instead of by another competing colour. */
+.action-card.running::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none; border-radius: inherit;
+  background: linear-gradient(105deg, transparent 35%, #ffffff12 50%, transparent 65%);
+  background-size: 260% 100%;
+  animation: card-sheen 2.6s linear infinite;
+}
+@keyframes card-sheen { from { background-position: 160% 0; } to { background-position: -60% 0; } }
+
+/* ---------- sidebar ----------
+ * The active tab used to differ only by a slightly lighter fill, which is hard to find at a glance
+ * in a list of nine. It now carries a rail in the skill's own colour. */
+
+.skill-tab {
+  position: relative;
+  transition: background .16s ease, border-color .16s ease, transform .16s var(--ease-out);
+}
+.skill-tab::before {
+  content: ""; position: absolute; left: 0; top: 50%; width: 3px; height: 0;
+  transform: translateY(-50%); border-radius: 0 3px 3px 0;
+  background: var(--accent, var(--gold));
+  transition: height .22s var(--ease-out);
+}
+.skill-tab:hover { transform: translateX(2px); }
+.skill-tab:hover::before { height: 40%; }
+.skill-tab.active::before { height: 70%; }
+.skill-tab.active {
+  box-shadow: var(--edge-hi),
+              inset 0 0 22px -8px color-mix(in srgb, var(--accent, var(--gold)) 60%, transparent);
+}
+.skill-tab .icon { transition: transform .22s var(--ease-out); }
+.skill-tab:hover .icon { transform: scale(1.14) rotate(-5deg); }
+.skill-tab.active .icon { transform: scale(1.08); }
+.skill-tab .xpbar > div { box-shadow: 0 0 8px -2px var(--accent, var(--gold)); }
+
+/* ---------- waiting for harvest ----------
+ * Only lights when every plot is planted and ripe, which is the one moment a garden is doing
+ * nothing at all. See farmIdleFull() in game.js for why it is not "anything is ripe". */
+
+.skill-tab.farm-waiting { border-color: color-mix(in srgb, var(--gold) 60%, transparent); }
+.skill-tab.farm-waiting .lvl { color: var(--gold); font-weight: 700; }
+.skill-tab.farm-waiting .icon { animation: harvest-nudge 2.4s ease-in-out infinite; }
+@keyframes harvest-nudge {
+  0%, 72%, 100% { transform: scale(1) rotate(0); }
+  80% { transform: scale(1.18) rotate(-9deg); }
+  88% { transform: scale(1.18) rotate(9deg); }
+}
+.area-head.farm-waiting-head {
+  color: var(--gold);
+  border-color: color-mix(in srgb, var(--gold) 45%, transparent);
+}
+
+/* ---------- topbar ----------
+ * Glass rather than a flat pill: a touch of blur and a lit top edge, so the numbers sit above the
+ * page instead of on it. */
+
+.topbar .gold-chip {
+  backdrop-filter: blur(6px);
+  box-shadow: var(--shadow-soft), var(--edge-hi);
+  transition: transform .16s var(--ease-out), box-shadow .16s ease;
+}
+.topbar .gold-chip:hover { transform: translateY(-1px); box-shadow: var(--shadow-lift), var(--edge-hi); }
+
+/* ---------- the running banner ----------
+ * The progress bar is the thing you actually watch while idling, so it earns a moving highlight. */
+
+.active-banner { box-shadow: var(--shadow-soft), var(--edge-hi); }
+.active-banner .bar > div {
+  position: relative; overflow: hidden;
+  transition: width .3s linear;
+  box-shadow: 0 0 12px -3px var(--skill-accent);
+}
+.active-banner .bar > div::after {
+  content: ""; position: absolute; inset: 0;
+  background: linear-gradient(100deg, transparent 30%, #ffffff40 50%, transparent 70%);
+  background-size: 220% 100%;
+  animation: bar-sheen 1.9s linear infinite;
+}
+@keyframes bar-sheen { from { background-position: 140% 0; } to { background-position: -40% 0; } }
+
+/* ---------- entering a view ----------
+ * Switching tabs used to swap instantly, which reads as a page reload. A short rise makes it read
+ * as the same page changing its mind. Cheap: one animation on one element, on render only. */
+
+.main > * { animation: view-rise .26s var(--ease-out) both; }
+@keyframes view-rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+/* ---------- buttons ---------- */
+
+.btn { transition: transform .14s var(--ease-out), box-shadow .14s ease, filter .14s ease; }
+.btn:hover { transform: translateY(-1px); box-shadow: var(--shadow-soft); filter: brightness(1.06); }
+.btn:active { transform: translateY(0) scale(.985); transition-duration: .05s; }
+.btn:disabled { filter: none; transform: none; box-shadow: none; }
+
+/* ---------- title ----------
+ * The gradient was already there; this makes it drift, which is the whole flourish. */
+
+.game-title { background-size: 200% auto; animation: title-drift 7s ease-in-out infinite alternate; }
+@keyframes title-drift { from { background-position: 0% center; } to { background-position: 100% center; } }
+
+/* ---------- respect the setting ----------
+ * Anything that loops forever is the part that hurts, so those stop entirely rather than shorten.
+ * One-shot transitions are reduced to near-instant instead of removed, because a button with no
+ * press feedback at all feels broken. */
+
+@media (prefers-reduced-motion: reduce) {
+  .action-card.running::after,
+  .active-banner .bar > div::after,
+  .skill-tab.farm-waiting .icon,
+  .game-title { animation: none; }
+  .main > * { animation-duration: .01ms; }
+  * { transition-duration: .05s !important; }
+  .skill-tab:hover { transform: none; }
+  .skill-tab:hover .icon { transform: none; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════════
+ * Parity layer (2026-08-21)
+ *
+ * Three regions — the sidebar, the top bar and the skill action cards — are rendered by React and
+ * MUI. Everything else is still drawn by game.js: the farm, the shop, the hunt, the guild, the
+ * bank, tax, rebirth, achievements, stats and the bag.
+ *
+ * Two halves of one screen must not look like two products. Every one of those views emits the same
+ * handful of class names, so this brings them to the same treatment the React components get —
+ * the same elevation, the same easing, the same accent behaviour — without rewriting twelve render
+ * functions and the twelve models they would need.
+ *
+ * The values are deliberately the ones in theme.js and ActionCards.jsx, not new ones. If a token
+ * changes there it has to change here too, which is the honest cost of this half-and-half state and
+ * the reason the note is at the top rather than buried.
+ * ═══════════════════════════════════════════════════════════════════════════════════════════════ */
+
+/* ---------- every card in every legacy view ---------- */
+
+.action-card {
+  border-radius: 14px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  background: linear-gradient(160deg, var(--card-hi), var(--card));
+  box-shadow: var(--shadow-soft), var(--edge-hi);
+}
+.action-card:hover:not(.locked) {
+  transform: translateY(-3px);
+  border-color: color-mix(in srgb, var(--skill-accent) 55%, var(--line));
+  box-shadow: var(--shadow-lift), var(--edge-hi),
+              0 0 0 1px color-mix(in srgb, var(--skill-accent) 30%, transparent);
+}
+/* A full-width row is a panel, not a button. Lifting it on hover made whole sections twitch as the
+   pointer crossed them, so it gets the material and not the motion. */
+.action-card.full-card:hover { transform: none; box-shadow: var(--shadow-soft), var(--edge-hi); }
+
+/* ---------- section headings ---------- */
+
+.area-head {
+  border-left: 3px solid color-mix(in srgb, var(--skill-accent) 70%, transparent);
+  padding-left: 12px;
+  border-radius: 2px;
+}
+
+/* ---------- zone tabs ---------- */
+
+.area-tab {
+  transition: transform .16s var(--ease-out), border-color .16s ease, box-shadow .16s ease;
+  box-shadow: var(--edge-hi);
+}
+.area-tab:hover:not(.shut) { transform: translateY(-1px); box-shadow: var(--shadow-soft), var(--edge-hi); }
+.area-tab.active {
+  border-color: color-mix(in srgb, var(--skill-accent) 65%, transparent);
+  color: var(--skill-accent);
+  box-shadow: var(--edge-hi), inset 0 0 18px -8px var(--skill-accent);
+}
+.area-tab.active .area-count { color: var(--skill-accent); }
+
+/* ---------- mastery strips, wherever they appear ---------- */
+
+.m-bar > div, .plot-bar > div { box-shadow: 0 0 8px -1px currentColor; }
+.m-chip { letter-spacing: .2px; }
+
+/* ---------- the farm ----------
+ * The plot bar is a clock, so it moves linearly. A ripe plot pulses instead: it is the one card in
+ * the game that is finished and waiting for you, and the waiting is the whole point of saying so. */
+
+.plot-bar > div { transition: width .3s linear; }
+.action-card.plot-card.ripe {
+  border-color: color-mix(in srgb, var(--gold) 60%, transparent);
+  animation: plot-ripe 2.6s ease-in-out infinite;
+}
+@keyframes plot-ripe {
+  0%, 100% { box-shadow: var(--shadow-soft), var(--edge-hi), 0 0 0 0 #e8b64c00; }
+  50%      { box-shadow: var(--shadow-soft), var(--edge-hi), 0 0 22px -6px #e8b64c88; }
+}
+.action-card.plot-card.empty-plot { border-style: dashed; opacity: .8; }
+.action-card.plot-card.empty-plot:hover { opacity: 1; border-style: solid; }
+
+.seed-opt { transition: transform .16s var(--ease-out), border-color .16s ease, box-shadow .16s ease; }
+.seed-opt:hover:not(:disabled) { transform: translateY(-2px); box-shadow: var(--shadow-soft); }
+.seed-opt.active { box-shadow: var(--shadow-soft), var(--edge-hi), 0 0 0 1px #7cc47f inset; }
+
+.farm-btn { transition: transform .14s var(--ease-out), box-shadow .14s ease, filter .14s ease; }
+.farm-btn:hover:not(:disabled) { transform: translateY(-1px); box-shadow: var(--shadow-soft); filter: brightness(1.07); }
+.farm-btn:active:not(:disabled) { transform: translateY(0) scale(.985); }
+
+/* ---------- the card the eye was sent to ----------
+ * `jumped` is set when a "you are missing this" link jumps to the card that makes the material.
+ * Landing somewhere new with nothing marked meant hunting for it, which is the thing the jump was
+ * supposed to save. Named to match the React cards, which use the same keyframes. */
+
+.action-card.jumped, .jumped { animation: chamnan-jump .9s ease; }
+@keyframes chamnan-jump {
+  0%   { box-shadow: 0 0 0 0 #e8b64c00; }
+  25%  { box-shadow: 0 0 0 3px #e8b64ccc; }
+  100% { box-shadow: var(--shadow-soft), var(--edge-hi); }
+}
+
+/* ---------- money panels, ledgers, modals ---------- */
+
+.money-summary, .ledger-card, .equip-panel, .stat-card, .loc-card, .stage-card {
+  box-shadow: var(--shadow-soft), var(--edge-hi);
+}
+.modal-back { backdrop-filter: blur(3px); }
+
+@media (prefers-reduced-motion: reduce) {
+  .action-card.plot-card.ripe { animation: none; }
+  .action-card.jumped, .jumped { animation: none; }
+  .action-card:hover:not(.locked) { transform: none; }
+  .area-tab:hover:not(.shut) { transform: none; }
+  .seed-opt:hover:not(:disabled) { transform: none; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════════
+ * Composition pass (2026-08-21)
+ *
+ * The owner played the polished build and said it felt the same. They were right, and the measure
+ * says why: the cards covered 20% of the window. The other 80% was one flat navy rectangle. Shadows
+ * and hover lifts are materials, and materials cannot rescue a composition — the eye reads mass,
+ * spacing and rhythm first, and none of those had moved.
+ *
+ * So this changes the things that occupy space rather than the things that decorate it: the
+ * background becomes something rather than nothing, the cards grow enough to hold the width, and
+ * the type gets a hierarchy instead of four sizes within three points of each other.
+ * ═══════════════════════════════════════════════════════════════════════════════════════════════ */
+
+/* ---------- the 80% ----------
+ * Four very large, very soft radial pools drifting at different speeds. Slow enough that nothing
+ * ever visibly moves — it is the difference between a room with a window and a room without one,
+ * not an animation anyone should notice. Pure gradients, so it costs no canvas and no JS. */
+
+body::before {
+  content: ""; position: fixed; inset: -20%; z-index: -2; pointer-events: none;
+  background:
+    radial-gradient(38vw 38vw at 18% 12%, color-mix(in srgb, var(--skill-accent) 22%, transparent), transparent 62%),
+    radial-gradient(46vw 46vw at 88% 22%, #4a3a8c33, transparent 64%),
+    radial-gradient(42vw 42vw at 72% 96%, #1e5a7a3d, transparent 62%),
+    radial-gradient(34vw 34vw at 8%  88%, #7a2f5e33, transparent 60%);
+  filter: blur(28px);
+  animation: nebula 46s ease-in-out infinite alternate;
+  transition: background 1.2s ease;
+}
+@keyframes nebula {
+  from { transform: translate3d(0, 0, 0) scale(1); }
+  to   { transform: translate3d(2%, -2.5%, 0) scale(1.08); }
+}
+
+/* A fine grain over the top. Large flat gradients band on cheap panels; a little noise breaks the
+ * banding and keeps the dark from reading as plastic. */
+body::after {
+  content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none; opacity: .035;
+  background-image: url("data:image/svg+xml;utf8,\
+<svg xmlns='http://www.w3.org/2000/svg' width='140' height='140'>\
+<filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/></filter>\
+<rect width='140' height='140' filter='url(%23n)'/></svg>");
+}
+
+/* ---------- the 20% ----------
+ * 249px cards on a 1600px window left four of them adrift in the middle of the screen. Wider cards
+ * with real padding fill the row, and the grid keeps filling as the window grows. */
+
+.action-grid,
+#skill-grid-root > div {
+  grid-template-columns: repeat(auto-fill, minmax(310px, 1fr)) !important;
+  gap: 18px !important;
+}
+.action-card { padding: 20px 22px; }
+.action-card.full-card { padding: 22px 24px; }
+
+/* ---------- type ----------
+ * Four sizes within three points of each other is not a hierarchy, it is a texture. The title now
+ * leads, the card name follows, and the supporting lines step down clearly enough that the eye can
+ * skip them. */
+
+.topbar h2 { font-size: 32px; letter-spacing: -.4px; }
+.topbar .flavor { font-size: 14px; opacity: .85; }
+.action-card .name { font-size: 17px; letter-spacing: -.2px; }
+.action-card .detail { font-size: 13.5px; line-height: 1.75; }
+.area-head { font-size: 16px; letter-spacing: .2px; }
+
+/* ---------- the sidebar ----------
+ * 240px for eighteen rows, each with a name, a note and a bar. The extra 44px is all breathing. */
+
+.sidebar { width: 284px; min-width: 284px; padding: 20px 16px; }
+.sidebar .brand { font-size: 22px; letter-spacing: -.3px; padding-bottom: 12px; }
+
+/* The panels sit ON the atmosphere rather than replacing it, so the colour behind them shows
+ * through and the whole screen reads as one space instead of cards on a backdrop. */
+.sidebar { background: color-mix(in srgb, var(--bg-deep) 82%, transparent); backdrop-filter: blur(14px); }
+.action-card {
+  background: linear-gradient(160deg,
+    color-mix(in srgb, var(--card-hi) 88%, transparent),
+    color-mix(in srgb, var(--card) 92%, transparent));
+  backdrop-filter: blur(10px);
+}
+
+@media (max-width: 900px) {
+  .action-grid, #skill-grid-root > div {
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)) !important;
+  }
+  .topbar h2 { font-size: 26px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  body::before { animation: none; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════════
+ * Phone pass (2026-08-21)
+ *
+ * 🎯 [owner] "วางแผนให้ฉันเล่นผ่านมือถือ browser ได้"
+ *
+ * Measured on a 390×844 viewport before touching anything: the header ate 235px — 28% of the
+ * screen — and the first card began at y=681, leaving 163px of actual game visible on load. The
+ * sidebar drawer and the no-horizontal-scroll work were already right; the header was not.
+ *
+ * The desktop composition pass is what made it worse: a 32px title and 407px cards are correct on
+ * a 1600px window and wrong on a phone. So this is not "shrink everything" — it is a different
+ * arrangement for a different shape.
+ * ═══════════════════════════════════════════════════════════════════════════════════════════════ */
+
+@media (max-width: 760px) {
+  /* ---- the header, from three stacked rows to two tight ones ---- */
+
+  .topbar { gap: 8px; margin-bottom: 12px; row-gap: 6px; }
+  .topbar h2 { font-size: 20px; letter-spacing: -.2px; }
+  /* The flavour line is a sentence of atmosphere. It is the first thing to go when the screen is
+     the size of a hand — the title already says which skill this is. */
+  .topbar .flavor { display: none; }
+
+  /* 🎯 [owner 2026-08-22] The scrolling strip was the wrong trade. Eight chips are 714px wide in a
+     366px viewport, so more than half was hidden at all times — and tapping the fullscreen chip,
+     which sits at the far right, left the row scrolled there with the HP and gold chips off-screen
+     until you dragged it back. Vitals you cannot see are not vitals.
+     Compact chips wrap into two rows instead: nothing hidden, nothing to drag, and the height cost
+     is the difference between 44px and about 84px. */
+  #vitals-root > div { gap: 6px !important; row-gap: 6px !important; }
+  #vitals-root > div > * {
+    padding: 5px 10px !important;
+    font-size: 13px !important;
+  }
+
+  /* ---- everything between the header and the first card ---- */
+
+  .active-banner { padding: 10px 12px; margin-bottom: 10px; gap: 10px; }
+  .mastery-summary { padding: 8px 10px; }
+  .area-tabs { gap: 6px; margin: 8px 0; overflow-x: auto; flex-wrap: nowrap; scrollbar-width: none; }
+  .area-tabs::-webkit-scrollbar { display: none; }
+  .area-tab { flex: 0 0 auto; padding: 6px 10px; font-size: 13px; }
+  .area-head { font-size: 14px; padding-left: 10px; }
+
+  /* ---- the cards ---- */
+
+  .main { padding: 14px 12px; }
+  .action-grid, #skill-grid-root > div {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+  .action-card { padding: 14px 16px; }
+  .action-card .name { font-size: 16px; }
+  .action-card .detail { font-size: 13px; line-height: 1.6; }
+
+  /* ---- touch ----
+   * Hover does not exist here. A card that lifts on tap-and-hold reads as a bug, and the lift was
+   * for a pointer that can hesitate over something without committing to it. */
+  .action-card:hover:not(.locked) { transform: none; }
+  .area-tab:hover:not(.shut) { transform: none; }
+  .seed-opt:hover:not(:disabled) { transform: none; }
+  /* Apple's 44px minimum, applied where a finger actually lands. */
+  .farm-btn, .btn, .area-tab, .seed-opt { min-height: 44px; }
+
+  /* The drawer covers the view it is opening, so it gets a real backdrop rather than a tint. */
+  .sidebar { width: 82vw; min-width: 0; max-width: 320px; }
+  .sidebar-backdrop.open { backdrop-filter: blur(4px); }
+
+  /* The atmosphere costs a full-screen blurred layer on every frame. On a phone GPU that is the
+     difference between smooth scrolling and not, and at this size nobody is admiring it anyway. */
+  body::before { filter: blur(14px); animation-duration: 70s; }
+  .action-card, .sidebar { backdrop-filter: none; }
+}
+
+/* Landscape on a phone is shorter than it is narrow: the header has to give way, not the content. */
+@media (max-height: 480px) and (orientation: landscape) {
+  .topbar { margin-bottom: 8px; }
+  .topbar h2 { font-size: 18px; }
+  .mastery-summary { display: none; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════════
+ * The profile screen could hide its own content (2026-08-21)
+ *
+ * 🎯 [owner, from a phone] "เหมือนบางข้อมูลหาย"
+ *
+ * Not a look, a bug. Measured at 390×844: the screen's content is 882px tall, `justify-content:
+ * center` therefore pushed the title to y=-38, and `body { overflow: hidden }` with the screen at
+ * `overflow: visible` meant there was no way to scroll up and get it back. Centred flex clips at
+ * BOTH ends when the content is taller than the box, and the game title was simply gone.
+ *
+ * `safe center` is the whole fix: centre while it fits, fall back to flex-start when it does not,
+ * so nothing is ever pushed off the top. The scroll is the belt to that braces — a short desktop
+ * window hit this too, it just needed a smaller one than a phone.
+ * ═══════════════════════════════════════════════════════════════════════════════════════════════ */
+
+#screen-profiles {
+  justify-content: safe center;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 24px 16px;
+  -webkit-overflow-scrolling: touch;
+}
+
+@media (max-width: 760px) {
+  #screen-profiles { gap: 18px; padding: 16px 12px 32px; }
+
+  /* 44px of gradient title on a 390px screen is most of the first fold, and it is the one thing on
+     the page nobody needs to read twice. */
+  .game-title { font-size: 30px; }
+  .game-subtitle { font-size: 13px; line-height: 1.6; margin-top: -8px; }
+
+  /* The save-location box is a paragraph of file paths — genuinely useful on a desktop where you
+     can act on it, and four lines of a phone screen where you cannot. */
+  .save-location { font-size: 12px; line-height: 1.7; padding: 12px 14px; }
+  /* break-word, not break-all: the latter splits mid-token and turned `saves/backups/` into
+     "sa / ves/backups/". This only breaks a path when it genuinely cannot fit. */
+  .save-location code { font-size: 11px; overflow-wrap: break-word; word-break: normal; }
+
+  .profile-row { flex-direction: column; width: 100%; gap: 14px; }
+  .profile-card { width: 100%; padding: 18px 16px; }
+  .profile-card .slot-icon { font-size: 32px; }
+  .profile-card h3 { font-size: 18px; margin: 6px 0 2px; }
+  .profile-card .meta { font-size: 12px; min-height: 0; }
+  .profile-card:hover { transform: none; }     /* no hover on a finger */
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════════
+ * Toasts could not fit on a phone (2026-08-21)
+ *
+ * 🎯 [owner, from a phone] "พอ filler เห็นไม่ครบ"
+ *
+ * `#toasts` is pinned to `right: 20px` with no `left` and no `max-width`, so a toast grows leftward
+ * for as long as its text needs. On a 1600px window that is invisible; on a 390px one the message
+ * runs off the left edge of the screen and the first words are simply gone — and because several
+ * stack at once while a farm ripens and a dividend lands, they cover the list underneath at the
+ * same time.
+ *
+ * The desktop behaviour is deliberately untouched: a toast that hugs the right edge and sizes to
+ * its own text is right when there is room for it.
+ * ═══════════════════════════════════════════════════════════════════════════════════════════════ */
+
+#toasts { max-width: min(420px, calc(100vw - 40px)); }
+.toast { overflow-wrap: anywhere; }
+
+@media (max-width: 760px) {
+  /* Span the width and wrap, rather than growing off-screen. */
+  #toasts { left: 12px; right: 12px; bottom: 12px; max-width: none; gap: 6px; }
+  .toast { padding: 9px 12px; font-size: 13px; line-height: 1.5; }
+
+  /* They slide up from the bottom here, not in from the right — there is no right to come from
+     once the strip is the full width of the screen. */
+  @keyframes toast-in { from { transform: translateY(14px); opacity: 0; } }
+  @keyframes toast-out { to { transform: translateY(14px); opacity: 0; } }
+
+  /* The last card in a list sat under the toast strip and could not be scrolled past it, because
+     the strip is fixed and the page had no room reserved for it. */
+  .main { padding-bottom: 96px; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════════
+ * Modals could not be closed on a phone (2026-08-22)
+ *
+ * 🎯 [owner, from a phone] "ข้อมูลมันล้น"
+ *
+ * The same bug as the profile screen, in a second place — which is the lesson worth writing down.
+ * When that one was fixed the fix was applied where the report pointed instead of to every centred
+ * flex container in the file, and this one was already broken at the time.
+ *
+ * Measured at 390×844 with the settings panel open: the modal is 956px tall, `align-items: center`
+ * put its top at y=-56, and nothing scrolled. The "เสร็จ" button sat at y=807 with the modal ending
+ * at 900 — off the bottom of the screen, with no way to reach it. A dialog you cannot close is
+ * worse than one that looks wrong.
+ *
+ * `safe center` centres while it fits and falls back to flex-start when it does not, so nothing is
+ * ever pushed off the top. The actions bar is sticky rather than merely reachable: scrolling to
+ * find the way out is not much better than not having one.
+ * ═══════════════════════════════════════════════════════════════════════════════════════════════ */
+
+.modal-back {
+  align-items: safe center;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 16px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.modal {
+  /* dvh, not vh: mobile browsers hide and show their own chrome, and vh measures the tallest state
+     — the difference is the address bar, which is exactly the strip a close button was hiding
+     behind. The vh line is the fallback for anything that does not know dvh. */
+  max-height: calc(100vh - 32px);
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+/* The sticky bar floats over the content, so the content needs somewhere to end — without this the
+ * last row sat behind the buttons and could be read but not ticked.
+ *
+ * `:last-of-type` was the first attempt and is a trap worth naming: it matches the last element of
+ * that TAG among its siblings, not the last one carrying the class. Both lists here are divs, so it
+ * selected by position and would have silently missed the moment a non-div was added between them. */
+.modal > .notif-list:last-child,
+.modal > *:nth-last-child(2) { padding-bottom: 6px; }
+
+.modal-actions {
+  position: sticky;
+  bottom: -22px;             /* cancels the modal's own padding so the bar sits flush */
+  margin-bottom: -22px;
+  padding: 12px 0 22px;
+  background: linear-gradient(to top, var(--card) 68%, transparent);
+  z-index: 1;
+}
+
+@media (max-width: 760px) {
+  .modal-back { padding: 10px; align-items: flex-end; }
+  /* A sheet rather than a floating card: at this width the modal is nearly the screen anyway, and
+     anchoring it to the bottom puts the actions where the thumb already is. */
+  .modal {
+    width: 100%;
+    max-height: calc(100dvh - 20px);
+    border-radius: 18px;
+    padding: 18px 16px;
+  }
+  .modal-head { font-size: 18px; }
+  .modal-actions { bottom: -18px; margin-bottom: -18px; padding: 10px 0 18px; }
+  .notif-row { padding: 10px 0; }
+}
+
+/* ---------- 🎖️ ฉายา ----------
+ * 🎯 [owner 2026-08-22] Titles come from achievements, so the achievements page is where the
+ * banner lives. Gold border only for a special title: the counted tiers are something everyone
+ * passes through, the special ones are not, and the difference has to be visible at a glance. */
+.title-banner {
+  display: flex; align-items: center; gap: 14px;
+  padding: 14px 16px; margin-bottom: 14px;
+  background: linear-gradient(120deg, var(--card-hi), var(--card));
+  border: 1px solid var(--line); border-radius: 14px;
+}
+.title-banner.is-special {
+  border-color: var(--gold);
+  box-shadow: inset 0 1px 0 #ffffff10, 0 0 0 1px #e8b64c33, 0 8px 22px -14px #e8b64c;
+}
+.title-banner .t-icon { font-size: 30px; line-height: 1; flex-shrink: 0; }
+.title-banner .t-body { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.title-banner .t-body b { font-size: 17px; }
+.title-banner.is-special .t-body b { color: var(--gold); }
+.title-banner .t-body small { font-size: 12.5px; color: var(--text-dim); }
+
+/* 😱 The fear mark. A bonus the player cannot see is a bonus they do not have, and this one is
+ * earned over a thousand kills — it gets a badge on the monster it applies to, not a line in a
+ * menu somewhere. */
+.fear-tag {
+  display: inline-block; margin-left: 4px; font-size: 15px; cursor: help;
+  animation: fear-shiver 2.8s ease-in-out infinite;
+}
+@keyframes fear-shiver {
+  0%, 88%, 100% { transform: translateX(0); }
+  91% { transform: translateX(-1.5px); }
+  94% { transform: translateX(1.5px); }
+  97% { transform: translateX(-1px); }
+}
+@media (prefers-reduced-motion: reduce) { .fear-tag { animation: none; } }
+
+/* ---------- 📜 การ์ดเควส ----------
+ * A job you can hand in right now is the only thing on this screen worth acting on, so it is the
+ * only thing that carries colour. Everything else states its price and waits. */
+.quest-card { display: flex; flex-direction: column; gap: 9px; }
+.quest-card.is-ready { border-color: #7cc47f88; box-shadow: inset 0 1px 0 #ffffff10, 0 0 0 1px #7cc47f33; }
+.quest-card .q-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.quest-card .q-who { font-weight: 700; font-size: 15px; }
+.quest-card .q-job { font-size: 12px; color: var(--text-dim); }
+.quest-card .q-want {
+  display: flex; justify-content: space-between; align-items: center; gap: 10px;
+  background: var(--bg-deep); border: 1px solid var(--line); border-radius: 10px; padding: 8px 11px;
+}
+.quest-card .q-item { font-size: 14px; font-weight: 600; }
+.quest-card .q-have { font-size: 13px; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.quest-card .q-have.ok { color: #7cc47f; font-weight: 700; }
+.quest-card .q-pay { font-size: 13.5px; color: var(--gold); font-weight: 600; }
+.quest-card .q-foot { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: auto; }
+.quest-card .q-left { font-size: 12px; color: var(--text-dim); }
+.empty-note { padding: 22px; text-align: center; color: var(--text-dim); }
+
+/* ---------- 💗 คนในหมู่บ้าน ---------- */
+.villager-head { margin: 20px 0 10px; font-size: 15px; font-weight: 700; color: var(--text-dim); }
+.villager-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); }
+.villager-card {
+  display: flex; flex-direction: column; gap: 8px; padding: 13px 14px;
+  background: linear-gradient(160deg, var(--card-hi), var(--card));
+  border: 1px solid var(--line); border-radius: 14px;
+}
+.villager-card.is-wed { border-color: #d98fb0; box-shadow: inset 0 1px 0 #ffffff10, 0 0 0 1px #d98fb033; }
+.villager-card .v-top { display: flex; align-items: center; gap: 9px; }
+.villager-card .v-icon { font-size: 24px; line-height: 1; }
+.villager-card .v-id { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.villager-card .v-id b { font-size: 15px; }
+.villager-card .v-id small { font-size: 11.5px; color: var(--text-dim); }
+.villager-card .v-stage { font-size: 12px; font-weight: 700; color: #d98fb0; white-space: nowrap; }
+.villager-card .v-track { height: 5px; border-radius: 3px; background: var(--bg-deep); overflow: hidden; }
+.villager-card .v-track > div {
+  height: 100%; border-radius: 3px; background: #d98fb0;
+  box-shadow: 0 0 8px -1px #d98fb0; transition: width .45s cubic-bezier(.22,1,.36,1);
+}
+.villager-card .v-note { font-size: 11.5px; color: var(--text-dim); }
+.villager-card .v-bonus { font-size: 12.5px; font-weight: 600; color: var(--gold); }
+.villager-card .v-bonus.muted { color: var(--text-dim); font-weight: 400; }
+.villager-card .v-acts { display: flex; gap: 7px; flex-wrap: wrap; margin-top: auto; }
+.villager-card .v-acts .btn { flex: 1; font-size: 12.5px; padding: 7px 9px; }
+
+/* The gift picker sorts by what this person actually wants, and says so per row — a system that
+ * punishes a wrong guess has to let the player make an informed one. */
+.gift-list { display: flex; flex-direction: column; gap: 5px; max-height: 46vh; overflow-y: auto; }
+.gift-row {
+  display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
+  padding: 9px 11px; border-radius: 10px; cursor: pointer;
+  background: var(--card); border: 1px solid var(--line); color: var(--text); font-size: 14px;
+}
+.gift-row:hover { background: var(--card-hi); }
+.gift-row .g-n { margin-left: auto; font-size: 12px; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.gift-row .g-d { font-weight: 700; font-variant-numeric: tabular-nums; min-width: 30px; text-align: right; }
+.gift-row.loved { border-color: #d98fb066; }
+.gift-row.loved .g-d { color: #d98fb0; }
+.gift-row.plain .g-d { color: var(--text-dim); }
+.gift-row.bad .g-d { color: var(--danger); }
+
+/* 🎯 [owner 2026-08-22] "ในลานหมู่บ้าน ควรเห็นหน้า npc ด้วย เพื่ออ้างอิงตัวละคร ... บางคนอาจจะหน้าตาแบบนึง
+ * หรืออาจดูแค่สเตตัสโบนัส" — so the face and the bonus carry equal weight on the card. The portrait
+ * is large enough to tell people apart at a glance, and the bonus line sits directly under it. */
+.villager-card .v-face { flex-shrink: 0; }
+.villager-card .v-face .icon-art { width: 54px; height: 54px; }
+.villager-card .v-top { align-items: center; gap: 11px; }
+
+/* Two sub-tabs, per the owner: quests and relationships rather than one long scroll. */
+#view-extra .area-tabs { margin-bottom: 12px; }
+
+/* ---------- 👨‍👩‍👧 ครอบครัว ----------
+ * Us first and always present, so the page never reads as a locked feature: a player with no
+ * partner and no children still has themselves and the companion they hunt with. */
+.fam-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+.fam-card {
+  display: flex; gap: 12px; padding: 14px;
+  background: linear-gradient(160deg, var(--card-hi), var(--card));
+  border: 1px solid var(--line); border-radius: 14px;
+}
+.fam-card.is-me { border-color: var(--gold); }
+.fam-card.is-spouse { border-color: #d98fb0; }
+.fam-card.is-kid { border-color: #8fd0e8; }
+.fam-card.is-empty { opacity: .6; }
+.fam-face { flex-shrink: 0; font-size: 30px; line-height: 1; }
+.fam-face .icon-art { width: 54px; height: 54px; }
+.fam-body { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1; }
+.fam-body b { font-size: 15px; }
+.fam-body small { font-size: 12px; color: var(--text-dim); }
+.fam-note { font-size: 12.5px; color: var(--gold); font-weight: 600; }
+.fam-row { display: flex; gap: 10px; flex-wrap: wrap; font-size: 12.5px; color: var(--text-dim);
+           font-variant-numeric: tabular-nums; }
+.fam-hint { margin-top: 12px; padding: 11px 14px; border-radius: 12px;
+            background: var(--bg-deep); border: 1px solid var(--line);
+            font-size: 13px; color: var(--text-dim); text-align: center; }
+.kid-track { height: 4px; border-radius: 2px; background: var(--bg-deep); overflow: hidden; margin: 2px 0; }
+.kid-track > div { height: 100%; border-radius: 2px; background: #8fd0e8; transition: width .4s ease; }
+
+/* Education: the dots say how far a track has gone, the button says what the next step costs.
+ * Both on one line because the decision is exactly "is that worth that". */
+.edu-list { display: flex; flex-direction: column; gap: 5px; margin-top: 6px; }
+.edu-row { display: flex; align-items: center; gap: 8px; font-size: 12.5px; }
+.edu-name { min-width: 76px; }
+.edu-lv { letter-spacing: 1px; color: var(--gold); font-size: 11px; }
+.edu-max { margin-left: auto; font-size: 11px; color: var(--text-dim); }
+.btn.tiny { margin-left: auto; padding: 3px 9px; font-size: 11.5px; border-radius: 8px;
+            font-variant-numeric: tabular-nums; }
+
+/* 🎯 [owner 2026-08-22] "ในหน้าเควส ยังเป็น emoji" — the quest card shows the same face as the
+ * relationship card, so the person asking is recognisable in both places. */
+.quest-card .q-head { align-items: center; }
+.quest-card .q-face { flex-shrink: 0; }
+.quest-card .q-face .icon-art { width: 34px; height: 34px; }
+.quest-card .q-who { font-weight: 700; font-size: 15px; margin-right: auto; }
+
+/* The source picker. Locked routes stay visible but dimmed — knowing a thing also drops in a place
+ * you cannot reach yet is information, and hiding it just makes the list look shorter than it is. */
+.src-list { display: flex; flex-direction: column; gap: 5px; max-height: 46vh; overflow-y: auto; }
+.src-row {
+  display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
+  padding: 10px 12px; border-radius: 10px; cursor: pointer;
+  background: var(--card); border: 1px solid var(--line); color: var(--text); font-size: 14px;
+}
+.src-row:hover { background: var(--card-hi); }
+.src-row.locked { opacity: .5; }
+.src-row .s-ic { font-size: 17px; flex-shrink: 0; }
+.src-row .s-nm { min-width: 0; }
+.src-row .s-nt { margin-left: auto; font-size: 11.5px; color: var(--text-dim); white-space: nowrap; }
+
+/* 🌐 Language switch. Two buttons rather than a dropdown: there are exactly two, and a select for
+ * two options hides one of them behind a tap for no reason. */
+.lang-row { display: flex; gap: 8px; margin-bottom: 10px; }
+.lang-row .lang-btn { flex: 1; }

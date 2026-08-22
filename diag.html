@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Idle Fantacia — ตรวจที่เก็บเซฟ</title>
+<!--
+  A standalone probe for "the game will not save in this browser".
+
+  It loads nothing and depends on nothing, so it works in any browser, over file:// or http://.
+  It reports what the browser ACTUALLY allows rather than what it claims: every storage backend is
+  written to and read back, because a browser can expose the API and then silently discard writes
+  (Brave does exactly this on file:// pages regardless of the Shields toggle).
+-->
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; padding: 28px 20px; background: #12162a; color: #e8e9f2;
+         font-family: "Noto Sans Thai", -apple-system, "Segoe UI", sans-serif; line-height: 1.75; }
+  .wrap { max-width: 760px; margin: 0 auto; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .sub { color: #9aa1c0; font-size: 14px; margin-bottom: 22px; }
+  .row { display: grid; grid-template-columns: 200px 1fr; gap: 12px; padding: 11px 14px;
+         border-bottom: 1px solid #2c355a; align-items: baseline; }
+  .row b { font-weight: 700; }
+  .ok { color: #7cc47f; } .bad { color: #e86a6a; } .dim { color: #9aa1c0; font-size: 13px; }
+  .verdict { margin: 24px 0 0; padding: 18px 20px; border-radius: 14px; border: 1px solid #2c355a;
+             background: #1b2138; }
+  .verdict.good { border-color: #7cc47f; }
+  .verdict.bad { border-color: #e86a6a; background: rgba(232,106,106,.10); }
+  .verdict h2 { margin: 0 0 8px; font-size: 17px; }
+  code { background: rgba(0,0,0,.4); padding: 2px 7px; border-radius: 5px; font-size: 13px; }
+  ol { margin: 10px 0 0; padding-left: 22px; }
+  li { margin-bottom: 8px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🔍 ตรวจที่เก็บเซฟของเบราว์เซอร์</h1>
+  <div class="sub">เปิดหน้านี้ด้วยเบราว์เซอร์ตัวที่เซฟไม่ได้ แล้วอ่านผลด้านล่าง</div>
+  <div id="rows"></div>
+  <div id="verdict" class="verdict"></div>
+</div>
+<script>
+const rows = document.getElementById("rows");
+function row(label, value, good, note) {
+  const el = document.createElement("div");
+  el.className = "row";
+  el.innerHTML = `<b>${label}</b><span><span class="${good === null ? "dim" : good ? "ok" : "bad"}">${value}</span>`
+    + (note ? `<br><span class="dim">${note}</span>` : "") + `</span>`;
+  rows.appendChild(el);
+}
+
+/* Write, read back, delete. An API that exists but drops writes still fails here, which is the
+ * failure mode that makes this worth writing at all. */
+function probeSync(name, store) {
+  try {
+    const s = window[store];
+    if (!s) return { ok: false, why: "เบราว์เซอร์ไม่มี " + store + " ให้ใช้" };
+    const k = "__fantacia_probe__", v = String(Date.now());
+    s.setItem(k, v);
+    const back = s.getItem(k);
+    s.removeItem(k);
+    if (back !== v) return { ok: false, why: "เขียนได้แต่อ่านกลับไม่ตรง — เบราว์เซอร์ทิ้งค่าให้เงียบ ๆ" };
+    return { ok: true, why: "เขียนและอ่านกลับได้ครบ" };
+  } catch (e) {
+    return { ok: false, why: (e.name ? e.name + ": " : "") + (e.message || String(e)) };
+  }
+}
+
+const proto = location.protocol;
+const isFile = proto === "file:";
+row("เปิดหน้านี้ด้วย", proto + "//" + (location.host || "(ไม่มีโฮสต์)"), !isFile,
+    isFile ? "เปิดจากไฟล์ตรง ๆ — Brave ปิดที่เก็บข้อมูลของ file:// ไว้ตายตัว ไม่เกี่ยวกับปุ่ม Shields"
+           : "เป็นที่อยู่จริง เบราว์เซอร์จึงยอมเก็บข้อมูลให้");
+
+const ls = probeSync("localStorage", "localStorage");
+row("localStorage (ที่เกมใช้)", ls.ok ? "ใช้งานได้ ✅" : "ถูกบล็อก ❌", ls.ok, ls.why);
+
+const ss = probeSync("sessionStorage", "sessionStorage");
+row("sessionStorage", ss.ok ? "ใช้งานได้" : "ถูกบล็อก", ss.ok, ss.why);
+
+row("cookieEnabled", String(navigator.cookieEnabled), navigator.cookieEnabled,
+    "Brave ที่ตั้งค่า “บล็อกคุกกี้ทั้งหมด” จะปิด localStorage ไปด้วย");
+
+let brave = "ไม่ใช่ Brave (หรือบอกไม่ได้)";
+if (navigator.brave && navigator.brave.isBrave) {
+  brave = "กำลังตรวจ...";
+  navigator.brave.isBrave().then((b) => {
+    document.querySelectorAll(".row b").forEach((el) => {
+      if (el.textContent === "เบราว์เซอร์") el.nextElementSibling.firstElementChild.textContent =
+        b ? "Brave" : "ไม่ใช่ Brave";
+    });
+  });
+}
+row("เบราว์เซอร์", brave, null);
+
+/* IndexedDB is the fallback worth knowing about: if it survives where localStorage does not,
+ * the game has somewhere else to put a save. */
+row("IndexedDB", "กำลังตรวจ...", null, "ที่เก็บสำรอง เผื่อ localStorage ใช้ไม่ได้");
+const idbRow = rows.lastElementChild.querySelector("span span");
+(function probeIdb() {
+  try {
+    const req = indexedDB.open("__fantacia_probe__", 1);
+    req.onupgradeneeded = () => req.result.createObjectStore("t");
+    req.onsuccess = () => {
+      try {
+        const db = req.result;
+        const tx = db.transaction("t", "readwrite");
+        tx.objectStore("t").put("1", "k");
+        tx.oncomplete = () => { db.close(); indexedDB.deleteDatabase("__fantacia_probe__");
+          idbRow.textContent = "ใช้งานได้ ✅"; idbRow.className = "ok"; };
+        tx.onerror = () => { idbRow.textContent = "ถูกบล็อก ❌"; idbRow.className = "bad"; };
+      } catch (e) { idbRow.textContent = "ถูกบล็อก ❌ " + e.message; idbRow.className = "bad"; }
+    };
+    req.onerror = () => { idbRow.textContent = "ถูกบล็อก ❌"; idbRow.className = "bad"; };
+  } catch (e) { idbRow.textContent = "ถูกบล็อก ❌ " + e.message; idbRow.className = "bad"; }
+})();
+
+const v = document.getElementById("verdict");
+if (ls.ok) {
+  v.className = "verdict good";
+  v.innerHTML = `<h2>✅ เบราว์เซอร์นี้เซฟได้</h2>
+    เกมเก็บเซฟด้วย localStorage และตรงนี้เขียน–อ่านผ่านแล้ว ถ้าเกมยังเซฟไม่ได้
+    ให้บอกผมว่าหน้าโปรไฟล์ขึ้นข้อความอะไร เพราะจะเป็นคนละสาเหตุกับที่หน้านี้ตรวจ`;
+} else {
+  v.className = "verdict bad";
+  v.innerHTML = `<h2>❌ เบราว์เซอร์นี้ไม่ยอมให้เก็บเซฟ</h2>
+    <div class="dim">สาเหตุที่เบราว์เซอร์แจ้งกลับมา: <code>${ls.why}</code></div>
+    <ol>
+      ${isFile ? `<li><b>ต้นเหตุหลัก: เปิดจากไฟล์ตรง ๆ</b> — Brave ปิดที่เก็บข้อมูลของหน้า
+        <code>file://</code> ไว้ ปิด Shields ก็ไม่ช่วย เพราะ Shields ไม่ได้ทำงานกับ file:// ตั้งแต่แรก<br>
+        <b>วิธีแก้: เสิร์ฟโฟลเดอร์นี้ก่อน</b> — <code>python3 -m http.server 8000</code> แล้วเปิด
+        <code>http://localhost:8000</code></li>` : ""}
+      <li>ถ้าเล่นผ่าน localhost แล้วยังไม่ได้: เปิด <code>brave://settings/shields</code>
+        ดูหัวข้อคุกกี้ ถ้าตั้งเป็น <b>บล็อกคุกกี้ทั้งหมด</b> ให้เปลี่ยนเป็น
+        <b>บล็อกเฉพาะคุกกี้ข้ามเว็บ</b> — ตัวเลือกนี้ปิด localStorage ทั้งเบราว์เซอร์
+        และปุ่ม Shields รายหน้าไม่สามารถแทนที่มันได้</li>
+      <li>ถ้าเป็นหน้าต่าง Private ให้เปิดในหน้าต่างปกติแทน</li>
+    </ol>`;
+}
+</script>
+</body>
+</html>
