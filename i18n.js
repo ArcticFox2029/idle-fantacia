@@ -642,6 +642,12 @@ const I18N = (() => {
       "Squads returning, auto-collected loot, injuries, and new recruits",
     "ลูกเกิด ลูกโตพอออกผจญภัย การเรียน และค่าเลี้ยงดูรายวัน":
       "Births, a child coming of age, their schooling, and the daily upkeep",
+    "ลูกออกล่า": "Children hunting",
+    "สรุปรายวันว่าลูกกี่คนออกล่า ได้เงินและของเท่าไหร่":
+      "The daily line: how many went hunting, and what they brought back",
+    "ลูกหาของ": "Children gathering",
+    "สรุปรายวันของ event สุ่ม — ตัดไม้ ตกปลา ขุดแร่ ล้วงกระเป๋า":
+      "The daily errand line — woodcutting, fishing, mining, pickpocketing",
     "งานจากลานหมู่บ้าน":
       "Village jobs",
     "ตอนส่งงานสำเร็จและได้ค่าจ้าง":
@@ -719,6 +725,8 @@ const I18N = (() => {
     "🚫 คุมกำเนิดอยู่": "🚫 No children", "👶 มีลูกได้": "👶 Children allowed",
     "ขั้น": "Level", "ล่าอีก": "Hunts in", "ออกล่าวันนี้": "Hunting today",
     "กำลังจะออกล่า": "Setting out",
+    "ลูก": "children", "คน ออกล่า": "went hunting", "คน หาของ": "went gathering",
+    "ล้วงกระเป๋า": "Pickpocketing",
     "⚙️ ตั้งค่า": "⚙️ Settings",
     "ภาษา / Language": "Language / ภาษา",
     "🇹🇭 ไทย": "🇹🇭 Thai",

@@ -6,7 +6,7 @@
  * v5 combat-stat split shipped with this left at 4: freshProfile stamped v4, migrate pushed
  * it to v5, and the `p.v === GAME_VERSION` guard then rejected every profile — the game
  * silently refused to create or load anything. balance_check.mjs now fails if the two drift. */
-const GAME_VERSION = 54;
+const GAME_VERSION = 55;
 /* 🎯 [owner 2026-08-22] "avatar คน เพดานน่าจะไม่กำหนด เพราะวางไว้ว่าให้โตได้เรื่อยๆ ... จริงๆ อยากให้ถึง 999"
  *
  * 99 was reachable in about four hours of the best XP route, which is the whole reason it felt like
@@ -1408,9 +1408,13 @@ const CHILD_STAT_DIVISOR = 2;         // a child starts at half of what we were 
  * Education is charged for on purpose. The owner's design is "ยิ่งเรียนรู้เยอะ ยิ่งเสริมโบนัสให้เรา" —
  * a child who gives more should eat more, or schooling is free money with a one-off entry fee.
  * One track taken to level 5 costs 90,000 to buy and 300 a day to keep. */
-const FAMILY_UPKEEP_SPOUSE = 250;   // per game-day
-const FAMILY_UPKEEP_CHILD = 150;    // per game-day, each
-const FAMILY_UPKEEP_PER_EDU = 60;   // per game-day, per education level a child holds
+/* 🎯 [owner 2026-08-23] "ฟิกค่าใช้จ่ายลูก ควรเท่าแม่ ฟิกตายตัว ต่อวันคนละ 500 เพราะค่าเรียนเราจ่าย
+   ตายตัวไปแล้ว ต่อขั้นการเรียน" — schooling is bought once, at a cubic price. Charging rent on it
+   every day afterwards meant a fully-taught child cost 378,000 a year forever for a lesson already
+   paid for. Flat now, and the same as a wife: a person in the household costs what a person costs. */
+const FAMILY_UPKEEP_SPOUSE = 500;   // per game-day
+const FAMILY_UPKEEP_CHILD = 500;    // per game-day, each — flat, whatever they have been taught
+const FAMILY_UPKEEP_PER_EDU = 0;    // kept at zero rather than deleted: it is the owner's dial
 
 const CHILD_MAX = 4;                  // a ceiling, so a long marriage does not become a bonus farm
 const CHILD_ADULT_DAY = 120;          // game-days from birth to setting out on their own
@@ -1438,17 +1442,59 @@ const CHILD_TRACKS = [
  * At roughly 72 hunts a game-year, a child reaches 99 in something like a decade of game time,
  * which is the "ค่อยๆ เติบโต" he asked for rather than a bar that fills in an evening. */
 const CHILD_MAX_LEVEL = 99;
-const CHILD_HUNT_MIN_DAYS = 3;
-const CHILD_HUNT_MAX_DAYS = 7;
-const CHILD_HURT_REST_DAYS = 2;      // added to the next gap after a hunt goes badly
+/* 🎯 [owner 2026-08-23] "ออกล่าทุกวัน วันละครั้ง ถ้าบาดเจ็บให้พักสามวัน ออกล่าใหม่" — was 3-7 days
+   with a 2-day rest. Daily makes the injury mean something: it is now the only thing that ever
+   costs a child a day, instead of one irregular gap among several. */
+const CHILD_HUNT_MIN_DAYS = 1;
+const CHILD_HUNT_MAX_DAYS = 1;
+const CHILD_HURT_REST_DAYS = 3;      // days off after a hunt goes badly, on top of the daily gap
 const CHILD_GROWTH = 0.02;           // +2% of birth stats per level, the pet's rate
 /* How much of a stage's bounty a child brings home. Below the guild's share on purpose: a squad is
  * a business you pay wages for, a child is one person doing this on their own. */
 const CHILD_HUNT_GOLD_SHARE = 0.55;
 const CHILD_HUNT_LOOT_SHARE = 0.30;
-/* The success floor a child holds out for when choosing where to hunt. They pick the hardest stage
- * they can still clear comfortably, which is what makes levelling visibly move them up the map. */
-const CHILD_HUNT_MIN_SUCCESS = 0.60;
+/* 🎯 [owner 2026-08-23] "เหมือนมอนเกม rpg — มอนเขียวคือสู้ได้สบาย มอนเหลืองคือสู้ 80% ได้แต่บางครั้ง
+ * อาจไม่ไหว แต่มอนแดงคือถ้าสู้ โอกาสชนะ 50%" — a child now reads a stage the way an RPG con-colour
+ * does: against ITS OWN stats, not against where the stage sits on the map. That is the whole
+ * difference between a level-99 child punching slimes and one working the hardest ground it can
+ * still call green.
+ *
+ * The floor is the red line: below a coin-flip it will not go at all. */
+const CHILD_HUNT_MIN_SUCCESS = 0.50;
+const CHILD_HUNT_BAND_GREEN = 0.90;    // at or above this it is comfortable — green
+const CHILD_HUNT_BAND_YELLOW = 0.75;   // green > yellow >= this; below it, down to the floor, is red
+/* Weights across those three colours (owner: "ต่ำกว่าตัวเอง 60% มอนกลาง 40% ด่านมอนสูง 30%") — not
+   percentages; they normalise to 46/31/23 when all three colours have somewhere to go. */
+const CHILD_HUNT_TIER_WEIGHTS = { low: 60, mid: 40, high: 30 };
+/* Within a colour, only the hardest few are in play (owner: "lv99 มันควรเลือกมอนเขียวตัวยากสุด"). A
+   band is a difficulty, not a menu — without this a green day still averages down to the easiest
+   green on the map, which is the bug the colours were meant to fix. */
+const CHILD_HUNT_BAND_TOP = 3;
+/* Above this many children hunting in one day the toast rail pools into a single line instead of
+   naming each one — see childrenHuntDay. */
+const CHILD_HUNT_TOAST_MAX = 4;
+
+/* 🎯 [owner 2026-08-23] "นอกจากทุกวันต้องออกล่า มันจะมี event สุ่ม ตัดต้นไม้ ตกปลา ขุดแร่ และขโมย
+ * แต่ขโมยล็อกว่าล้วงกระเป๋าชาวบ้านเท่านั้น ... หากลูกบาดเจ็บ ไม่ออกล่า แต่ยังต้องทำ event สุ่ม"
+ *
+ * A grown child's day is two things: an errand, drawn at random from these four, and a hunt. The
+ * errand runs every single day — a child nursing a hunting injury still brings something home,
+ * which is what keeps a bad week from being an empty one.
+ *
+ * These are the real skills, not a parallel loot table: the child works the same actions the player
+ * does, gated by `actionOpen` so it can never reach a resource the player has not unlocked — the
+ * same rule the hunt already follows. Thieving is pinned to `villager` by the owner: a child picks
+ * pockets in the market, it does not burgle a noble's estate. */
+const CHILD_ERRANDS = [
+  { id: "wc", icon: "🌲", name: "ตัดไม้" },
+  { id: "fi", icon: "🎣", name: "ตกปลา" },
+  { id: "mi", icon: "💎", name: "ขุดแร่" },
+  { id: "th", icon: "🕵️", name: "ล้วงกระเป๋า", only: "villager" },
+];
+/* Each errand keeps its own level per child ("แบบนี้จะเพิ่มความสามารถในการหาของได้") on the player's
+   own XP curve, so a child that keeps fishing becomes a fisher rather than a generalist. */
+const CHILD_ERRAND_XP = 0.5;         // share of the action's XP a child earns for running it
+const CHILD_ERRAND_PER_LEVELS = 12;  // +1 copy of the haul per this many levels in that errand
 /* 🎯 [owner 2026-08-23] "เกี่ยว เพราะว่ายิ่งเรียนรู้ยิ่งเอาโบนัสนั้นมาใช้ได้" — the hunting track a
  * child studies now also makes THEM stronger, not only their parent. */
 const CHILD_HUNT_TRACK_POWER = 0.08;   // per level of the hunt track, on their own power

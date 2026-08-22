@@ -565,7 +565,13 @@ body {
  *
  * `.art-on` is set by markArtReady from the img's own onload, so the swap now happens when there is
  * something to swap TO. The image is transparent until then for the same reason. */
-.icon-art .art { opacity: 0; transition: opacity .18s ease; }
+/* 🐛 [owner 2026-08-23: "ในหน้าครอบครัว มันยังกระพริบอยู่ ไม่ให้ตรงรูปมันกระพริบได้ไหม"] This used
+   to fade in over .18s. That reads as a flicker every time the page is rebuilt — and a page is
+   rebuilt whenever you press anything on it — because a picture already sitting in cache still
+   started from transparent and animated back. The hidden state is still needed so a picture that
+   has not arrived shows its emoji rather than a broken-image glyph; what had to go is the
+   animation. A cached image now flips within one frame, which is not visible. */
+.icon-art .art { opacity: 0; }
 .icon-art.art-on .art { opacity: 1; }
 .icon-art.art-on .icon-glyph { display: none; }
 .stage-icon .icon-art, .slot-face .icon-art { width: 54px; height: 54px; }

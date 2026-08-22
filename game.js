@@ -703,6 +703,13 @@ function migrate(p) {
      * move. The version still steps because ?v= in index.html is the published site's only
      * cache-buster, and this batch rewrote a great deal of game.js. */
   }
+  if (p.v === 54) {
+    p.v = 55;
+    /* Errands, con-colour hunting grounds, the two new notification switches, flat child upkeep.
+     * Nothing to move: `k.chores` and `P.kidChoreMonth` both default in place on first use, and an
+     * absent notification preference already reads as ON. The version steps because ?v= in
+     * index.html is the published site's only cache-buster. */
+  }
   return p.v === GAME_VERSION ? p : null;
 }
 
@@ -1357,9 +1364,17 @@ function childLevel(k) {
 
 /* Combat stats as they stand today: what they were born with, grown by level. Birth stats are half
  * the parent's, so a child born to a strong father starts high and climbs from there. */
+/* 🐛 [owner 2026-08-23: "ลูกขั้นสอง แต่สเตตัสเหมือนไม่ขยับ"] It did not. The growth was a straight
+ * percentage of birth stats, and 2% of 13 is 0.26 — which rounds away. A child had to reach level 3
+ * before a single number changed, and at low birth stats the whole climb read as flat.
+ *
+ * The step is now at least 1 per level. It is still 2% for anything big enough for 2% to be a whole
+ * number, so a strong parent's child is unchanged; what it fixes is the case where the percentage
+ * was too small to be seen. */
 function childStat(k, id) {
   const base = (k.stats || {})[id] || 1;
-  return Math.max(1, Math.round(base * (1 + (childLevel(k) - 1) * CHILD_GROWTH)));
+  const step = Math.max(1, Math.round(base * CHILD_GROWTH));
+  return Math.max(1, base + (childLevel(k) - 1) * step);
 }
 
 /* What this child can bring to a fight. The hunting track they were taught counts here as well as
@@ -1390,20 +1405,161 @@ function childHuntGrounds() {
     .filter((x) => !x.st.boss && stageUnlocked(x.loc, x.i) && stageKills(x.loc.id, x.i) > 0));
 }
 
-/* The hardest ground they can still clear comfortably — not the hardest one open. This is what makes
-   a level-up visible: they move up the map on their own instead of dying at the top of it. */
+/* Where a grown child goes to work today.
+ *
+ * 🐛 [owner 2026-08-23: "ต้องเอามาตรฐาน lv สเตตัสตั้งก่อน เพื่อหาตัวแปรว่าจะไปด่านไหน เช่น lv99 จะบอก
+ * ไปตีสไลม์ก็ไม่ใช่ มันควรเลือกมอนเขียวตัวยากสุดแทน"] Twice now this cut its bands from the LIST of
+ * grounds — the hardest third of the map, the middling third, the easy third — and twice that meant
+ * a level-99 child spending most of its days somewhere its level made irrelevant. Difficulty is not
+ * a property of the map. It is a property of this child against that monster.
+ *
+ * So the bands are con-colours, measured per child, exactly as the owner described them:
+ *
+ *   🟢 green   success >= CHILD_HUNT_BAND_GREEN    "สู้ได้สบาย"
+ *   🟡 yellow  >= CHILD_HUNT_BAND_YELLOW           "สู้ 80% ได้ แต่บางครั้งอาจไม่ไหว"
+ *   🔴 red     >= CHILD_HUNT_MIN_SUCCESS           "ถ้าสู้ โอกาสชนะ 50%"
+ *
+ * and within whichever colour the day rolls, only the HARDEST few are in play. That second half is
+ * what makes levelling pay: as a child grows, the ground that is merely green climbs with it, so a
+ * green day at level 99 is the top of the map rather than the bottom of it. */
 function childHuntPick(k) {
   const power = childPower(k);
   const open = childHuntGrounds();
   if (!open.length) return null;
-  let best = null;
-  for (const g of open) {
-    const out = guildOutcome(power, guildTargetPower(g.st), 0);
-    if (out.success < CHILD_HUNT_MIN_SUCCESS) continue;
-    if (!best || guildTargetPower(g.st) > guildTargetPower(best.st)) best = g;
+  const rated = open
+    .map((g) => ({ ...g, tp: guildTargetPower(g.st) }))
+    .map((g) => ({ ...g, success: guildOutcome(power, g.tp, 0).success }))
+    .sort((a, b) => a.tp - b.tp);
+
+  const ok = rated.filter((g) => g.success >= CHILD_HUNT_MIN_SUCCESS);
+  /* Not even a coin-flip anywhere — a brand-new adult takes the easiest ground open and its odds. */
+  if (!ok.length) return rated[0];
+
+  /* Hardest-first inside each colour, then only the top few of each: a band is a difficulty to work
+     at, not the whole shelf of everything that happens to share a colour. */
+  const top = (band) => band.slice(-CHILD_HUNT_BAND_TOP);
+  const bands = [
+    top(ok.filter((g) => g.success >= CHILD_HUNT_BAND_GREEN)),
+    top(ok.filter((g) => g.success < CHILD_HUNT_BAND_GREEN && g.success >= CHILD_HUNT_BAND_YELLOW)),
+    top(ok.filter((g) => g.success < CHILD_HUNT_BAND_YELLOW)),
+  ];
+  const names = ["low", "mid", "high"];
+  const live = bands.map((b, i) => ({ b, w: CHILD_HUNT_TIER_WEIGHTS[names[i]] ?? 1 }))
+    .filter((x) => x.b.length);
+  if (!live.length) return ok[ok.length - 1];
+
+  let roll = Math.random() * live.reduce((t, x) => t + x.w, 0);
+  for (const x of live) {
+    roll -= x.w;
+    if (roll <= 0) return x.b[Math.floor(Math.random() * x.b.length)];
   }
-  /* Nothing is comfortable yet — a brand-new adult takes the easiest ground open and its odds. */
-  return best || open.reduce((a, b) => (guildTargetPower(a.st) <= guildTargetPower(b.st) ? a : b));
+  return live[0].b[0];
+}
+
+/* ---------- A grown child's errand ---------- */
+
+/* Their level in one errand. Capped with the hunt level, and on the player's own XP curve so the
+   climb reads the same as everything else in the game. */
+function childErrandLevel(k, id) {
+  return Math.min(CHILD_MAX_LEVEL, levelFromXp((k.chores || {})[id] || 0));
+}
+
+/* Which actions of one errand a child may work today.
+ *
+ * `actionOpen` is the player's own gate, reused rather than restated — a child must never reach a
+ * resource its parent has not unlocked, exactly as childHuntGrounds refuses grounds the parent has
+ * never fought on. Its OWN level gates it a second time, which is what makes the errand level worth
+ * having: the child grows into better wood the way the player did. */
+function childErrandActions(errand) {
+  const skill = SKILLS.find((s) => s.id === errand.id);
+  if (!skill) return [];
+  return skill.actions.filter((a) => (!errand.only || a.id === errand.only) && actionOpen(errand.id, a));
+}
+
+/* One errand for one child. Returns what it brought back, or null if there was nothing open to do.
+ * Everything it produces goes straight into the player's bag — the child is out working for the
+ * household, not keeping a stash. */
+function childErrandRun(k) {
+  const open = CHILD_ERRANDS
+    .map((e) => ({ e, acts: childErrandActions(e) }))
+    .filter((x) => x.acts.length);
+  if (!open.length) return null;
+
+  const { e, acts } = open[Math.floor(Math.random() * open.length)];
+  const lvl = childErrandLevel(k, e.id);
+  /* The hardest one it is qualified for. Unlike the hunt there is no risk to trade off here — a
+     harder tree is not a more dangerous tree — so there is nothing to spread across bands. */
+  const fit = acts.filter((a) => lvl >= a.level);
+  const action = (fit.length ? fit : acts).reduce((a, b) => (a.level >= b.level ? a : b));
+  const copies = 1 + Math.floor(lvl / CHILD_ERRAND_PER_LEVELS);
+
+  let gold = 0, items = 0;
+  const take = (id, n) => {
+    if (!n) return;
+    P.inv[id] = (P.inv[id] || 0) + n;
+    items += n;
+  };
+
+  if (action.steal) {
+    const st = action.steal;
+    /* Caught. The player loses HP here; a child has none to lose and cannot die, so an empty pocket
+       IS the failure — the same shape as a failed hunt, minus the days off, since the owner tied
+       rest to hunting injuries only. */
+    if (Math.random() >= st.success) {
+      k.chores = k.chores || {};
+      k.chores[e.id] = (k.chores[e.id] || 0) + Math.ceil(action.xp * CHILD_ERRAND_XP * 0.5);
+      return { gold: 0, items: 0 };
+    }
+    gold = randInt(st.gold[0], st.gold[1]) * copies;
+    /* no-goldBonus / no-charm: same rule the hunt follows — the parent's perks reward what the
+       parent does, and routing a child's takings through them would make children a multiplier. */
+    P.gold += gold;
+    bump("goldEarned", gold);
+    for (const drop of st.loot || []) {
+      if (Math.random() < drop.chance) take(drop.item, randInt(drop.n[0], drop.n[1]) * copies);
+    }
+  } else if (action.catch) {
+    const table = action.catch;
+    const total = table.reduce((t, c) => t + c.w, 0);
+    let roll = Math.random() * total;
+    let picked = table[table.length - 1].item;
+    for (const c of table) { roll -= c.w; if (roll <= 0) { picked = c.item; break; } }
+    take(picked, copies);
+    /* Guarded: a save old enough to predate the species achievement has no seenFish at all, and a
+       child fishing must not be the thing that throws on it. */
+    if (P.seenFish && /^(fish|squid|crab|octo)_/.test(picked)) P.seenFish[picked] = true;
+  } else if (action.outputs) {
+    /* A recipe a child cannot pay for is simply not a child's errand — the four the owner named are
+       all gathering, but this keeps the guard honest if the list ever grows. */
+    if (action.inputs) return null;
+    for (const [id, n] of Object.entries(action.outputs)) take(id, n * copies);
+  } else {
+    return null;
+  }
+
+  for (const rare of action.rare ? [].concat(action.rare) : []) {
+    if (Math.random() < rare.base + rare.perLevel * lvl) take(rare.item, 1);
+  }
+
+  k.chores = k.chores || {};
+  k.chores[e.id] = (k.chores[e.id] || 0) + Math.ceil(action.xp * CHILD_ERRAND_XP);
+
+  P.kidChoreMonth = P.kidChoreMonth || { gold: 0, items: 0, runs: 0 };
+  P.kidChoreMonth.gold += gold;
+  P.kidChoreMonth.items += items;
+  P.kidChoreMonth.runs++;
+
+  return { gold, items };
+}
+
+/* One ledger line a month for everything the children brought back from errands, beside the one
+   kidHuntPost writes for the hunt. Kept separate because they answer different questions: the hunt
+   line is whether they are strong enough, this one is whether they are useful anyway. */
+function kidChorePost() {
+  const m = P.kidChoreMonth;
+  P.kidChoreMonth = { gold: 0, items: 0, runs: 0 };
+  if (!m || (!m.gold && !m.items)) return;
+  ledger("🧺", `ลูกๆ หาของ ${m.runs} ครั้ง (ของ ${m.items} ชิ้น)`, Math.round(m.gold));
 }
 
 function childNextHuntGap() {
@@ -1413,17 +1569,29 @@ function childNextHuntGap() {
 
 /* One game-day for every grown child. Called from onNewDay.
  *
+ * 🎯 [owner 2026-08-23] "เท่ากับวันนึงลูกต้องทำ event สุ่ม เพื่อหาของให้เรา และออกล่า" — two
+ * things a day, not one. The errand is unconditional; the hunt waits on its cooldown.
+ *
  * 🎯 [owner 2026-08-23] "รวมเป็นก้อน แล้วรายงานว่าลูกๆ ออกล่าได้เงิน ของ ไม่ต้องแยกตามชิ้น บอกทั้งหมด
- * กี่ชิ้นพอ" — with children outliving rebirths, forty of them hunting every 3–7 days is about eight
- * events a day. One line for the whole household, or the toast rail becomes the game. */
+ * กี่ชิ้นพอ" — with children outliving rebirths and now working twice a day, a household of forty is
+ * eighty events every morning. One line for the whole household above the cap, or the toast rail
+ * becomes the game. */
 function childrenHuntDay() {
   if (P.dead) return;
   const kids = childrenOf().filter(childIsAdult);
   if (!kids.length) return;
   const today = questDay();
-  let gold = 0, items = 0, wins = 0, hurt = 0, levelled = [];
+  /* Hunt and errand are tallied apart all the way through: they are two ledger lines and two
+     different questions, and pooling them here is how the monthly summary would start lying. */
+  let hGold = 0, hItems = 0, wins = 0, hurt = 0;
+  let cGold = 0, cItems = 0, chores = 0;
 
   for (const k of kids) {
+    /* 🎯 [owner 2026-08-23] "หากลูกบาดเจ็บ ไม่ออกล่า แต่ยังต้องทำ event สุ่ม" — the errand runs
+       first and runs regardless. A child resting off a hunting injury still brings something home. */
+    const chore = childErrandRun(k);
+    if (chore) { cGold += chore.gold; cItems += chore.items; chores++; }
+
     if (k.nextHunt == null) { k.nextHunt = today + childNextHuntGap(); continue; }
     if (today < k.nextHunt) continue;
 
@@ -1447,30 +1615,48 @@ function childrenHuntDay() {
     /* no-goldBonus: the luck charm and rebirth karma reward what YOU hunt and steal. A child's haul
        is theirs, and scaling it by the parent's perks would make schooling one a way of multiplying
        those perks instead of a thing the child does. */
-    P.gold += g; gold += g;
+    P.gold += g; hGold += g;
     bump("goldEarned", g);
 
     const loot = guildLootFor(ground.st, bounty * CHILD_HUNT_LOOT_SHARE);
     for (const [id, n] of Object.entries(loot)) {
       P.inv[id] = (P.inv[id] || 0) + n;
-      items += n;
+      hItems += n;
     }
-
-    const before = childLevel(k);
     k.xp = (k.xp || 0) + Math.max(1, Math.round(tp * 40));
-    if (childLevel(k) > before) levelled.push(`${k.name} ขั้น ${childLevel(k)}`);
   }
 
+  /* 🎯 [owner 2026-08-23] "ปรับ notis ลูกๆ มันไม่สื่อ ทำเหมือนปันผล คือ ลูก 1 ออกล่า / ลูก 10 คน
+   * ออกล่า / ลูก 3 คน หาของ"
+   *
+   * Two lines a day at most, one per activity, counted by head — the shape the dividend notice
+   * uses. Naming each child was tried first and read as noise: with the household working twice a
+   * day it is the totals you act on, and the family page is where an individual child is looked up.
+   * Injuries ride on the hunting line rather than taking a third. */
   if (wins || hurt) {
     const parts = [];
-    if (wins) parts.push(`ล่าสำเร็จ ${wins} ครั้ง`);
-    if (gold) parts.push(`ได้ ${gold.toLocaleString()} 💰`);
-    if (items) parts.push(`ของ ${items} ชิ้น`);
+    if (hGold) parts.push(`ได้ ${hGold.toLocaleString()} 💰`);
+    if (hItems) parts.push(`ของ ${hItems} ชิ้น`);
     if (hurt) parts.push(`บาดเจ็บ ${hurt} คน`);
-    toast(`🗡️ ลูกๆ ออกล่า — ${parts.join(" · ")}`, hurt && !wins ? "warn" : "", "family");
-    if (gold || items) ledger("🗡️", `ลูกๆ ออกล่า ${wins} ครั้ง`, gold);
+    toast(`🗡️ ${T("ลูก")} ${wins + hurt} ${T("คน ออกล่า")}${parts.length ? " — " + parts.join(" · ") : ""}`,
+      hurt && !wins ? "warn" : "", "kidhunt");
   }
-  if (levelled.length) toast(`🎉 ${levelled.join(" · ")}`, "levelup", "family");
+  if (chores) {
+    const parts = [];
+    if (cGold) parts.push(`ได้ ${cGold.toLocaleString()} 💰`);
+    if (cItems) parts.push(`ของ ${cItems} ชิ้น`);
+    toast(`🧺 ${T("ลูก")} ${chores} ${T("คน หาของ")}${parts.length ? " — " + parts.join(" · ") : ""}`,
+      "", "kidchore");
+  }
+  /* 🎯 [owner 2026-08-23] "หน้ารวมบัญชี ให้สรุปลูกออกล่า ว่ายอดรวมต่อเดือนได้เท่าไหร่" — same call
+     rent got, and now more necessary: children work every day and there can be forty of them, so a
+     line a day would be the whole page. Banked here, posted once by onNewMonth. */
+  if (wins) {
+    P.kidHuntMonth = P.kidHuntMonth || { gold: 0, items: 0, hunts: 0 };
+    P.kidHuntMonth.gold += hGold;
+    P.kidHuntMonth.items += hItems;
+    P.kidHuntMonth.hunts += wins;
+  }
 }
 
 function childIsAdult(k) { return (k.age || 0) >= CHILD_ADULT_DAY; }
@@ -2701,8 +2887,10 @@ function artImg(kind, id, alt, cls) {
    * and with loading="lazy" they can be seconds apart on a phone scrolling a full bag. That gap
    * showed an empty circle, or the browser's own broken-image glyph, in place of a fallback that was
    * sitting right there. onload is the only honest signal, so it is what flips the swap now. */
+  /* decoding="sync" on purpose: async lets the browser paint the slot before the picture is ready
+     even when it came from cache, which is the other half of the flicker the owner saw. */
   return `<img class="art ${cls || ""}" src="art/${key}.jpg${v}" alt="${escapeHtml(alt)}" loading="lazy"
-    decoding="async" onload="markArtReady(this)" onerror="markArtMissing('${key}', this)">`;
+    decoding="sync" onload="markArtReady(this)" onerror="markArtMissing('${key}', this)">`;
 }
 /* 🐛 [owner 2026-08-22, from a phone: "เฟรม มอน มันหาย"] onerror does not say WHY the image failed,
  * and this used to treat every failure as "this file does not exist" — one permanent entry in
@@ -2728,6 +2916,11 @@ const ART_RETRY_LIMIT = 2;
  * dropped request, it is a folder that does not exist — so after a few failures with no successes,
  * that kind stops being asked for at all and its icons render as emoji immediately. Per page load,
  * and cleared by the `online` handler with everything else, so adding art/item/ later just works. */
+/* 🐛 [owner 2026-08-23] Pictures already seen this session. Without this, every rebuild of a page
+ * re-created the <img> at opacity 0 and waited for onload to reveal it — and onload for a CACHED
+ * image still lands a frame later, which is a visible flash across five portraits at once. Measured
+ * before: exactly one transparent frame per rebuild. A key in here is painted opaque immediately. */
+const ART_LOADED = new Set();
 const ART_KIND_OK = new Set();
 const ART_KIND_FAIL = new Map();
 const ART_KIND_GIVE_UP = 3;
@@ -2746,6 +2939,7 @@ function artKindDead(kind) {
 window.markArtReady = (el) => {
   const key = el.getAttribute("src").replace(/^art\//, "").replace(/\.jpg.*$/, "");
   ART_TRIES.delete(key);
+  ART_LOADED.add(key);
   ART_KIND_OK.add(artKindOf(key));   // this kind exists; keep retrying its transient failures
   const holder = el.parentElement;
   if (holder) holder.classList.add("art-on");
@@ -2781,13 +2975,17 @@ window.addEventListener("online", () => {
   ART_MISSING.clear();
   ART_TRIES.clear();
   ART_KIND_FAIL.clear();
+  /* ART_LOADED is deliberately kept: those pictures really did arrive, and forgetting them would
+     reintroduce the flash on the next render for no gain. */
   try { renderView(); refreshSidebar(); } catch (e) { /* pre-boot; the next render picks it up */ }
 });
 
 /* An icon slot that prefers art and falls back to the emoji underneath it. */
 function iconArt(kind, id, emoji, alt, cls) {
   const img = artImg(kind, id, alt, cls);
-  return `<span class="icon-art">${img || ""}<span class="icon-glyph">${emoji}</span></span>`;
+  /* Seen before → opaque from the first frame, no wait for onload and nothing to flash. */
+  const on = img && ART_LOADED.has(`${kind}/${id}`) ? " art-on" : "";
+  return `<span class="icon-art${on}">${img || ""}<span class="icon-glyph">${emoji}</span></span>`;
 }
 
 /* ---------- Pets ---------- */
@@ -3125,6 +3323,17 @@ function onNewDay(date) {
 function onNewMonth(date) {
   familyUpkeepPost();
   estateRentPost();
+  kidHuntPost();
+  kidChorePost();
+}
+
+/* One ledger line a month for what the children brought home, the counterpart of estateRentPost.
+   Posts nothing in a month where nobody hunted, rather than a zero. */
+function kidHuntPost() {
+  const m = P.kidHuntMonth;
+  P.kidHuntMonth = { gold: 0, items: 0, hunts: 0 };
+  if (!m || (!m.gold && !m.items)) return;
+  ledger("🗡️", `ลูกๆ ออกล่า ${m.hunts} ครั้ง (ของ ${m.items} ชิ้น)`, Math.round(m.gold));
 }
 
 /* One ledger line a month for rent, the counterpart of familyUpkeepPost. Posts what actually
@@ -3155,6 +3364,8 @@ function familyUpkeepPost() {
 function onNewYear(date) {
   familyUpkeepPost();   // day 1 of month 1 comes here instead of onNewMonth, so the month still closes
   estateRentPost();
+  kidHuntPost();
+  kidChorePost();
   bankTidySlips();
   toast(`🎆 ขึ้นปีใหม่ — ปีที่ ${date.year} ของมิธวูด`, "levelup");
   settleTaxYear(date);
@@ -6161,6 +6372,14 @@ function renderFamily() {
                The last three outings are the whole report a child owes you. -->
           ${adult && (k.log || []).length
             ? `<div class="detail kid-log">${k.log.map(escapeHtml).join(" · ")}</div>` : ""}
+          <!-- 🎯 [owner 2026-08-23] "แบบนี้จะเพิ่มความสามารถในการหาของได้" — the errand levels are the
+               visible half of that promise. Shown only once one has actually moved, so a child who
+               has just grown up is not handed a row of zeroes to read. -->
+          ${adult && CHILD_ERRANDS.some((e) => childErrandLevel(k, e.id) > 1)
+            ? `<div class="fam-row kid-chores">${CHILD_ERRANDS
+                .filter((e) => childErrandLevel(k, e.id) > 1)
+                .map((e) => `<span title="${escapeHtml(T(e.name))}">${e.icon} ${childErrandLevel(k, e.id)}</span>`)
+                .join("")}</div>` : ""}
           <div class="edu-list">${tracks}</div>
           <div class="kid-acts">
             <button class="btn ghost tiny" data-disown="${k.id}">💔 ${T("ไล่ออกจากตระกูล")}</button>
@@ -6189,7 +6408,7 @@ function renderFamily() {
   $("#action-grid").innerHTML =
     `<div class="fam-grid">${meCard}${spouseCard}${petCard}${kidCards}</div>`
     + (up.total ? `<div class="fam-hint${familyInArrears() ? " is-debt" : ""}">
-          🍚 ค่าเลี้ยงดูวันละ <b>${up.total.toLocaleString()}</b> 💰 — ภรรยา ${up.spouse.toLocaleString()}${up.kids ? ` · ลูก ${up.kids} คน ${up.heads.toLocaleString()}` : ""}${up.eduLevels ? ` · ค่าเรียน ${up.eduLevels} ขั้น ${up.edu.toLocaleString()}` : ""}
+          🍚 ค่าเลี้ยงดูวันละ <b>${up.total.toLocaleString()}</b> 💰 — ภรรยา ${up.spouse.toLocaleString()}${up.kids ? ` · ลูก ${up.kids} คน ${up.heads.toLocaleString()}` : ""}${up.edu ? ` · ค่าเรียน ${up.edu.toLocaleString()}` : ""}
           ${familyInArrears() ? `<br><b>ค้างจ่าย ${Math.round(P.family.arrears).toLocaleString()} 💰 — โบนัสจากภรรยาและลูกหยุดอยู่</b> จ่ายครบแล้วกลับมาเหมือนเดิม · เงินติดลบครบ ${TAX_GRACE_DAYS} วันคือจบเกม` : ""}
         </div>` : "")
     + (() => {
@@ -9787,6 +10006,11 @@ const NOTIF_KINDS = [
   { id: "trader", icon: "🧙", name: "พ่อค้าเร่",            note: "ตอนมาตั้งแผง ตอนเก็บแผง และตอนซื้อของจากแผง" },
   { id: "guild",  icon: "🏹", name: "สถาบันฮันเตอร์",      note: "ทีมกลับถึงสถาบัน รับของอัตโนมัติ บาดเจ็บ และรับเด็กเข้าสังกัด" },
   { id: "family", icon: "👨‍👩‍👧", name: "ครอบครัว",           note: "ลูกเกิด ลูกโตพอออกผจญภัย การเรียน และค่าเลี้ยงดูรายวัน" },
+  /* 🎯 [owner 2026-08-23] "เพิ่มปุ่มปิด notis ในตั้งค่า — ปิด notis การล่าของลูก / ปิด notis การหาของ
+     จาก event ของลูก" — split off ครอบครัว, which is the one-off news (a birth, a coming of age).
+     These two fire every single day and are the pair worth muting on their own. */
+  { id: "kidhunt",  icon: "🗡️", name: "ลูกออกล่า",   note: "สรุปรายวันว่าลูกกี่คนออกล่า ได้เงินและของเท่าไหร่" },
+  { id: "kidchore", icon: "🧺", name: "ลูกหาของ",    note: "สรุปรายวันของ event สุ่ม — ตัดไม้ ตกปลา ขุดแร่ ล้วงกระเป๋า" },
   { id: "quest",  icon: "📜", name: "งานจากลานหมู่บ้าน",   note: "ตอนส่งงานสำเร็จและได้ค่าจ้าง" },
   { id: "save",   icon: "💾", name: "แจ้งว่าเซฟแล้ว",       note: "เซฟอัตโนมัติทุก 10 นาที (เซฟไม่สำเร็จจะเตือนเสมอ)" },
 ];
