@@ -1797,3 +1797,6 @@ body::after {
 .kid-acts { display: flex; justify-content: flex-end; margin-top: 8px; }
 .kid-acts .btn { color: var(--text-dim); }
 .kid-acts .btn:hover { color: var(--danger); border-color: var(--danger); }
+
+/* The parent line on a child's card: quieter than the name, louder than nothing. */
+.kid-parent { color: var(--gold); opacity: .85; }

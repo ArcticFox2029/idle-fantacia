@@ -1337,11 +1337,19 @@ const REL_STAGES = [
   { at: 15, id: "known",    name: "คนรู้จัก",    bonus: 0.25, note: "เริ่มรับของขวัญ" },
   { at: 35, id: "friend",   name: "เพื่อน",      bonus: 0.5,  note: "สั่งงานให้เราได้" },
   { at: 55, id: "close",    name: "คนสนิท",      bonus: 0.7,  note: "บอกของที่ชอบเอง" },
-  { at: 75, id: "lover",    name: "คนรัก",       bonus: 0.85, note: "ขอแต่งงานได้" },
+  /* 🐛 [owner 2026-08-22: "npc คงไม่บัค สเตตัสความสัมพันธ์ใช่ไหม ... แบบนั้นจะตลกมาก"] The top two rungs
+     are romantic, and the ladder was shared by everyone — so gifting the woodcutter far enough
+     labelled him "คนรัก" and then "พร้อมแต่งงาน". He could never actually be married (canPropose
+     needs a REL_BONUS, which the non-romanceable villagers do not have), so this was the label
+     lying rather than the rules breaking, which is worse in one way: the game looked wrong while
+     behaving correctly. `alt` is what a villager with romance:false is called instead. */
+  { at: 75, id: "lover",    name: "คนรัก",       bonus: 0.85, note: "ขอแต่งงานได้",
+    alt: { name: "พี่น้องต่างสายเลือด", note: "นับกันเป็นพี่น้อง แม้ไม่ได้เกิดจากพ่อแม่เดียวกัน" } },
   /* 🐛 [owner 2026-08-22: "เอลลี่ฉันยังไม่ได้แต่งงาน มันควรเป็นสถานะสามารถแต่งงานได้"] Reaching this
      stage is not a wedding — it is the affection at which one is possible. Named "แต่งงาน", it
      told every maxed-out villager she was already your wife. */
-  { at: 90, id: "wed",      name: "พร้อมแต่งงาน", bonus: 1,    note: "โบนัสเต็ม · ขอแต่งงานได้" },
+  { at: 90, id: "wed",      name: "พร้อมแต่งงาน", bonus: 1,    note: "โบนัสเต็ม · ขอแต่งงานได้",
+    alt: { name: "ยอมตายแทนกันได้", note: "ความผูกพันที่ลึกที่สุด — ไม่ใช่ความรัก แต่หนักแน่นไม่แพ้กัน" } },
 ];
 const REL_MAX = 100;
 const REL_GIFT_LOVED = 8;        // an item on their likes list
@@ -1360,6 +1368,13 @@ const REL_BONUS = {
   sora:  { kind: "sellPrice", amount: 0.15, label: "ขายของได้ราคาดีขึ้น" },
   kano:  { kind: "luck",      amount: 0.12, label: "โอกาสได้ของหายากมากขึ้น" },
   ellie: { kind: "xpBonus",   amount: 0.15, label: "ได้ XP ทุกสายมากขึ้น" },
+  /* 🎯 [owner 2026-08-22] "โดยมันไม่มีการขอแต่งงาน แต่จะให้โบนัสเล็กน้อยมากๆ ฟรี" — the two villagers
+     who cannot be courted still repay a friendship taken to its end, at roughly a sixth of what a
+     marriage pays. Small enough that nobody grinds them for it; large enough that the bond is not
+     purely decorative. Note that these are NOT what gates a proposal — canPropose reads v.romance,
+     precisely so that giving these two a bonus does not quietly make them marriageable. */
+  borin: { kind: "dmg",       amount: 0.5,  label: "ดาเมจมากขึ้น" },
+  tam:   { kind: "sellPrice", amount: 0.03, label: "ขายของได้ราคาดีขึ้น" },
 };
 
 /* ---------- 👶 ลูก (children) ----------

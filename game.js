@@ -1073,10 +1073,27 @@ function relStage(aff) {
 
 /* The bonus a villager currently contributes. Zero for anyone the player has not warmed to, and
  * zero for the men — they have no romance track and therefore no bonus, per the owner. */
+/* 🎯 [owner 2026-08-22] "npc หญิง ต้องแต่งงาน ถึงจะได้โบนัส แต่ npc ชายเราทำแบบนั้นไม่ได้ มันจึงให้ค่า
+ * โบนัสเล็กน้อย ตอนสเตตัสยกระดับ" — two rules, because the two kinds of villager have different
+ * ceilings.
+ *
+ * 🐛 The bonus used to scale with the affection stage for everyone, and the top stage's multiplier
+ * is 1.0 — so a courted-but-unmarried villager already paid the FULL bonus and the wedding added
+ * nothing at all. The one thing marriage was for gave nothing, and the daily upkeep that now comes
+ * with it would have made marrying a strictly losing move.
+ *
+ * So: the romanceable ones pay on the marriage, all of it, and nothing before. The two who cannot be
+ * married keep the old behaviour — a small amount that grows as the friendship does, which is the
+ * only way they can repay it. */
 function relBonusOf(id) {
   const spec = REL_BONUS[id];
   if (!spec) return null;
+  const v = VILLAGERS.find((x) => x.id === id);
   const st = relStage(relOf(id).aff);
+  if (v?.romance) {
+    if (!isSpouse(id)) return null;
+    return { ...spec, stage: st };
+  }
   if (!st.bonus) return null;
   return { ...spec, amount: spec.amount * st.bonus, stage: st };
 }
@@ -1163,12 +1180,26 @@ function spouseIds() {
 }
 function isSpouse(id) { return spouseIds().includes(id); }
 
+/* 🐛 [owner 2026-08-22] What to CALL a rung, for this particular villager. The ladder is shared,
+ * but its top two rungs are romantic — so the woodcutter used to be labelled "คนรัก" and then
+ * "พร้อมแต่งงาน" for the crime of accepting enough gifts. Everything below is already neutral
+ * ("เพื่อน", "คนสนิท") and needs no alternative. */
+function relLabel(villagerId, stage) {
+  const v = VILLAGERS.find((x) => x.id === villagerId);
+  return (!v || v.romance || !stage?.alt) ? stage : { ...stage, ...stage.alt };
+}
+
 function canPropose(id) {
   /* 🐛 [owner 2026-08-22] This demanded the EXACT "lover" stage, so affection passing 90 moved the
    * villager to the next stage and the option to propose disappeared for good — being too generous
    * with gifts locked you out of marrying her. The gate is a floor, not a band. */
   const LOVER_AT = REL_STAGES.find((s) => s.id === "lover").at;
-  return !isSpouse(id) && relOf(id).aff >= LOVER_AT && !!REL_BONUS[id];
+  /* 🐛 [owner 2026-08-22] This used the presence of a REL_BONUS as a stand-in for "can be courted",
+   * which held only while the two non-romanceable villagers had no bonus at all. The moment they
+   * were given one, they would have become marriageable — a coupling nothing in either table hints
+   * at. romance is the field that actually means this. */
+  const v = VILLAGERS.find((x) => x.id === id);
+  return !isSpouse(id) && !!v?.romance && relOf(id).aff >= LOVER_AT;
 }
 
 function propose(id) {
@@ -5447,8 +5478,10 @@ function renderVillage() {
    * the relationship is what the quests are quietly building. */
   const people = VILLAGERS.map((v) => {
     const r = relOf(v.id);
-    const st = relStage(r.aff);
-    const next = REL_STAGES.find((s) => s.at > r.aff);
+    const st = relLabel(v.id, relStage(r.aff));
+    /* Both rungs go through relLabel, or the woodcutter is told he is 15 points from being
+       your lover. */
+    const next = relLabel(v.id, REL_STAGES.find((s) => s.at > r.aff));
     const b = relBonusOf(v.id);
     const wed = isSpouse(v.id);
     const pct = next ? (r.aff - st.at) / (next.at - st.at) * 100 : 100;
@@ -5475,7 +5508,13 @@ function renderVillage() {
         ${b ? `<div class="v-bonus">${escapeHtml(b.label)} +${b.kind === "dmg"
             ? Math.round(b.amount * 10) / 10
             : Math.round(b.amount * 100) + "%"}</div>`
-            : `<div class="v-bonus muted">${v.romance ? "ยังไม่สนิทพอ" : "เพื่อนบ้าน — ไม่มีโบนัส"}</div>`}
+            : `<div class="v-bonus muted">${
+                /* 🎯 [owner 2026-08-22] Say WHY there is no bonus yet, per kind of villager.
+                   "ยังไม่สนิทพอ" was wrong for someone already at maximum affection who simply
+                   has not been married, which is now the state that pays. */
+                !v.romance ? T("โบนัสจะโตขึ้นเองเมื่อสนิทกันขึ้น")
+                  : canPropose(v.id) ? T("แต่งงานแล้วจะได้โบนัสเต็ม")
+                  : T("ยังไม่สนิทพอ")}</div>`}
         <div class="v-acts">
           ${st.at >= REL_STAGES[1].at
             ? `<button class="btn" data-gift="${v.id}"${canGiftToday(v.id) ? "" : " disabled"}>
@@ -5646,7 +5685,15 @@ function renderFamily() {
         <div class="fam-face">${iconArt("child", childFaceId(k, adult), adult ? "🧑" : "👶", k.name, "big")}</div>
         <div class="fam-body">
           <b>${escapeHtml(k.name)}</b>
-          <small>${adult ? "โตแล้ว — ออกผจญภัยเอง" : `อายุ ${k.age || 0}/${CHILD_ADULT_DAY} วัน`}</small>
+          <small>${adult ? T("โตแล้ว — ออกผจญภัยเอง") : `${T("อายุ")} ${k.age || 0}/${CHILD_ADULT_DAY} ${T("วัน")}`}</small>
+          <!-- 🎯 [owner 2026-08-22] "ในตัวของลูก เช่น อาริน ควรมีข้อความเล็กๆ บอกว่าลูกเรากับของใคร"
+               — and this is the same thread as the rebirth rule: a child records his mother,
+               which is why annulling marriages was wrong. Now the record is visible.
+               Falls back rather than guessing: a very old save may have no parent stored. -->
+          <small class="kid-parent">${(() => {
+            const m = VILLAGERS.find((v) => v.id === k.parent);
+            return m ? `${T("ลูกของคุณกับ")}${escapeHtml(m.name)}` : T("ไม่มีบันทึกว่าเป็นลูกกับใคร");
+          })()}</small>
           ${adult ? "" : `<div class="kid-track"><div style="width:${pct}%"></div></div>`}
           <div class="fam-row">${COMBAT_STATS.map((st) =>
             `<span>${st.icon} ${(k.stats || {})[st.id] || 1}</span>`).join("")}</div>

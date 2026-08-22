@@ -678,6 +678,17 @@ const I18N = (() => {
     "คู่ชีวิตของคุณ": "Your spouse",
     "สนิทที่สุดแล้ว — ขอแต่งงานได้": "As close as it gets — you may propose",
     "ไล่ออกจากตระกูล": "Disown",
+    /* The friendship rungs a villager who cannot be courted gets instead of the romantic ones. */
+    "พี่น้องต่างสายเลือด": "Sworn kin",
+    "นับกันเป็นพี่น้อง แม้ไม่ได้เกิดจากพ่อแม่เดียวกัน": "Family, without sharing any blood",
+    "ยอมตายแทนกันได้": "Would die for you",
+    "ความผูกพันที่ลึกที่สุด — ไม่ใช่ความรัก แต่หนักแน่นไม่แพ้กัน":
+      "The deepest bond there is — not love, and no less binding for it",
+    "โบนัสจะโตขึ้นเองเมื่อสนิทกันขึ้น": "The bonus grows as you get closer",
+    "แต่งงานแล้วจะได้โบนัสเต็ม": "Marry to receive the full bonus",
+    "ลูกของคุณกับ": "Your child with ",
+    "ไม่มีบันทึกว่าเป็นลูกกับใคร": "No record of the other parent",
+    "โตแล้ว — ออกผจญภัยเอง": "Grown — off adventuring alone", "อายุ": "Age",
     "⚙️ ตั้งค่า": "⚙️ Settings",
     "ภาษา / Language": "Language / ภาษา",
     "🇹🇭 ไทย": "🇹🇭 Thai",
