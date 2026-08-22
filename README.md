@@ -51,6 +51,14 @@ once you have killed 1,000 of a species, **it starts to fear you** and hits soft
 
 ![Combat](img/03-combat.png)
 
+Companions have seven grades, and the top two are effectively **breed-only** — wild catches almost
+never reach them. Fuse two of the same grade and you have a chance at the next one up, so a hoard of
+ordinary catches is raw material rather than clutter. **⚡ Auto-fuse** does the whole roster in one
+press, finishing the lowest grade before moving up. It leaves alone the companion you are fielding
+and the top grade, which has nothing to climb to.
+
+![Auto-fuse](img/12-autofuse.png)
+
 ### 3. The village square — work, and courting
 
 Every villager has a job for you. Open it and the game checks your bag: hold the goods and you hand
@@ -173,6 +181,13 @@ Art in `art/` was generated with [pollinations.ai](https://pollinations.ai).
 
 เอาของที่หาได้ไปตีเป็นอาวุธและเกราะ แล้วออกล่า สัตว์เลี้ยงช่วยรับดาเมจแทนคุณได้ —
 และล่าสายพันธุ์เดิมครบ 1,000 ตัวเมื่อไหร่ **มันจะเริ่มกลัวคุณ** แล้วตีเบาลง
+
+สัตว์เลี้ยงมี 7 ขั้น และสองขั้นบนสุดแทบ **ต้องผสมเอาเท่านั้น** — จับเอาในป่าโอกาสต่ำกว่า 1%
+ผสมสองตัวขั้นเดียวกันแล้วมีลุ้นขึ้นขั้น กองตัวธรรมดาที่สะสมไว้จึงเป็นวัตถุดิบ ไม่ใช่ขยะ
+กด **⚡ ผสมอัตโนมัติ** ทีเดียวจบทั้งกอง ไล่จากขั้นต่ำสุดขึ้นไป
+ไม่แตะตัวที่คุณพาลงสนาม และไม่ผสมขั้นสูงสุดซึ่งไม่มีที่ให้ไปต่อ
+
+![ผสมอัตโนมัติ](img/12-autofuse.png)
 
 ### 3. ลานหมู่บ้าน — รับงาน และจีบสาว
 
