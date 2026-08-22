@@ -6,7 +6,7 @@
  * v5 combat-stat split shipped with this left at 4: freshProfile stamped v4, migrate pushed
  * it to v5, and the `p.v === GAME_VERSION` guard then rejected every profile — the game
  * silently refused to create or load anything. balance_check.mjs now fails if the two drift. */
-const GAME_VERSION = 50;
+const GAME_VERSION = 51;
 /* 🎯 [owner 2026-08-22] "avatar คน เพดานน่าจะไม่กำหนด เพราะวางไว้ว่าให้โตได้เรื่อยๆ ... จริงๆ อยากให้ถึง 999"
  *
  * 99 was reachable in about four hours of the best XP route, which is the whole reason it felt like
@@ -1338,7 +1338,10 @@ const REL_STAGES = [
   { at: 35, id: "friend",   name: "เพื่อน",      bonus: 0.5,  note: "สั่งงานให้เราได้" },
   { at: 55, id: "close",    name: "คนสนิท",      bonus: 0.7,  note: "บอกของที่ชอบเอง" },
   { at: 75, id: "lover",    name: "คนรัก",       bonus: 0.85, note: "ขอแต่งงานได้" },
-  { at: 90, id: "wed",      name: "แต่งงาน",     bonus: 1,    note: "โบนัสเต็ม · เปิดระบบลูก" },
+  /* 🐛 [owner 2026-08-22: "เอลลี่ฉันยังไม่ได้แต่งงาน มันควรเป็นสถานะสามารถแต่งงานได้"] Reaching this
+     stage is not a wedding — it is the affection at which one is possible. Named "แต่งงาน", it
+     told every maxed-out villager she was already your wife. */
+  { at: 90, id: "wed",      name: "พร้อมแต่งงาน", bonus: 1,    note: "โบนัสเต็ม · ขอแต่งงานได้" },
 ];
 const REL_MAX = 100;
 const REL_GIFT_LOVED = 8;        // an item on their likes list
@@ -1373,8 +1376,27 @@ const REL_BONUS = {
  * a real question with a different answer every run. That tension is the feature; without the loss
  * at rebirth this would just be somewhere to put spare gold.
  */
-const CHILD_BIRTH_CHANCE = 0.03;      // per game-day, only while married — the owner's number
+/* 🎯 [owner 2026-08-22] 3% → 1%. A game-day is 100 real seconds, so 3% filled the household's
+ * four slots in under half an hour of play — children arrived faster than any of them could
+ * grow up, which made the growing-up the player was meant to watch invisible. At 1% the wait
+ * between births is roughly the time a child needs to reach adulthood. */
+const CHILD_BIRTH_CHANCE = 0.01;      // per game-day, only while married
 const CHILD_STAT_DIVISOR = 2;         // a child starts at half of what we were when they were born
+/* 🎯 [owner 2026-08-22: "ภรรยา + ลูก ตามจำนวน ... ดึงเงินจากกระเป๋าระบบเดียวกัน แต่ของภรรยากับลูกดึงทุกวัน"]
+ * A household costs money every game-day. Before this, marriage and children were pure bonus with
+ * no running cost anywhere in the game — the only reason to stop at four children was the cap.
+ *
+ * Sized against the tax-free allowance, which is the game's own statement of what counts as a small
+ * income: 700,000 a year over 360 days is about 1,944 a day. A spouse alone is 13% of that; a spouse
+ * with two children schooled to three levels each is 910 a day, roughly half. Meaningful, survivable.
+ *
+ * Education is charged for on purpose. The owner's design is "ยิ่งเรียนรู้เยอะ ยิ่งเสริมโบนัสให้เรา" —
+ * a child who gives more should eat more, or schooling is free money with a one-off entry fee.
+ * One track taken to level 5 costs 90,000 to buy and 300 a day to keep. */
+const FAMILY_UPKEEP_SPOUSE = 250;   // per game-day
+const FAMILY_UPKEEP_CHILD = 150;    // per game-day, each
+const FAMILY_UPKEEP_PER_EDU = 60;   // per game-day, per education level a child holds
+
 const CHILD_MAX = 4;                  // a ceiling, so a long marriage does not become a bonus farm
 const CHILD_ADULT_DAY = 120;          // game-days from birth to setting out on their own
 

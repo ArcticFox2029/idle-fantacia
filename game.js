@@ -664,6 +664,17 @@ function migrate(p) {
     p.v = 50;
     /* Auto-fuse is a button, not stored state. Nothing to migrate. */
   }
+  if (p.v === 50) {
+    p.v = 51;
+    /* Family upkeep starts today rather than being backdated: a save made before the cost existed
+     * has not been dodging it, and charging for a marriage the player has had for two in-game years
+     * would end a healthy run on the first tick after an update. */
+    p.family = { arrears: 0, noteDay: null, lastBirthDay: null, lastBirthByWife: {},
+                 bornThisLife: 0, monthPaid: 0 };
+  }
+
+  repairOverpopulatedFamily(p);
+
   return p.v === GAME_VERSION ? p : null;
 }
 
@@ -1045,7 +1056,7 @@ function baneCount(p = P) {
 
 /* ---------- 💗 ความสัมพันธ์ ----------
  * See the REL_* note in data.js. State lives on P.rel: { [villagerId]: { aff, floor, gaveDay } }
- * and P.spouse, which is a villager id or null.
+ * and the marriages, which live on P.spouses (see spouseIds — P.spouse is the legacy first one).
  */
 
 function relOf(id) {
@@ -1075,6 +1086,9 @@ function relBonusOf(id) {
 function relBonusTotal(kind) {
   let total = 0;
   for (const v of VILLAGERS) {
+    /* Only the spouse's share is suspended by arrears. The others are friendships, not dependants —
+     * they are not being paid for, so failing to pay is not a reason to withdraw them. */
+    if (isSpouse(v.id) && familyInArrears()) continue;
     const b = relBonusOf(v.id);
     if (b && b.kind === kind) total += b.amount;
   }
@@ -1090,7 +1104,13 @@ function giftValue(villager, itemId) {
   /* Junk is checked FIRST. It is junk to everyone, and a cheap thing that happens to share a
    * prefix with something they like — ore_stone for the blacksmith — should not read as a gift. */
   if ((ITEMS[itemId]?.sell || 0) <= 1) return REL_GIFT_DISLIKED;
-  if ((v.likes || []).some((tag) => itemId.includes(tag))) return REL_GIFT_LOVED;
+  /* 🐛 [audit-qa 2026-08-22] The tag has to be a WHOLE part of the id, never any substring of it.
+   * Plain `itemId.includes(tag)` made the blacksmith's "ore" match spore_glow, snow_core, ember_core
+   * and core_nova — four items she has no reason to care about, each paying REL_GIFT_LOVED instead
+   * of REL_GIFT_PLAIN. Item ids are word_word with the odd trailing digit, so splitting on those
+   * separators is the word boundary this table always meant. Measured before changing it: exactly
+   * those four move, and not one intended match is lost. */
+  if ((v.likes || []).some((tag) => itemId.split(/[_\d]+/).includes(tag))) return REL_GIFT_LOVED;
   return REL_GIFT_PLAIN;
 }
 
@@ -1127,15 +1147,36 @@ function relCredit(villagerId, amount = REL_QUEST_BONUS) {
   r.aff = Math.max(r.floor, Math.min(REL_MAX, r.aff + amount));
 }
 
+/* 🎯 [owner 2026-08-22] "ให้แต่งงานได้หลายคน ภรรยา มีลูกได้ปีละคน" — the household can hold more
+ * than one marriage, and the one-per-year clock belongs to each wife rather than to the player.
+ *
+ * P.spouse stays as the FIRST marriage and is what every older save carries, so nothing that reads
+ * it breaks; P.spouses is the full list and is derived from P.spouse when a save predates it.
+ * Reading through spouseIds() everywhere is what keeps those two from drifting apart. */
+function spouseIds() {
+  /* Merged rather than "array wins", because the two fields can disagree and only one direction of
+     disagreement is safe. An empty P.spouses next to a set P.spouse would silently annul a marriage
+     the player has — a listed spouse missing from the array is the harmless case. */
+  const list = Array.isArray(P.spouses) ? P.spouses.slice() : [];
+  if (P.spouse && !list.includes(P.spouse)) list.unshift(P.spouse);
+  return list;
+}
+function isSpouse(id) { return spouseIds().includes(id); }
+
 function canPropose(id) {
-  return !P.spouse && relStage(relOf(id).aff).id === "lover" && !!REL_BONUS[id];
+  /* 🐛 [owner 2026-08-22] This demanded the EXACT "lover" stage, so affection passing 90 moved the
+   * villager to the next stage and the option to propose disappeared for good — being too generous
+   * with gifts locked you out of marrying her. The gate is a floor, not a band. */
+  const LOVER_AT = REL_STAGES.find((s) => s.id === "lover").at;
+  return !isSpouse(id) && relOf(id).aff >= LOVER_AT && !!REL_BONUS[id];
 }
 
 function propose(id) {
   if (!canPropose(id)) return false;
   const r = relOf(id);
   r.aff = Math.max(r.aff, REL_STAGES[REL_STAGES.length - 1].at);
-  P.spouse = id;
+  P.spouses = spouseIds().concat(id);
+  P.spouse = P.spouses[0];
   const v = VILLAGERS.find((x) => x.id === id);
   toast(`💍 ${v.icon} ${v.name} ตอบตกลง!`, "levelup", "quest");
   save("แต่งงาน");
@@ -1153,7 +1194,10 @@ function relRebirth() {
     r.aff = Math.max(r.floor, halved);
     r.gaveDay = -1;
   }
+  /* Both, or a save carrying P.spouses would come out of a rebirth still married — spouseIds()
+     reads the array first, so clearing only the legacy field would have no effect at all. */
   P.spouse = null;
+  P.spouses = [];
 }
 
 /* ---------- 👶 ลูก ----------
@@ -1164,6 +1208,45 @@ function relRebirth() {
  * the player rebirths, and would do it silently.
  */
 const CHILD_NAMES = ["อาริน", "นารา", "เคนจิ", "ลิลลี่", "ทาโร่", "มินะ", "โซอี้", "ยูกิ"];
+
+/* 🐛 [owner 2026-08-22: "มีลูกถึง 4 คนไปแล้ว มันเยอะผิดปกติ ... มันควรเพิ่งแต่งงาน มีลูกแค่คนเดียว"]
+ * At 3% a day with no spacing rule, a save filled all four slots inside two game-years — the owner's
+ * had children born 17, 3 and 2 days apart. Those children are the old rate's doing, not the
+ * player's, so the state is repaired rather than trusted.
+ *
+ * Keyed on its OWN flag rather than on a version boundary, and that is the point: this was first
+ * written inside the 50→51 step, and the owner had already reloaded once between the version bump
+ * and the repair being added — so their save sat at 51 with four children and nothing would ever
+ * have run again. A repair that can only fire on one exact version misses everyone who crossed it a
+ * moment too early.
+ *
+ * It keeps what the one-per-year rule WOULD have allowed: the eldest, then each child born a full
+ * game-year after the last one kept. A save that spaced its children properly loses nothing, which
+ * is what makes this a repair and not a wipe. Runs once per save, and never again. */
+function repairOverpopulatedFamily(p) {
+  p.family = p.family || { arrears: 0, noteDay: null, lastBirthDay: null, lastBirthByWife: {},
+                           bornThisLife: 0, monthPaid: 0 };
+  if (p.family.kidsRepaired) return;
+  p.family.kidsRepaired = true;
+
+  const kids = Array.isArray(p.kids)
+    ? p.kids.slice().sort((a, b) => (a.bornDay || 0) - (b.bornDay || 0)) : [];
+  if (kids.length > 1) {
+    const kept = [kids[0]];
+    for (const k of kids.slice(1)) {
+      if ((k.bornDay || 0) - (kept[kept.length - 1].bornDay || 0) >= DAYS_PER_YEAR) kept.push(k);
+    }
+    p.kids = kept;
+  }
+  /* Rebuild the clocks from whoever is actually left, so the spacing rule counts from a survivor's
+     birthday rather than from a child that no longer exists. */
+  p.family.lastBirthByWife = {};
+  for (const k of p.kids || []) {
+    if (k.parent) p.family.lastBirthByWife[k.parent] = k.bornDay || 0;
+  }
+  p.family.lastBirthDay = p.kids?.length ? (p.kids[p.kids.length - 1].bornDay || 0) : null;
+  p.family.bornThisLife = p.kids?.length || 0;
+}
 
 function childrenOf() { P.kids = P.kids || []; return P.kids; }
 
@@ -1180,18 +1263,115 @@ function newChildStats() {
 
 /* Rolled once per game-day while married. Nothing happens on the vast majority of days, which is
  * the point — see the note on CHILD_BIRTH_CHANCE. */
+/* 🎯 [owner 2026-08-22: "สร้างภาพรูปไว้เยอะๆ แล้วค่อยหยิบมาใช้ แต่ถ้ามีลูกเยอะจนใช้รูปหมดแล้ว คนใหม่ๆ ค่อยให้ใช้ emoji"]
+ * One portrait per name, and a second for the same child grown up — so อาริน is the same face in
+ * every run instead of a fresh stranger each time, and the growing-up the player is meant to watch
+ * is finally visible rather than being a number on a progress bar.
+ *
+ * Falls through to the emoji by returning an id with no file behind it: iconArt already degrades
+ * that way, and markArtMissing remembers the miss, so an unnamed child costs one 404 and never
+ * asks again. Naming CHILD_FACES separately from CHILD_NAMES is what keeps that promise — a
+ * ninth name can be added without an art file and the game stays correct. */
+const CHILD_FACES = ["arin", "nara", "kenji", "lily", "taro", "mina", "zoe", "yuki"];
+function childFaceId(k, adult) {
+  const i = CHILD_NAMES.indexOf(k.name);
+  const face = i >= 0 && i < CHILD_FACES.length ? CHILD_FACES[i] : "none";
+  return adult ? `${face}_adult` : face;
+}
+
+/* 🎯 [owner 2026-08-22] What a household costs per game-day, itemised so the family screen can show
+ * the player where the number comes from rather than one total they have to trust. */
+function familyUpkeep() {
+  const wives = spouseIds();
+  const kids = wives.length ? childrenOf() : [];
+  const spouse = wives.length * FAMILY_UPKEEP_SPOUSE;
+  const heads = kids.length * FAMILY_UPKEEP_CHILD;
+  let eduLevels = 0;
+  for (const k of kids) for (const tr of CHILD_TRACKS) eduLevels += childTrackLevel(k, tr.id);
+  const edu = eduLevels * FAMILY_UPKEEP_PER_EDU;
+  return { spouse, heads, edu, eduLevels, kids: kids.length, total: spouse + heads + edu };
+}
+
+/* Unpaid upkeep suspends what the household gives back. The owner's rule — "หักไม่ได้ช่วงแรก โบนัสจะหาย"
+ * — and the honest version of it: a family you cannot feed does not keep working for you. It is a
+ * suspension, not a loss; clearing the arrears restores every bonus untouched. */
+function familyInArrears() { return (P.family?.arrears || 0) > 0; }
+
+/* Charged once per game-day. Anything the wallet and bank cannot cover is left as a real negative
+ * balance rather than quietly forgiven, which is what hands the run to taxDebtCheck's 90-day clock —
+ * the owner asked for "สามเดือน เกม over" and that clock already exists, counting consecutive days at
+ * P.gold < 0 whatever put it there. So there is no second game-over path to keep in step with the
+ * first. */
+function familyUpkeepDay() {
+  if (P.dead || !spouseIds().length) return;
+  const due = familyUpkeep().total;
+  if (due <= 0) return;
+  P.family = P.family || {};
+  const took = takeGoldThenBank(due);
+  const short = due - took;
+  if (short > 0) P.gold -= short;              // the debt is real, and the clock starts today
+  P.family.arrears = short > 0 ? (P.family.arrears || 0) + short : 0;
+  /* 🎯 [owner 2026-08-22: "หน้าธนาคาร บัญชี ข้อความมันถี่มาก ... ให้รวมค่าครอบครัวรายวัน แล้วแสดงผลเป็น
+   * ยอดสิ้นเดือนในบัญชีแทน"] The money still leaves every day — that part is the rule. What was wrong
+   * was the LEDGER: one line a day, interleaved with dividends, turned the account page into a wall
+   * where nothing could be read. A household bill is a monthly figure everywhere outside this game
+   * too, so it is banked here and posted once by onNewMonth. */
+  P.family.monthPaid = (P.family.monthPaid || 0) + took;
+
+  /* 🎯 [owner 2026-08-22: "หักค่าใช้จ่าย ต้องมี Notis แจ้งด้วย"] Under its own notification kind, so
+   * a player who does not want a money toast every 100 seconds can silence this one without losing
+   * the birth announcement. The shortfall toast is deliberately NOT rate-limited: it is the only
+   * warning before the run ends. */
+  if (short > 0) {
+    toast(`⚠️ จ่ายค่าเลี้ยงดูไม่ครบ ขาด ${Math.round(short).toLocaleString()} 💰`
+          + ` — โบนัสจากภรรยาและลูกหยุดจนกว่าจะเคลียร์หนี้ · ติดลบครบ ${TAX_GRACE_DAYS} วันคือจบเกม`,
+          "warn");   // no category on purpose: toast() filters on category alone, and the settings
+                     // panel promises warnings cannot be switched off. This is the only notice
+                     // between a missed payment and the run ending.
+  } else if (!P.family.noteDay || Math.floor(P.gameDays) - P.family.noteDay >= 1) {
+    P.family.noteDay = Math.floor(P.gameDays);
+    toast(`👨‍👩‍👧 ค่าเลี้ยงดูครอบครัววันนี้ ${due.toLocaleString()} 💰`, "", "family");
+  }
+}
+
 function childBirthRoll() {
-  if (!P.spouse) return;
+  const wives = spouseIds();
+  if (!wives.length) return;
   const kids = childrenOf();
-  if (kids.length >= CHILD_MAX) return;
-  if (Math.random() >= CHILD_BIRTH_CHANCE) return;
-  const used = new Set(kids.map((k) => k.name));
-  const name = CHILD_NAMES.find((n) => !used.has(n)) || `ลูกคนที่ ${kids.length + 1}`;
-  const spouse = VILLAGERS.find((v) => v.id === P.spouse);
-  kids.push({ id: `k${questDay()}_${kids.length}`, name, bornDay: questDay(), age: 0,
-              parent: P.spouse, stats: newChildStats(), edu: {} });
-  toast(`👶 ${name} เกิดแล้ว! ลูกของคุณกับ${spouse ? spouse.name : "คู่ชีวิต"}`, "levelup", "family");
-  save("ลูกเกิด");
+  P.family = P.family || {};
+  if ((P.family.bornThisLife ?? kids.length) >= CHILD_MAX) return;
+
+  /* 🎯 [owner 2026-08-22] "ควรมีลูกได้ปีละคน" and "ให้แต่งงานได้หลายคน ภรรยา มีลูกได้ปีละคน" — the
+   * year is each wife's own, not the household's. 360 days against the 120 a child needs to grow up
+   * means every child is born, grows and is seen doing it before that mother's next, instead of
+   * four arriving as a row of identical babies. Rolled per wife rather than once for the household:
+   * a second marriage should be its own chance, not a share of one.
+   *
+   * lastBirthByWife is keyed by villager id; lastBirthDay stays the most recent birth of any wife,
+   * because that is the number a save written before this change carries and the one the family
+   * screen counts down from. */
+  P.family.lastBirthByWife = P.family.lastBirthByWife || {};
+  const today = questDay();
+  for (const id of wives) {
+    const last = P.family.lastBirthByWife[id] ?? (wives.length === 1 ? P.family.lastBirthDay : null);
+    if (last != null && today - last < DAYS_PER_YEAR) continue;
+    if (Math.random() >= CHILD_BIRTH_CHANCE) continue;
+
+    const used = new Set(kids.map((k) => k.name));
+    const name = CHILD_NAMES.find((n) => !used.has(n)) || `ลูกคนที่ ${kids.length + 1}`;
+    const mother = VILLAGERS.find((v) => v.id === id);
+    kids.push({ id: `k${today}_${kids.length}`, name, bornDay: today, age: 0,
+                parent: id, stats: newChildStats(), edu: {} });
+    P.family.lastBirthByWife[id] = today;
+    P.family.lastBirthDay = today;
+    P.family.bornThisLife = (P.family.bornThisLife || 0) + 1;
+    toast(`👶 ${name} เกิดแล้ว! ลูกของคุณกับ${mother ? mother.name : "คู่ชีวิต"}`
+          + ` · ค่าเลี้ยงดูขึ้นเป็นวันละ ${familyUpkeep().total.toLocaleString()} 💰`, "levelup", "family");
+    save("ลูกเกิด");
+    /* One birth a day at most, whatever the household size — two babies in one toast stack is a
+     * result the player cannot follow, and the cap is about to stop the second one anyway. */
+    break;
+  }
 }
 
 /* One day older. Called from onNewDay so growth follows the game calendar, and stored as its own
@@ -1233,6 +1413,7 @@ function trainChild(kidId, trackId) {
 /* What the children contribute, summed by bonus kind. Joined to the same totals as gear, perks and
  * relationships — see relBonusTotal for why a bonus must not have its own later pass. */
 function childBonusTotal(kind) {
+  if (familyInArrears()) return 0;
   let total = 0;
   for (const k of childrenOf()) {
     for (const tr of CHILD_TRACKS) {
@@ -1245,7 +1426,19 @@ function childBonusTotal(kind) {
 
 /* Rebirth takes the children with it — the owner's rule, and the reason educating them is a
  * decision rather than a place to park gold. */
-function childrenRebirth() { P.kids = []; }
+/* 🎯 [owner 2026-08-22] "ในรอบจุติต่อรอบ คือ มีลูกได้ max 4 คน ถ้าจุติ จะไม่นับลูกคนเก่าในเงื่อนไข"
+ * — the cap is per life, and a new life starts owing nothing to the last one. Counting births
+ * explicitly rather than inferring the number from who is still at home: adults stay on the roster
+ * today, so the two agree, but the rule the owner stated is about how many were BORN and should not
+ * quietly change meaning the first time a grown child moves out. The spacing clock resets with it,
+ * so a new marriage is not made to wait out the previous life's cooldown. */
+function childrenRebirth() {
+  P.kids = [];
+  P.family = P.family || {};
+  P.family.bornThisLife = 0;
+  P.family.lastBirthDay = null;
+  P.family.lastBirthByWife = {};
+}
 
 /* ---------- 📜 เควส ----------
  * See the QUEST_* note in data.js. The board lives on P.quests and is refilled by onNewDay.
@@ -2161,16 +2354,70 @@ function artImg(kind, id, alt, cls) {
   const key = `${kind}/${id}`;
   if (ART_MISSING.has(key)) return null;
   const v = ART_STAMP ? `?v=${ART_STAMP}` : "";
+  /* 🐛 [owner 2026-08-22: "บางจังหวะ มันโหลดรูปไอเทมช้า แต่ซักพักรูปก็มา"] The emoji underneath used to
+   * be hidden the moment this <img> existed, which is a different moment from the picture arriving —
+   * and with loading="lazy" they can be seconds apart on a phone scrolling a full bag. That gap
+   * showed an empty circle, or the browser's own broken-image glyph, in place of a fallback that was
+   * sitting right there. onload is the only honest signal, so it is what flips the swap now. */
   return `<img class="art ${cls || ""}" src="art/${key}.jpg${v}" alt="${escapeHtml(alt)}" loading="lazy"
-    onerror="markArtMissing('${key}', this)">`;
+    decoding="async" onload="markArtReady(this)" onerror="markArtMissing('${key}', this)">`;
 }
-/* Called from the img's own onerror — drops the element and remembers not to try again. */
+/* 🐛 [owner 2026-08-22, from a phone: "เฟรม มอน มันหาย"] onerror does not say WHY the image failed,
+ * and this used to treat every failure as "this file does not exist" — one permanent entry in
+ * ART_MISSING, for the rest of the page's life. But a phone on wifi loses requests for reasons that
+ * have nothing to do with the file: the LAN drops for a second, the server is restarted while the
+ * page sits open. An idle game is left open for hours, so it only takes one such moment for a
+ * portrait to vanish and never come back — which is exactly the shape of the report. A file that is
+ * genuinely absent never appears in the first place; a frame that DISAPPEARS was always a live
+ * request that failed.
+ *
+ * So a failure is now provisional. Two retries with backoff, and only then is the key remembered.
+ * The retry parameter is what forces the browser to actually re-request instead of replaying the
+ * failure it has already cached. */
+const ART_TRIES = new Map();
+const ART_RETRY_LIMIT = 2;
+
+/* The picture is really on screen now: reveal it, retire the emoji, and forget the retry counter.
+ *
+ * 🐛 [audit-qa 2026-08-22, unconfirmed but correct anyway] ART_TRIES was only ever cleared by the
+ * `online` event. A network that drops requests without firing offline/online — which a phone on
+ * bad wifi does — would let a key's count creep to the limit over hours and blacklist a file that
+ * is present the whole time. A success is the strongest possible evidence the earlier failures were
+ * transient, so it clears the count here rather than waiting for an event that may never come. */
+window.markArtReady = (el) => {
+  ART_TRIES.delete(el.getAttribute("src").replace(/^art\//, "").replace(/\.jpg.*$/, ""));
+  const holder = el.parentElement;
+  if (holder) holder.classList.add("art-on");
+};
+
 window.markArtMissing = (key, el) => {
+  const n = (ART_TRIES.get(key) || 0) + 1;
+  ART_TRIES.set(key, n);
+  if (n <= ART_RETRY_LIMIT && el.isConnected) {
+    /* ART_STAMP is empty when the game is opened without the server, so the src may carry no query
+     * at all — the separator has to be chosen, not assumed. */
+    const base = el.getAttribute("src").replace(/[?&]retry=\d+/, "");
+    const sep = base.includes("?") ? "&" : "?";
+    setTimeout(() => {
+      if (el.isConnected) el.setAttribute("src", `${base}${sep}retry=${n}`);
+    }, 400 * Math.pow(4, n - 1));
+    return;
+  }
   ART_MISSING.add(key);
   const holder = el.parentElement;
   el.remove();
   if (holder) holder.classList.add("no-art");
 };
+
+/* Coming back online is proof that the failures were the network's, not the files'. Forget every
+ * verdict reached while it was down and redraw, so the frames return without a manual reload —
+ * which the owner would otherwise have to know to do. */
+window.addEventListener("online", () => {
+  if (!ART_MISSING.size && !ART_TRIES.size) return;
+  ART_MISSING.clear();
+  ART_TRIES.clear();
+  try { renderView(); refreshSidebar(); } catch (e) { /* pre-boot; the next render picks it up */ }
+});
 
 /* An icon slot that prefers art and falls back to the emoji underneath it. */
 function iconArt(kind, id, emoji, alt, cls) {
@@ -2470,6 +2717,10 @@ function onNewDay(date) {
   refreshQuests(questDay());
   childrenAgeDay();
   childBirthRoll();
+  /* After the birth roll so a child born today is fed from today, and before taxDebtCheck so that a
+   * day whose upkeep pushed the balance negative starts the 90-day clock on that same day rather
+   * than a day late. */
+  familyUpkeepDay();
   /* 🐛 [found by game-playtester, 2026-08-18] taxEnforce's own docstring says "Runs every game-day"
    * and the tax page shows the late fee as a per-day rate ("ค่าปรับวันละ 0.4%"), but this used to be
    * called from a monthly wrapper that only ran on day 1 of each month — so a seized business accrued
@@ -2483,9 +2734,27 @@ function onNewDay(date) {
 }
 
 function onNewMonth(date) {
+  familyUpkeepPost();
+}
+
+/* One ledger line a month for the household, instead of one a day drowning the dividends beside it.
+ * Posts what was ACTUALLY paid, not what was owed — a month where the wallet came up short shows
+ * the smaller figure, and the shortfall is already carried as arrears and warned about the day it
+ * happens. Runs on the calendar rather than on a counter, so a month with no marriage posts nothing
+ * rather than a zero. Also called by onNewYear's month rollover, since day 1 of month 1 takes that
+ * branch instead. */
+function familyUpkeepPost() {
+  const paid = Math.round(P.family?.monthPaid || 0);
+  if (paid <= 0) { if (P.family) P.family.monthPaid = 0; return; }
+  P.family.monthPaid = 0;
+  ledger("👨‍👩‍👧", "ค่าเลี้ยงดูครอบครัว (ทั้งเดือน)", -paid);
+  /* No toast to go with it. The daily notice the owner asked for already reports each deduction as
+     it happens; a second one at month end would be the same information twice, which is the noise
+     this change exists to remove. */
 }
 
 function onNewYear(date) {
+  familyUpkeepPost();   // day 1 of month 1 comes here instead of onNewMonth, so the month still closes
   bankTidySlips();
   toast(`🎆 ขึ้นปีใหม่ — ปีที่ ${date.year} ของมิธวูด`, "levelup");
   settleTaxYear(date);
@@ -4676,8 +4945,8 @@ function sidebarModel() {
   const kidsN = (P.kids || []).length;
   rows.push({
     id: "family", kind: "tab", icon: "👨‍👩‍👧", name: T("ครอบครัว"), accent: "#e8a0c8",
-    note: P.spouse
-      ? `${VILLAGERS.find((v) => v.id === P.spouse)?.name || "คู่ชีวิต"}${kidsN ? ` · ลูก ${kidsN} คน` : ""}`
+    note: spouseIds().length
+      ? `${spouseIds().map((id) => VILLAGERS.find((v) => v.id === id)?.name || "คู่ชีวิต").join(" · ")}${kidsN ? ` · ลูก ${kidsN} คน` : ""}`
       : P.pets.length ? `${T("เรากับสัตว์เลี้ยง")} ${P.pets.length}` : T("ยังมีแค่เรา"),
     active: view.kind === "family",
   });
@@ -5130,7 +5399,7 @@ function renderVillage() {
     const st = relStage(r.aff);
     const next = REL_STAGES.find((s) => s.at > r.aff);
     const b = relBonusOf(v.id);
-    const wed = P.spouse === v.id;
+    const wed = isSpouse(v.id);
     const pct = next ? (r.aff - st.at) / (next.at - st.at) * 100 : 100;
     return `
       <div class="villager-card${wed ? " is-wed" : ""}">
@@ -5140,10 +5409,14 @@ function renderVillage() {
             <b>${escapeHtml(v.name)}${wed ? " 💍" : ""}</b>
             <small>${escapeHtml(v.job)}</small>
           </span>
-          <span class="v-stage">${escapeHtml(st.name)}</span>
+          <!-- 🎯 [owner 2026-08-22] Marriage is a fact about the two of you, not a rung on the
+               affection ladder — so it is stated, not inferred from the stage name. -->
+          <span class="v-stage${wed ? " is-wed" : ""}">${wed ? T("แต่งงานแล้ว") : escapeHtml(st.name)}</span>
         </div>
         <div class="v-track"><div style="width:${Math.max(0, Math.min(100, pct))}%"></div></div>
-        <div class="v-note">${next ? `อีก ${next.at - r.aff} เป็น${escapeHtml(next.name)}` : "สนิทที่สุดแล้ว"}
+        <div class="v-note">${next ? `อีก ${next.at - r.aff} เป็น${escapeHtml(next.name)}`
+            : wed ? T("คู่ชีวิตของคุณ")
+            : canPropose(v.id) ? T("สนิทที่สุดแล้ว — ขอแต่งงานได้") : T("สนิทที่สุดแล้ว")}
           ${r.floor > 0 ? ` · พื้นจากชาติก่อน ${r.floor}` : ""}</div>
         ${b ? `<div class="v-bonus">${escapeHtml(b.label)} +${b.kind === "dmg"
             ? Math.round(b.amount * 10) / 10
@@ -5240,7 +5513,8 @@ function renderFamily() {
   $("#skill-title").textContent = `👨‍👩‍👧 ${T("ครอบครัว")}`;
   $("#skill-flavor").textContent = T("บ้านของเรา — คู่ชีวิต ลูก และเพื่อนร่วมทาง");
 
-  const spouse = P.spouse ? VILLAGERS.find((v) => v.id === P.spouse) : null;
+  const wives = spouseIds().map((id) => VILLAGERS.find((v) => v.id === id)).filter(Boolean);
+  const spouse = wives[0] || null;
   const kids = childrenOf();
   const pet = P.activePet != null ? P.pets[P.activePet] : null;
 
@@ -5255,15 +5529,24 @@ function renderFamily() {
       </div>
     </div>`;
 
-  const spouseCard = spouse ? `
+  /* One card per marriage, each showing the children she has and when she may have another —
+     the yearly clock belongs to her, so it is read where she is. */
+  const spouseCard = wives.length ? wives.map((w) => {
+    const hers = kids.filter((k) => k.parent === w.id).length;
+    const last = P.family?.lastBirthByWife?.[w.id]
+      ?? (wives.length === 1 ? P.family?.lastBirthDay : null);
+    const wait = last != null ? Math.ceil(DAYS_PER_YEAR - (questDay() - last)) : 0;
+    return `
     <div class="fam-card is-spouse">
-      <div class="fam-face">${iconArt("char", spouse.id, spouse.icon, spouse.name, "big")}</div>
+      <div class="fam-face">${iconArt("char", w.id, w.icon, w.name, "big")}</div>
       <div class="fam-body">
-        <b>💍 ${escapeHtml(spouse.name)}</b>
-        <small>${escapeHtml(spouse.job)}</small>
-        <div class="fam-note">${escapeHtml(REL_BONUS[spouse.id]?.label || "")}</div>
+        <b>💍 ${escapeHtml(w.name)}</b>
+        <small>${escapeHtml(w.job)}</small>
+        <div class="fam-note">${escapeHtml(REL_BONUS[w.id]?.label || "")}</div>
+        <small>${hers ? `ลูก ${hers} คน · ` : ""}${wait > 0 ? `มีลูกได้อีกใน ${wait} วัน` : "พร้อมมีลูกได้"}</small>
       </div>
-    </div>` : `
+    </div>`;
+  }).join("") : `
     <div class="fam-card is-empty">
       <div class="fam-face">💗</div>
       <div class="fam-body"><b>${T("ยังไม่มีคู่ชีวิต")}</b>
@@ -5306,7 +5589,7 @@ function renderFamily() {
     }).join("");
     return `
       <div class="fam-card is-kid">
-        <div class="fam-face">${adult ? "🧑" : "👶"}</div>
+        <div class="fam-face">${iconArt("child", childFaceId(k, adult), adult ? "🧑" : "👶", k.name, "big")}</div>
         <div class="fam-body">
           <b>${escapeHtml(k.name)}</b>
           <small>${adult ? "โตแล้ว — ออกผจญภัยเอง" : `อายุ ${k.age || 0}/${CHILD_ADULT_DAY} วัน`}</small>
@@ -5318,6 +5601,10 @@ function renderFamily() {
       </div>`;
   }).join("");
 
+  /* 🎯 [owner 2026-08-22: "หลังแต่งงาน ไม่เห็นค่าใช้จ่ายรายวัน ของภรรยา"] Broken out per head rather
+   * than shown as one total, because the player decides how many children to have and how far to
+   * school them — a single number gives them nothing to decide with. */
+  const up = familyUpkeep();
   const bonusLine = ["dmg", "sellPrice", "xpBonus"]
     .map((kind) => ({ kind, v: childBonusTotal(kind) })).filter((x) => x.v > 0)
     .map((x) => ({ dmg: `🗡️ +${Math.round(x.v * 10) / 10}`,
@@ -5329,12 +5616,17 @@ function renderFamily() {
       <span class="m-chip">👨‍👩‍👧 ${1 + (spouse ? 1 : 0) + kids.length} ${T("คน")}</span>
       <span class="m-chip">🐾 ${T("สัตว์เลี้ยง")} ${P.pets.length}</span>
       ${bonusLine ? `<span class="m-chip">${T("โบนัสจากลูก")} ${bonusLine}</span>` : ""}
+      ${up.total ? `<span class="m-chip${familyInArrears() ? " missing" : ""}">🍚 ${T("ค่าเลี้ยงดู")} ${up.total.toLocaleString()}/${T("วัน")}</span>` : ""}
     </div>`;
   $("#action-grid").innerHTML =
     `<div class="fam-grid">${meCard}${spouseCard}${petCard}${kidCards}</div>`
-    + (P.spouse && kids.length < CHILD_MAX
-        ? `<div class="fam-hint">แต่งงานแล้ว — แต่ละวันมีโอกาส ${Math.round(CHILD_BIRTH_CHANCE * 100)}% ที่จะมีลูก</div>`
-        : kids.length >= CHILD_MAX ? `<div class="fam-hint">ลูกครบ ${CHILD_MAX} คนแล้ว</div>` : "");
+    + (up.total ? `<div class="fam-hint${familyInArrears() ? " is-debt" : ""}">
+          🍚 ค่าเลี้ยงดูวันละ <b>${up.total.toLocaleString()}</b> 💰 — ภรรยา ${up.spouse.toLocaleString()}${up.kids ? ` · ลูก ${up.kids} คน ${up.heads.toLocaleString()}` : ""}${up.eduLevels ? ` · ค่าเรียน ${up.eduLevels} ขั้น ${up.edu.toLocaleString()}` : ""}
+          ${familyInArrears() ? `<br><b>ค้างจ่าย ${Math.round(P.family.arrears).toLocaleString()} 💰 — โบนัสจากภรรยาและลูกหยุดอยู่</b> จ่ายครบแล้วกลับมาเหมือนเดิม · เงินติดลบครบ ${TAX_GRACE_DAYS} วันคือจบเกม` : ""}
+        </div>` : "")
+    + (spouseIds().length && (P.family?.bornThisLife ?? kids.length) < CHILD_MAX
+        ? `<div class="fam-hint">ภรรยาแต่ละคนมีลูกได้ปีละคน — แต่ละวันมีโอกาส ${Math.round(CHILD_BIRTH_CHANCE * 100)}% · รอบจุตินี้มีลูกได้อีก ${CHILD_MAX - (P.family?.bornThisLife ?? kids.length)} คน</div>`
+        : `<div class="fam-hint">รอบจุตินี้มีลูกครบ ${CHILD_MAX} คนแล้ว — จุติแล้วเริ่มนับใหม่</div>`);
 
   $("#action-grid").querySelectorAll("[data-train]").forEach((b) => {
     b.onclick = () => { if (trainChild(b.dataset.train, b.dataset.track)) renderView(); };
@@ -5454,8 +5746,13 @@ function renderSkill() {
       const acts = skill.actions.filter((a) => a.area === ar);
       const open = acts.filter((a) => actionOpen(skill.id, a)).length;
       const maxed = acts.every((a) => masteryLevelOf(skill.id, a.id) >= MASTERY_MAX);
+      /* 🐛 [audit-qa 2026-08-22] The LABEL goes through T(); the data-area attribute must not.
+       * `area` is the key every card on this page is filtered by (action.area === shown, openArea,
+       * the click handler that reads dataset.area back), which is why i18n.js does not walk it —
+       * and why the tab used to print the raw Thai even in English mode. Two zone names had already
+       * been translated in the dictionary and could never appear on screen. */
       return `<button class="area-tab${ar === shown ? " active" : ""}${open ? "" : " shut"}" data-area="${escapeHtml(ar)}">
-        <span style="color:${skill.accent}">◆</span> ${escapeHtml(ar)}
+        <span style="color:${skill.accent}">◆</span> ${escapeHtml(T(ar))}
         <span class="area-count">${maxed ? "✅" : `${open}/${acts.length}`}</span></button>`;
     }).join("");
     extra.appendChild(bar);
@@ -7972,17 +8269,30 @@ function renderStats() {
       ...VILLAGERS.filter((v) => v.romance).map((v) => {
         const r = relOf(v.id);
         return [`${v.icon} ${v.name}`,
-                `${relStage(r.aff).name} (${r.aff}/${REL_MAX})${P.spouse === v.id ? " 💍" : ""}`];
+                `${relStage(r.aff).name} (${r.aff}/${REL_MAX})${isSpouse(v.id) ? " 💍" : ""}`];
       }),
       ["ของขวัญที่ให้ไป", fmtNum(P.stats.giftsGiven || 0) + " ชิ้น"],
     ] },
     { icon: "👨‍👩‍👧", title: "ครอบครัว", rows: [
-      ["คู่ชีวิต", P.spouse ? (VILLAGERS.find((v) => v.id === P.spouse)?.name || "-") : "ยังไม่มี"],
-      ["ลูก", `${(P.kids || []).length}/${CHILD_MAX} คน`],
+      ["คู่ชีวิต", spouseIds().length
+      ? spouseIds().map((id) => VILLAGERS.find((v) => v.id === id)?.name || "-").join(", ") : "ยังไม่มี"],
+        ["ลูก", `${(P.kids || []).length} คน · รอบจุตินี้เกิดแล้ว ${P.family?.bornThisLife ?? (P.kids || []).length}/${CHILD_MAX}`],
       ["ลูกที่โตแล้ว", `${(P.kids || []).filter(childIsAdult).length} คน`],
       ["ขั้นการเรียนรวม", `${(P.kids || []).reduce((t, k) =>
           t + CHILD_TRACKS.reduce((n, tr) => n + childTrackLevel(k, tr.id), 0), 0)} ขั้น`],
       ["ลงทุนกับการเรียนไป", fmtNum(Math.round(P.stats.eduSpent || 0)) + " ทอง"],
+        /* 🎯 [owner 2026-08-22: "อย่าลืมปรับหน้าสถิติ ให้สัมพันธ์กับระบบล่าสุด"] The household now
+           costs money every day and can end the run if it goes unpaid, so the page that summarises
+           it has to say both. A stats page listing only what a family GIVES is not a summary. */
+        ["ค่าเลี้ยงดูต่อวัน", (() => {
+          const u = familyUpkeep();
+          return u.total ? `${fmtNum(u.total)} ทอง · ภรรยา ${fmtNum(u.spouse)}`
+            + (u.kids ? ` · ลูก ${fmtNum(u.heads)}` : "")
+            + (u.edu ? ` · ค่าเรียน ${fmtNum(u.edu)}` : "") : "ยังไม่มีค่าใช้จ่าย";
+        })()],
+        ["จ่ายไปเดือนนี้", fmtNum(Math.round(P.family?.monthPaid || 0)) + " ทอง"],
+        ["ค้างจ่าย", familyInArrears()
+          ? `${fmtNum(Math.round(P.family.arrears))} ทอง — โบนัสภรรยาและลูกหยุดอยู่` : "ไม่มี"],
     ] },
     { icon: "📈", title: "เลเวลทุกสาย", rows: SKILLS.map((sk) =>
       [`${sk.icon} ${sk.name}`, `เลเวล ${levelFromXp(P.xp[sk.id] || 0)}`]) },
@@ -8580,14 +8890,14 @@ function refreshWakeLock() {
 function wakeLockStatusText() {
   if (!soundPref("awakeOn", true)) return "";
   if (wakeLockNative()) {
-    return wakeLock ? "กำลังทำงาน (Wake Lock API)" : "ยังไม่ได้จับ — จะจับเมื่อกลับมาดูหน้าจอ";
+    return wakeLock ? T("กำลังทำงาน (Wake Lock API)") : T("ยังไม่ได้จับ — จะจับเมื่อกลับมาดูหน้าจอ");
   }
-  if (typeof NoSleepVideo === "undefined") return "ไม่มีวิธีสำรองในหน้านี้";
+  if (typeof NoSleepVideo === "undefined") return T("ไม่มีวิธีสำรองในหน้านี้");
   const s = NoSleepVideo.status();
-  if (s.playing && !s.muted) return "กำลังทำงาน (วิดีโอเงียบ)";
-  if (s.playing && s.muted) return "วิดีโอเล่นแบบ mute — Android มักไม่ยอมกันจอดับให้ ต้องใช้ https";
-  if (s.error) return `วิดีโอถูกปฏิเสธ (${s.error}) — แตะหน้าจอหนึ่งครั้งแล้วเปิดดูใหม่`;
-  return "ยังไม่เริ่ม — แตะหน้าจอหนึ่งครั้ง";
+  if (s.playing && !s.muted) return T("กำลังทำงาน (วิดีโอเงียบ)");
+  if (s.playing && s.muted) return T("วิดีโอเล่นแบบ mute — Android มักไม่ยอมกันจอดับให้ ต้องใช้ https");
+  if (s.error) return `${T("วิดีโอถูกปฏิเสธ")} (${s.error}) — ${T("แตะหน้าจอหนึ่งครั้งแล้วเปิดดูใหม่")}`;
+  return T("ยังไม่เริ่ม — แตะหน้าจอหนึ่งครั้ง");
 }
 
 function openSettings() {
@@ -8596,16 +8906,15 @@ function openSettings() {
   back.className = "modal-back";
   back.innerHTML = `
     <div class="modal">
-      <div class="modal-head">⚙️ ตั้งค่า</div>
-      <div class="modal-head" style="font-size:16px">ภาษา / Language</div>
+      <div class="modal-head">${T("⚙️ ตั้งค่า")}</div>
+      <div class="modal-head" style="font-size:16px">${T("ภาษา / Language")}</div>
       <div class="lang-row">
-        <button class="btn lang-btn${currentLang() === "th" ? " primary" : ""}" data-lang="th">🇹🇭 ไทย</button>
+        <button class="btn lang-btn${currentLang() === "th" ? " primary" : ""}" data-lang="th">${T("🇹🇭 ไทย")}</button>
         <button class="btn lang-btn${currentLang() === "en" ? " primary" : ""}" data-lang="en">🇬🇧 English</button>
       </div>
-      <div class="modal-sub">ยังแปลไม่ครบทุกคำ — คำที่ยังไม่ได้แปลจะแสดงเป็นภาษาไทยไว้ก่อน / Not everything is translated yet; untranslated text stays in Thai.</div>
+      <div class="modal-sub">${T("ยังแปลไม่ครบทุกคำ — คำที่ยังไม่ได้แปลจะแสดงเป็นภาษาไทยไว้ก่อน / Not everything is translated yet; untranslated text stays in Thai.")}</div>
       <div class="modal-head" style="font-size:16px">${T("การแจ้งเตือน")}</div>
-      <div class="modal-sub">เลือกว่าจะให้อะไรเด้งขึ้นมาบ้าง — คำเตือน ความพ่ายแพ้
-        และข้อความที่ตอบสิ่งที่คุณเพิ่งกด จะแสดงเสมอ ปิดไม่ได้</div>
+      <div class="modal-sub">${T("เลือกว่าจะให้อะไรเด้งขึ้นมาบ้าง — คำเตือน ความพ่ายแพ้ และข้อความที่ตอบสิ่งที่คุณเพิ่งกด จะแสดงเสมอ ปิดไม่ได้")}</div>
       <div class="notif-list">
         ${NOTIF_KINDS.map((n) => `
           <label class="notif-row">
@@ -8622,20 +8931,20 @@ function openSettings() {
       <div class="notif-list">
         <label class="notif-row">
           <input type="checkbox" data-sound="sfxOn"${soundPref("sfxOn", true) ? " checked" : ""}>
-          <span class="notif-name">🔔 เสียงประกอบ</span>
+          <span class="notif-name">${T("🔔 เสียงประกอบ")}</span>
           <span class="notif-note">${T("เสียงสั้น ๆ ตอนได้ของ เลเวลอัพ เก็บเกี่ยว หรือมีคำเตือน")}</span>
         </label>
         <label class="notif-row">
           <input type="checkbox" data-sound="musicOn"${soundPref("musicOn", false) ? " checked" : ""}>
-          <span class="notif-name">🎵 เพลงประกอบ</span>
-          <span class="notif-note">ทำนองช้า ๆ วนไปเรื่อย ๆ — ปิดไว้เป็นค่าเริ่มต้น</span>
+          <span class="notif-name">${T("🎵 เพลงประกอบ")}</span>
+          <span class="notif-note">${T("ทำนองช้า ๆ วนไปเรื่อย ๆ — ปิดไว้เป็นค่าเริ่มต้น")}</span>
         </label>
         <label class="notif-row"${wakeLockSupported() ? "" : ' style="opacity:.45"'}>
           <input type="checkbox" data-sound="awakeOn"${soundPref("awakeOn", true) ? " checked" : ""}${wakeLockSupported() ? "" : " disabled"}>
-          <span class="notif-name">📱 กันจอดับตอนดูเกม</span>
+          <span class="notif-name">${T("📱 กันจอดับตอนดูเกม")}</span>
           <span class="notif-note">${wakeLockSupported()
-            ? `เกม idle มีจังหวะที่นั่งดูเฉย ๆ มือถือจะได้ไม่ล็อกจอ — ปล่อยเองเมื่อสลับแอปหรือกดพัก${
-                wakeLockNative() ? "" : " (ใช้วิธีเล่นวิดีโอเงียบ เพราะหน้านี้เป็น http)"}${wakeLockStatusText() ? `<br><b class="awake-state">สถานะตอนนี้: ${escapeHtml(wakeLockStatusText())}</b>` : ""}`
+            ? `${T("เกม idle มีจังหวะที่นั่งดูเฉย ๆ มือถือจะได้ไม่ล็อกจอ — ปล่อยเองเมื่อสลับแอปหรือกดพัก")}${
+                wakeLockNative() ? "" : ` ${T("(ใช้วิธีเล่นวิดีโอเงียบ เพราะหน้านี้เป็น http)")}`}${wakeLockStatusText() ? `<br><b class="awake-state">${T("สถานะตอนนี้")}: ${escapeHtml(wakeLockStatusText())}</b>` : ""}`
             : (typeof isSecureContext !== "undefined" && !isSecureContext)
               /* 🎯 [owner 2026-08-22] This used to say "เบราว์เซอร์นี้ไม่รองรับ" and that was wrong:
                * Chrome supports Wake Lock. It requires a SECURE CONTEXT, and http:// on a LAN name
@@ -8683,7 +8992,7 @@ function openSettings() {
   const awakeTick = setInterval(() => {
     const cell = back.querySelector(".awake-state");
     if (!cell || !document.body.contains(back)) { clearInterval(awakeTick); return; }
-    cell.textContent = `สถานะตอนนี้: ${wakeLockStatusText()}`;
+    cell.textContent = `${T("สถานะตอนนี้")}: ${wakeLockStatusText()}`;
   }, 1000);
   const close = () => { save("ตั้งค่า"); back.remove(); };
   back.querySelector("[data-close]").onclick = close;
@@ -8784,7 +9093,7 @@ const NOTIF_KINDS = [
   { id: "combat", icon: "⚔️", name: "รายละเอียดการต่อสู้",  note: "กินอัตโนมัติ เกราะแตก โหมดคลั่ง สัตว์เลี้ยงหมดแรง" },
   { id: "trader", icon: "🧙", name: "พ่อค้าเร่",            note: "ตอนมาตั้งแผง ตอนเก็บแผง และตอนซื้อของจากแผง" },
   { id: "guild",  icon: "🏹", name: "สถาบันฮันเตอร์",      note: "ทีมกลับถึงสถาบัน รับของอัตโนมัติ บาดเจ็บ และรับเด็กเข้าสังกัด" },
-  { id: "family", icon: "👨‍👩‍👧", name: "ครอบครัว",           note: "ลูกเกิด ลูกโตพอออกผจญภัย และการเรียน" },
+  { id: "family", icon: "👨‍👩‍👧", name: "ครอบครัว",           note: "ลูกเกิด ลูกโตพอออกผจญภัย การเรียน และค่าเลี้ยงดูรายวัน" },
   { id: "quest",  icon: "📜", name: "งานจากลานหมู่บ้าน",   note: "ตอนส่งงานสำเร็จและได้ค่าจ้าง" },
   { id: "save",   icon: "💾", name: "แจ้งว่าเซฟแล้ว",       note: "เซฟอัตโนมัติทุก 10 นาที (เซฟไม่สำเร็จจะเตือนเสมอ)" },
 ];

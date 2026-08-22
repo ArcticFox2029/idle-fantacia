@@ -339,8 +339,13 @@ body {
 .main::-webkit-scrollbar-thumb { background: var(--line); border-radius: 5px; }
 
 /* Mastery overview panel at the top of each skill page */
+/* 🐛 [owner 2026-08-22: "ของข้อมูลรวมมันตก"] A flex row with no wrap: every chip added here pushed
+   the row wider than the phone, and because the row is inside the page rather than its own scroller,
+   it took the whole page sideways with it. The summary is a set of independent facts with no order
+   to preserve, so wrapping is the honest layout — nothing is ever off-screen, and adding a chip
+   costs a line instead of the page's horizontal scroll. */
 .mastery-summary {
-  display: flex; align-items: center; gap: 12px;
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap; row-gap: 8px; max-width: 100%;
   background: linear-gradient(160deg, var(--card-hi), var(--card));
   border: 1px solid var(--line); border-radius: var(--radius);
   padding: 12px 16px; margin-bottom: 16px;
@@ -552,7 +557,17 @@ body {
   transform: scale(1.06);      /* nudge past the circle's own soft edge */
   display: block; position: relative; z-index: 1;
 }
-.icon-art .art + .icon-glyph { display: none; }
+/* 🐛 [owner 2026-08-22: "บางจังหวะ มันโหลดรูปไอเทมช้า แต่ซักพักรูปก็มา"] This used to be
+ * `.art + .icon-glyph { display: none }` — a sibling rule, so the emoji vanished the moment the
+ * <img> was in the DOM. With loading="lazy" that is seconds before the picture arrives, and a bag
+ * scrolled fast on a phone fires dozens of those requests at once. The gap showed an empty circle,
+ * or the browser's broken-image glyph, instead of the fallback that was already there.
+ *
+ * `.art-on` is set by markArtReady from the img's own onload, so the swap now happens when there is
+ * something to swap TO. The image is transparent until then for the same reason. */
+.icon-art .art { opacity: 0; transition: opacity .18s ease; }
+.icon-art.art-on .art { opacity: 1; }
+.icon-art.art-on .icon-glyph { display: none; }
 .stage-icon .icon-art, .slot-face .icon-art { width: 54px; height: 54px; }
 .f-avatar .icon-art { width: 84px; height: 84px; }
 .inv-item .icon .icon-art { width: 30px; height: 30px; }
@@ -1772,3 +1787,7 @@ body::after {
 .pet-skill { font-size: 14px; cursor: help; }
 .pet-skill-num { color: var(--gold); font-weight: 600; font-variant-numeric: tabular-nums; }
 .pet-next { color: var(--text-dim); font-size: 11px; margin-left: auto; white-space: nowrap; }
+
+/* 🎯 [owner 2026-08-22] Arrears are the one state on the family screen that costs the player
+   something, so the panel says so in the danger colour rather than in the same grey as the rest. */
+.fam-hint.is-debt { color: var(--danger); border-color: var(--danger); }

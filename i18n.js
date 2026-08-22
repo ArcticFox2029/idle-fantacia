@@ -47,6 +47,7 @@ const I18N = (() => {
     "โบริน": "Borin", "ตั้ม": "Tam",
     "คนดูแลเรือนเพาะชำ": "Nursery keeper", "ช่างตีเหล็ก ": "Blacksmith",
     "ลูกสาวพ่อค้า": "Merchant's daughter", "คนหาปลาริมทะเลสาบ": "Lakeside angler",
+    "ดาเมจมากขึ้น อาวุธถูกลง": "More damage, cheaper weapons",
     "นักบันทึกของสถาบัน": "Institute archivist", "คนตัดไม้": "Woodcutter",
     "เจ้าของโรงเตี๊ยม": "Innkeeper",
     "คนแปลกหน้า": "Stranger", "คนรู้จัก": "Acquaintance", "เพื่อน": "Friend",
@@ -559,6 +560,34 @@ const I18N = (() => {
     "เหวมังกรหลับ": "Sleeping Dragon Chasm",
     "ปลา": "Fish", "ไม่มี": "None",
 
+    /* ---- skill-page zone tabs (`area` in data.js) ----
+     * 🐛 [audit-qa 2026-08-22] These render through T() at the tab, NOT through the in-place walk:
+     * `area` is also the key that decides which cards a page shows (openArea, action.area === shown,
+     * data-area on the button), so translating the value would break the lookup. ป่าชายเมือง and
+     * ป่าชั้นใน were already sitting in the chrome block below and could never fire, because the tab
+     * printed the raw string. Every one of the 42 is listed, and smoke_render pins that. */
+    "ป่าชายเมือง": "Town Edge Wood", "ป่าชั้นใน": "Inner Forest",
+    "เตาดินโบราณ": "Ancient Clay Kiln", "เตาวิญญาณ": "Spirit Kiln",
+    "ลำธารหมู่บ้าน": "Village Brook", "ทะเลสาบแสงจันทร์": "Moonlight Lake",
+    "ทะเลลึกพราวดาว": "Starlit Deep", "ตำนานใต้สมุทร": "Legends Beneath the Sea",
+    "เหมืองปากผา": "Cliffmouth Mine", "เหมืองชั้นกลาง": "Middle Seam",
+    "เหมืองใจพิภพ": "Earthheart Mine",
+    "เตาแคมป์": "Camp Stove", "เมนูบ้าน ๆ": "Home Cooking", "เมนูทะเลลึก": "Deep-Sea Menu",
+    "ครัวหลวง": "Royal Kitchen",
+    "โรงฟอกหนัง": "Tannery", "ช่างหลวง": "Royal Workshop", "งานขาย": "Goods for Sale",
+    "แปลงหลังบ้าน": "Back Garden", "สวนผลไม้จันทรา": "Moonfruit Orchard",
+    "เรือนกระจกดาว": "Star Greenhouse", "ตลาดเมืองจันทรา": "Moon City Market",
+    "บุกรังมอนสเตอร์": "Monster Dens", "หอคอยจอมเวท": "Sorcerer’s Tower",
+    "ท่าเรือและกองคาราวาน": "Docks and Caravans", "เขตพระราชวัง": "Palace Quarter",
+    "สุสานและซากปรักหักพัง": "Tombs and Ruins",
+    "งานฝึกหัด": "Apprentice Work", "สายทองแดงรุ้ง": "Rainbow Copper Line",
+    "สายเหล็กเงา": "Sheen Iron Line", "สายเงินบริสุทธิ์": "Pure Silver Line",
+    "สายทองคำเปลว": "Gilded Gold Line", "สายมิธริล": "Mithril Line",
+    "สายอดามันไทต์": "Adamantite Line", "สายราตรีมืด": "Blacknight Line",
+    "สายสุริยะ": "Solar Line", "งานอัญมณี": "Gemwork", "งานตำนาน": "Legendary Work",
+    "งานเครื่องประดับ": "Jewellery", "งานราชวงศ์": "Royal Regalia",
+    "งานดาราจักร": "Galactic Work",
+
     /* ---- interface chrome ----
      * Wrapped by hand at each site in game.js, because these are fragments inside template
      * literals with values interpolated between them — the in-place table walk cannot reach them. */
@@ -580,6 +609,87 @@ const I18N = (() => {
     "ค้าง": "Owed", "ปีนี้": "This year", "ไม่มีค้างชำระ": "Nothing owed",
     "จุติแล้ว": "Reborn", "ครั้ง": "times", "พร้อมจุติแล้ว": "Ready to be reborn",
     "ต้องเลเวลรวม": "Needs total level", "เล่นต่อ": "Resume", "พัก": "Pause",
+    /* 🐛 [owner 2026-08-22] The settings dialog was the one screen that stayed Thai after a switch,
+       and it is the screen the player is looking at WHEN they switch — so an instant, working change
+       read as a button that did nothing. Everything visible in that dialog belongs here. */
+    /* The notification list inside the settings dialog — NOTIF_KINDS is walked by i18n, but
+       nothing here matched it, so the panel stayed Thai in English mode. */
+    "ล้มมอนสเตอร์และของที่ดรอป":
+      "Kills and drops",
+    "ทุกตัวที่ล้มได้ — ตัวที่ขึ้นถี่ที่สุด (บอสยังขึ้นเสมอ)":
+      "Every monster you fell — the noisiest of these (bosses always show)",
+    "ของและ XP จากงาน":
+      "Job yields and XP",
+    "ตัดไม้ ขุด ตกปลา ปลูกผัก คราฟต์ และย่องเก็บของ":
+      "Woodcutting, mining, fishing, farming, crafting and thieving",
+    "เลเวลอัพ / ขั้นชำนาญ":
+      "Levels and mastery",
+    "เลเวลสายอาชีพ สเตตัสการล่า และขั้นชำนาญ":
+      "Skill levels, combat stats and mastery ranks",
+    "ปันผลและการซื้อขาย":
+      "Dividends and trading",
+    "ปันผลรายวัน ดอกเบี้ย ซื้อ-ขายหุ้นและของ":
+      "Daily dividends, interest, buying and selling",
+    "รายละเอียดการต่อสู้":
+      "Combat detail",
+    "กินอัตโนมัติ เกราะแตก โหมดคลั่ง สัตว์เลี้ยงหมดแรง":
+      "Auto-eating, broken armour, frenzy, a companion going down",
+    "พ่อค้าเร่":
+      "The pedlar",
+    "ตอนมาตั้งแผง ตอนเก็บแผง และตอนซื้อของจากแผง":
+      "When the stall opens, when it packs up, and what you buy from it",
+    "ทีมกลับถึงสถาบัน รับของอัตโนมัติ บาดเจ็บ และรับเด็กเข้าสังกัด":
+      "Squads returning, auto-collected loot, injuries, and new recruits",
+    "ลูกเกิด ลูกโตพอออกผจญภัย การเรียน และค่าเลี้ยงดูรายวัน":
+      "Births, a child coming of age, their schooling, and the daily upkeep",
+    "งานจากลานหมู่บ้าน":
+      "Village jobs",
+    "ตอนส่งงานสำเร็จและได้ค่าจ้าง":
+      "Handing a job in and being paid for it",
+    "แจ้งว่าเซฟแล้ว":
+      "Save confirmations",
+    "เซฟอัตโนมัติทุก 10 นาที (เซฟไม่สำเร็จจะเตือนเสมอ)":
+      "Auto-saves every 10 minutes (a failed save always warns)",
+    /* The keep-awake block: its status text is built in JS, so it needs entries of its own. */
+    "เกม idle มีจังหวะที่นั่งดูเฉย ๆ มือถือจะได้ไม่ล็อกจอ — ปล่อยเองเมื่อสลับแอปหรือกดพัก":
+      "An idle game has long stretches you just watch, so the phone should not lock. Released on its own when you switch apps or pause.",
+    "(ใช้วิธีเล่นวิดีโอเงียบ เพราะหน้านี้เป็น http)":
+      "(using the silent-video fallback, because this page is http)",
+    "สถานะตอนนี้":
+      "Right now",
+    "กำลังทำงาน (Wake Lock API)":
+      "Working (Wake Lock API)",
+    "ยังไม่ได้จับ — จะจับเมื่อกลับมาดูหน้าจอ":
+      "Not held yet — it takes hold when you come back to the screen",
+    "ไม่มีวิธีสำรองในหน้านี้":
+      "No fallback available on this page",
+    "กำลังทำงาน (วิดีโอเงียบ)":
+      "Working (silent video)",
+    "วิดีโอเล่นแบบ mute — Android มักไม่ยอมกันจอดับให้ ต้องใช้ https":
+      "The video is muted — Android usually ignores a muted clip, so this needs https",
+    "วิดีโอถูกปฏิเสธ":
+      "Video refused",
+    "แตะหน้าจอหนึ่งครั้งแล้วเปิดดูใหม่":
+      "tap the screen once, then reopen this",
+    "ยังไม่เริ่ม — แตะหน้าจอหนึ่งครั้ง":
+      "Not started — tap the screen once",
+    "แต่งงานแล้ว": "Married", "พร้อมแต่งงาน": "Ready to marry",
+    "โบนัสเต็ม · ขอแต่งงานได้": "Full bonus · you may propose",
+    "คู่ชีวิตของคุณ": "Your spouse",
+    "สนิทที่สุดแล้ว — ขอแต่งงานได้": "As close as it gets — you may propose",
+    "⚙️ ตั้งค่า": "⚙️ Settings",
+    "ภาษา / Language": "Language / ภาษา",
+    "🇹🇭 ไทย": "🇹🇭 Thai",
+    "ยังแปลไม่ครบทุกคำ — คำที่ยังไม่ได้แปลจะแสดงเป็นภาษาไทยไว้ก่อน / Not everything is translated yet; untranslated text stays in Thai.":
+      "Not everything is translated yet — anything untranslated stays in Thai rather than breaking.",
+    "การแจ้งเตือน": "Notifications",
+    "เลือกว่าจะให้อะไรเด้งขึ้นมาบ้าง — คำเตือน ความพ่ายแพ้ และข้อความที่ตอบสิ่งที่คุณเพิ่งกด จะแสดงเสมอ ปิดไม่ได้":
+      "Choose what pops up. Warnings, defeats, and replies to something you just pressed always show and cannot be switched off.",
+    "🔔 เสียงประกอบ": "🔔 Sound effects",
+    "🎵 เพลงประกอบ": "🎵 Music",
+    "ทำนองช้า ๆ วนไปเรื่อย ๆ — ปิดไว้เป็นค่าเริ่มต้น": "A slow looping theme — off by default",
+    "📱 กันจอดับตอนดูเกม": "📱 Keep the screen awake",
+    "ค่าเลี้ยงดู": "Upkeep", "วัน": "day",
     "กระเป๋าเก็บของ": "Inventory",
     "เวลาในเกมหยุดอยู่ — งาน แปลงปลูก ปฏิทิน และการต่อสู้หยุดหมด":
       "Game time is stopped — jobs, crops, the calendar and combat are all paused",
@@ -599,7 +709,6 @@ const I18N = (() => {
     "ได้": "got", "เซฟล่าสุด": "Last saved",
     "รับปันผล": "Dividends", "จาก": "from", "การลงทุน": "investments",
     "ปันผล": "Dividends", "กิจการ": "companies",
-    "ป่าชายเมือง": "Town Edge Wood", "ป่าชั้นใน": "Inner Forest",
 
     /* ---- panel labels ----
      * Wrapped by a rule rather than by hand: Thai text sitting cleanly between two HTML tags is a
