@@ -2056,6 +2056,9 @@ function offlineCashflow(seconds) {
        * do — not the rent a building collects while you are asleep. */
       P.gold += shops;
       if (shops > 0) bump("goldEarned", shops);
+      /* 🐛 [owner 2026-08-22] The offline catch-up credited this and left no trace, so a night's
+         trading was invisible in the one place that records where money came from. */
+      ledger("🏪", `ร้านค้าระหว่างออฟไลน์ ${Math.round(days)} วัน`, shops);
     }
   }
 
@@ -2092,6 +2095,7 @@ function offlineCashflow(seconds) {
       P.gold += div;
       bookInvestmentProfit(div);      // taxable exactly as it is online
       bump("divPaid", div);
+      ledger("📈", `ปันผลระหว่างออฟไลน์ ${Math.round(days)} วัน`, Math.round(div));
     }
   }
 
@@ -3365,8 +3369,15 @@ function runShopsDay(date) {
   if (!P.shops?.length) return;
   let total = 0;
   for (const sh of P.shops) { runShopDay(sh, date); total += sh.lastNet || 0; }
+  /* 🐛 [owner 2026-08-22: "ธุรกิจของเราที่สร้าง ก็ต้องเห็นรายได้ในบัญชีด้วย"] One line for the day's
+   * trading, not one per shop — a chain of six would otherwise fill the whole panel every day and
+   * bury everything else, which is the complaint that moved family upkeep to a monthly line. A loss
+   * is recorded the same way a profit is: a business that costs you money is exactly what the
+   * ledger should be able to tell you. */
   if (Math.abs(total) >= 1) {
-    toast(`${total >= 0 ? "🏪 กำไรร้านค้า" : "🏪 ขาดทุนร้านค้า"} ${Math.abs(Math.round(total)).toLocaleString()} 💰`,
+    const n = Math.round(total);
+    ledger("🏪", `${n >= 0 ? "กำไร" : "ขาดทุน"}ร้านค้า ${P.shops.length} ร้าน`, n);
+    toast(`${total >= 0 ? "🏪 กำไรร้านค้า" : "🏪 ขาดทุนร้านค้า"} ${Math.abs(n).toLocaleString()} 💰`,
           total >= 0 ? "" : "warn", "money");
   }
   if (view.kind === "shops") renderView();
@@ -6295,7 +6306,14 @@ function runEstatesDay() {
   bump("rentEarned", total);
   /* Rent is not income-taxed either, for the same reason: the estate tax already charges the
    * property, and the rent it pays lands in the pocket where the wealth tax finds it. */
-  if (Math.round(total) >= 1) toast(`🏘️ ค่าเช่า ${Math.round(total).toLocaleString()} 💰`, "", "money");
+  /* 🐛 [owner 2026-08-22: "เช็คให้หน่อยว่าค่าเช่าทำไมไม่เห็นในบัญชี"] It toasted and vanished. The
+   * ledger is the only record of where a year's profit came from, and rent was leaving no trace in
+   * it at all — so the page that answers "where did my money come from" could not answer it for the
+   * income the player deliberately bought a building to get. */
+  if (Math.round(total) >= 1) {
+    ledger("🏘️", `ค่าเช่า ${P.estates.length} แห่ง`, Math.round(total));
+    toast(`🏘️ ค่าเช่า ${Math.round(total).toLocaleString()} 💰`, "", "money");
+  }
   if (view.kind === "shops") renderView();
 }
 
@@ -6434,7 +6452,13 @@ function renderEstateFurnish(grid, owned) {
         ค่าเช่าตอนนี้ ${Math.round(estateRentPerDay(es)).toLocaleString()} 💰/วัน
         ${estateRentBonus(es) > 0 ? ` <b class="good">+${Math.round(estateRentBonus(es) * 100)}% จากเฟอร์นิเจอร์</b>` : ""}
       </div>
-      <div class="furn-row">${FURNITURE.map((f) => {
+      <!-- 🎯 [owner 2026-08-22] "ในส่วนตบแต่ง ให้เรียง % สูงขึ้นก่อน" — the list ran in table
+           order, which put a +8% between two +10%s. Every slot is a choice among the same six
+           pieces at prices that scale with the rent they add, so the percentage is the only
+           thing being compared and should not have to be hunted for. Sorted on a COPY:
+           FURNITURE is read elsewhere by position (slice(0, slots) for the fully-furnished
+           figure), and reordering the table itself would quietly change what that means. -->
+      <div class="furn-row">${FURNITURE.slice().sort((a, b) => b.rent - a.rent).map((f) => {
         const has = es.furniture.includes(f.id);
         const room = es.furniture.length < kind.slots;
         const price = furniturePrice(kind, f);
@@ -7287,7 +7311,9 @@ function wireCompanyDetail(card, c) {
  * tax ladder underneath is what makes the length matter — a full sixty pushed it off the page, and
  * the whole point of stacking was that it should be visible without hunting. The store stays at
  * sixty because it costs nothing and it is the only record of where a year's profit came from. */
-const LEDGER_SHOWN = 10;
+/* 🎯 [owner 2026-08-22] "ให้แสดงเพิ่มเป็น 15 ข้อมูลล่าสุด จาก 10" — asked for in the same breath as
+   putting rent and shop takings into the ledger, which is what makes the extra room necessary. */
+const LEDGER_SHOWN = 15;
 
 function renderLedgerTab(grid) {
   const d = today();
