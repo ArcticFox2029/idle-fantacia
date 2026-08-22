@@ -674,6 +674,7 @@ function migrate(p) {
   }
 
   repairOverpopulatedFamily(p);
+  repairStrandedQuests(p);
 
   if (p.v === 51) {
     p.v = 52;
@@ -681,6 +682,26 @@ function migrate(p) {
      * published site has, and this batch changed game.js without changing the save format — leaving
      * it at 51 would serve every existing player the old code from cache. estateMonth defaults
      * through `|| 0`, and the title rewrite reads the same fields it always did. */
+  }
+  if (p.v === 52) {
+    p.v = 53;
+    /* Grown children hunt now, which needs lv/xp/nextHunt/log on each child — all of them default
+     * through `|| 0` and `== null`, so nothing has to be written here. A child already of age simply
+     * schedules their first outing on the next day tick.
+     *
+     * The version still moves: ?v= in index.html is the only cache-buster the published site has,
+     * and this batch changed game.js heavily. */
+  }
+  if (p.v === 52) {
+    p.v = 53;
+    /* Nothing to move — the version stepped for the cache-buster while this batch was in flight. */
+  }
+  if (p.v === 53) {
+    p.v = 54;
+    /* Grown children hunt now — lv/xp/nextHunt/log all default through `|| 0` and `== null`, so a
+     * child already of age simply schedules their first outing on the next day tick. Nothing to
+     * move. The version still steps because ?v= in index.html is the published site's only
+     * cache-buster, and this batch rewrote a great deal of game.js. */
   }
   return p.v === GAME_VERSION ? p : null;
 }
@@ -1171,8 +1192,8 @@ function relCredit(villagerId, amount = REL_QUEST_BONUS) {
   r.aff = Math.max(r.floor, Math.min(REL_MAX, r.aff + amount));
 }
 
-/* 🎯 [owner 2026-08-22] "ให้แต่งงานได้หลายคน ภรรยา มีลูกได้ปีละคน" — the household can hold more
- * than one marriage, and the one-per-year clock belongs to each wife rather than to the player.
+/* 🎯 [owner 2026-08-22] "ให้แต่งงานได้หลายคน" — the household can hold more than one marriage. The
+ * per-wife yearly clock this note used to describe was removed on 2026-08-23; the cap is per life.
  *
  * P.spouse stays as the FIRST marriage and is what every older save carries, so nothing that reads
  * it breaks; P.spouses is the full list and is derived from P.spouse when a save predates it.
@@ -1280,6 +1301,18 @@ const CHILD_NAMES = ["อาริน", "นารา", "เคนจิ", "ล�
  * It keeps what the one-per-year rule WOULD have allowed: the eldest, then each child born a full
  * game-year after the last one kept. A save that spaced its children properly loses nothing, which
  * is what makes this a repair and not a wipe. Runs once per save, and never again. */
+/* 🐛 [owner 2026-08-22] The same calendar-reset bug, for saves that already rebirthed before it was
+ * fixed. A quest dated past the length of a year cannot be explained any other way — the board only
+ * ever issues them QUEST_DAYS ahead — so anything further out than that is stranded from a previous
+ * life and is expired here rather than left to sit forever. Flagged, so it runs once. */
+function repairStrandedQuests(p) {
+  p.questsRepaired = p.questsRepaired || false;
+  if (p.questsRepaired) return;
+  p.questsRepaired = true;
+  const today = Math.floor(p.gameDays || 0);
+  p.quests = (p.quests || []).filter((q) => (q.until || 0) <= today + QUEST_DAYS);
+}
+
 function repairOverpopulatedFamily(p) {
   p.family = p.family || { arrears: 0, noteDay: null, lastBirthDay: null, lastBirthByWife: {},
                            bornThisLife: 0, monthPaid: 0 };
@@ -1306,6 +1339,139 @@ function repairOverpopulatedFamily(p) {
 }
 
 function childrenOf() { P.kids = P.kids || []; return P.kids; }
+
+/* ---------- 🗡️ ลูกที่โตแล้วออกล่าเอง ----------
+ * 🎯 [owner 2026-08-23] "ต้องวางระบบออกผจญภัยเอง ค่อยๆ สู้สะสมเลเวล ... แต่เราไม่ได้คุมเอง มันจะทำงาน
+ * ตามระบบหลังบ้าน ... ไม่ต้องมีแถบ hp ให้เห็นเพราะเราไม่สนใจ"
+ *
+ * Everything below borrows the institute's combat maths rather than restating it — guildTargetPower,
+ * guildOutcome, guildLootFor. Two systems that both send people out to fight would drift apart the
+ * first time either was tuned, and this one has no screen to notice the drift on. */
+
+/* A child's level from stored XP. Same shape as petLevel, same curve. */
+function childLevel(k) {
+  let l = 1;
+  while (l < CHILD_MAX_LEVEL && (k.xp || 0) >= petXpToReach(l + 1)) l++;
+  return l;
+}
+
+/* Combat stats as they stand today: what they were born with, grown by level. Birth stats are half
+ * the parent's, so a child born to a strong father starts high and climbs from there. */
+function childStat(k, id) {
+  const base = (k.stats || {})[id] || 1;
+  return Math.max(1, Math.round(base * (1 + (childLevel(k) - 1) * CHILD_GROWTH)));
+}
+
+/* What this child can bring to a fight. The hunting track they were taught counts here as well as
+   on their parent — the owner's rule, and the reason schooling one is worth the daily upkeep. */
+function childPower(k) {
+  const atk = childStat(k, "atk"), def = childStat(k, "defs"), vit = childStat(k, "vit");
+  const taught = childTrackLevel(k, "hunt") * CHILD_HUNT_TRACK_POWER;
+  return (atk / 6 + def / 10 + vit / 12) * (1 + taught);
+}
+
+/* Where a child is allowed to hunt: stages the PLAYER has opened, bosses excluded. A child should
+ * never be the one who clears a boss, and never somewhere the player has not been.
+ *
+ * 🐛 [owner 2026-08-23: "พบบัคลูกไปล่าด่านที่ยังไม่ปลดล็อค"] This checked stageUnlocked alone, and
+ * that is only half the gate — it returns true for the FIRST stage of every location, because
+ * within a location there is no earlier stage to clear. The location itself is gated separately, by
+ * combat level. So a day-one child could hunt in ห้วงกำเนิด.
+ *
+ * Both halves now, and taken from startCombat rather than restated: that is the function the player
+ * goes through, and a child must not be able to reach anywhere the player cannot. */
+function childHuntGrounds() {
+  const lvl = combatLevel();
+  return LOCATIONS.filter((loc) => lvl >= loc.levelReq).flatMap((loc) => loc.stages
+    .map((st, i) => ({ loc, st, i }))
+    /* 🎯 [owner 2026-08-23] "ลูกล่าได้เฉพาะมอนที่คุณเคยล่าเองอย่างน้อยหนึ่งตัว" — the strictest of the
+       three gates and the one that matches how it reads: unlocking a zone by level is not the same
+       as having been there. A child hunts where their parent has actually fought. */
+    .filter((x) => !x.st.boss && stageUnlocked(x.loc, x.i) && stageKills(x.loc.id, x.i) > 0));
+}
+
+/* The hardest ground they can still clear comfortably — not the hardest one open. This is what makes
+   a level-up visible: they move up the map on their own instead of dying at the top of it. */
+function childHuntPick(k) {
+  const power = childPower(k);
+  const open = childHuntGrounds();
+  if (!open.length) return null;
+  let best = null;
+  for (const g of open) {
+    const out = guildOutcome(power, guildTargetPower(g.st), 0);
+    if (out.success < CHILD_HUNT_MIN_SUCCESS) continue;
+    if (!best || guildTargetPower(g.st) > guildTargetPower(best.st)) best = g;
+  }
+  /* Nothing is comfortable yet — a brand-new adult takes the easiest ground open and its odds. */
+  return best || open.reduce((a, b) => (guildTargetPower(a.st) <= guildTargetPower(b.st) ? a : b));
+}
+
+function childNextHuntGap() {
+  return CHILD_HUNT_MIN_DAYS
+    + Math.floor(Math.random() * (CHILD_HUNT_MAX_DAYS - CHILD_HUNT_MIN_DAYS + 1));
+}
+
+/* One game-day for every grown child. Called from onNewDay.
+ *
+ * 🎯 [owner 2026-08-23] "รวมเป็นก้อน แล้วรายงานว่าลูกๆ ออกล่าได้เงิน ของ ไม่ต้องแยกตามชิ้น บอกทั้งหมด
+ * กี่ชิ้นพอ" — with children outliving rebirths, forty of them hunting every 3–7 days is about eight
+ * events a day. One line for the whole household, or the toast rail becomes the game. */
+function childrenHuntDay() {
+  if (P.dead) return;
+  const kids = childrenOf().filter(childIsAdult);
+  if (!kids.length) return;
+  const today = questDay();
+  let gold = 0, items = 0, wins = 0, hurt = 0, levelled = [];
+
+  for (const k of kids) {
+    if (k.nextHunt == null) { k.nextHunt = today + childNextHuntGap(); continue; }
+    if (today < k.nextHunt) continue;
+
+    const ground = childHuntPick(k);
+    if (!ground) { k.nextHunt = today + childNextHuntGap(); continue; }
+
+    const power = childPower(k);
+    const tp = guildTargetPower(ground.st);
+    const out = guildOutcome(power, tp, 0);
+    const won = Math.random() < out.success;
+    /* Injury is the only failure — the owner asked for "ไม่ได้ บาดเจ็บกลับมา", not for a child who
+       can die. A household that can be wiped out by background rolls is not something to leave
+       running while you do something else. */
+    k.nextHunt = today + childNextHuntGap() + (won ? 0 : CHILD_HURT_REST_DAYS);
+    k.log = [(won ? "✅" : "🩹") + ` ${ground.st.name}`].concat(k.log || []).slice(0, 3);
+    if (!won) { hurt++; continue; }
+
+    wins++;
+    const bounty = guildBounty(ground.st);
+    const g = Math.max(1, Math.round(bounty * CHILD_HUNT_GOLD_SHARE));
+    /* no-goldBonus: the luck charm and rebirth karma reward what YOU hunt and steal. A child's haul
+       is theirs, and scaling it by the parent's perks would make schooling one a way of multiplying
+       those perks instead of a thing the child does. */
+    P.gold += g; gold += g;
+    bump("goldEarned", g);
+
+    const loot = guildLootFor(ground.st, bounty * CHILD_HUNT_LOOT_SHARE);
+    for (const [id, n] of Object.entries(loot)) {
+      P.inv[id] = (P.inv[id] || 0) + n;
+      items += n;
+    }
+
+    const before = childLevel(k);
+    k.xp = (k.xp || 0) + Math.max(1, Math.round(tp * 40));
+    if (childLevel(k) > before) levelled.push(`${k.name} ขั้น ${childLevel(k)}`);
+  }
+
+  if (wins || hurt) {
+    const parts = [];
+    if (wins) parts.push(`ล่าสำเร็จ ${wins} ครั้ง`);
+    if (gold) parts.push(`ได้ ${gold.toLocaleString()} 💰`);
+    if (items) parts.push(`ของ ${items} ชิ้น`);
+    if (hurt) parts.push(`บาดเจ็บ ${hurt} คน`);
+    toast(`🗡️ ลูกๆ ออกล่า — ${parts.join(" · ")}`, hurt && !wins ? "warn" : "", "family");
+    if (gold || items) ledger("🗡️", `ลูกๆ ออกล่า ${wins} ครั้ง`, gold);
+  }
+  if (levelled.length) toast(`🎉 ${levelled.join(" · ")}`, "levelup", "family");
+}
 
 function childIsAdult(k) { return (k.age || 0) >= CHILD_ADULT_DAY; }
 
@@ -1354,6 +1520,22 @@ function familyUpkeep() {
  * suspension, not a loss; clearing the arrears restores every bonus untouched. */
 function familyInArrears() { return (P.family?.arrears || 0) > 0; }
 
+/* Whether this wife is currently on birth control, and the toggle for it. Stored per villager id so
+   the answer survives everything the owner listed: a reload, a tab switch, and a rebirth. */
+function wifeOnControl(id) { return !!P.family?.noKids?.[id]; }
+function toggleWifeControl(id) {
+  P.family = P.family || {};
+  P.family.noKids = P.family.noKids || {};
+  if (P.family.noKids[id]) delete P.family.noKids[id];
+  else P.family.noKids[id] = true;
+  const v = VILLAGERS.find((x) => x.id === id);
+  toast(P.family.noKids[id]
+    ? `🚫 คุมกำเนิดกับ${v ? v.name : "คู่ชีวิต"}แล้ว — จะไม่มีลูกเพิ่มจนกว่าจะปิด`
+    : `👶 เลิกคุมกำเนิดกับ${v ? v.name : "คู่ชีวิต"} — มีลูกได้ตามปกติ`, "", "family");
+  save("คุมกำเนิด");
+  return !!P.family.noKids[id];
+}
+
 /* Charged once per game-day. Anything the wallet and bank cannot cover is left as a real negative
  * balance rather than quietly forgiven, which is what hands the run to taxDebtCheck's 90-day clock —
  * the owner asked for "สามเดือน เกม over" and that clock already exists, counting consecutive days at
@@ -1399,18 +1581,25 @@ function childBirthRoll() {
   P.family = P.family || {};
   if ((P.family.bornThisLife ?? kids.length) >= CHILD_MAX) return;
 
-  /* 🎯 [owner 2026-08-22] "ควรมีลูกได้ปีละคน" and "ให้แต่งงานได้หลายคน ภรรยา มีลูกได้ปีละคน" — the
-   * year is each wife's own, not the household's. 360 days against the 120 a child needs to grow up
-   * means every child is born, grows and is seen doing it before that mother's next, instead of
-   * four arriving as a row of identical babies. Rolled per wife rather than once for the household:
-   * a second marriage should be its own chance, not a share of one.
+  /* 🎯 [owner 2026-08-23] Two limits, and they are not the same limit — I removed this one earlier
+   * on the reading that the per-life cap made it redundant, and he corrected it:
    *
-   * lastBirthByWife is keyed by villager id; lastBirthDay stays the most recent birth of any wife,
-   * because that is the number a save written before this change carries and the one the family
-   * screen counts down from. */
+   *   per wife   one child a year, counted from HER last birth
+   *   per life   four children total, however many wives there are
+   *
+   * The cap is on the household, not on each woman, so without the yearly clock one wife could fill
+   * all four slots in a fortnight. With it, four children across a life means either four wives or
+   * several years — which is the pace the growing-up was written for. */
   P.family.lastBirthByWife = P.family.lastBirthByWife || {};
   const today = questDay();
   for (const id of wives) {
+    /* 🎯 [owner 2026-08-22: "ในภรรยาที่แต่งงาน จะมีปุ่มควบคุมการมีบุตร ให้เลือกคุมได้ ค่านี้จะโดนจำไป
+     * ด้วย ต้องจุติ หรือสลับ tab ว่าเราเลือกคุมอยู่หรือไม่คุม"] Per wife, and remembered — it is
+     * stored on the profile rather than in a module variable so it survives a reload, a tab switch
+     * and a rebirth. Which matters more than it sounds: children outlive a rebirth now, so upkeep
+     * only ever grows, and a setting that quietly reset would hand a player four more mouths every
+     * time they were reborn. */
+    if (P.family.noKids?.[id]) continue;
     const last = P.family.lastBirthByWife[id] ?? (wives.length === 1 ? P.family.lastBirthDay : null);
     if (last != null && today - last < DAYS_PER_YEAR) continue;
     if (Math.random() >= CHILD_BIRTH_CHANCE) continue;
@@ -1514,8 +1703,15 @@ function disownChild(id) {
   return true;
 }
 
+/* 🎯 [owner 2026-08-22] "ให้ลูกอยู่ข้ามชาติเหมือนภรรยา" — children used to be lost here, which was
+ * his own earlier design and stopped fitting once marriages started surviving: a child whose mother
+ * you are still married to should not vanish while she stays.
+ *
+ * The consequence is deliberate and is the thing to keep in view when tuning anything: the household
+ * has no ceiling any more. Four births per life, none of them cleared, so upkeep grows by roughly
+ * 4 × (child + their schooling) every rebirth and never comes down. The cap the hint on the family
+ * screen talks about is a cap on BIRTHS THIS LIFE, not on how many people you are feeding. */
 function childrenRebirth() {
-  P.kids = [];
   /* 🐛 [owner 2026-08-22: "เจอบัค จุติลูกหาย"] Losing the children is the design. Keeping their BILL
    * was not. Arrears used to survive the rebirth, and since upkeep is 0 with no household there is
    * nothing left to pay them down with — so the debt of a family that no longer exists suspended the
@@ -1525,9 +1721,28 @@ function childrenRebirth() {
    * Everything about the family resets together, because every field here describes a household that
    * has just ceased to exist. kidsRepaired is the one exception: it records that a one-time repair
    * already ran on this save, which is true regardless of how many lives it outlives. */
+  /* Two fields outlive the life they were set in, for opposite reasons: kidsRepaired records that a
+     one-time repair already ran on this save, and noKids is a standing instruction the owner gave
+     per wife. Rebuilding the object wholesale is what lost the second one — and losing it is the
+     expensive direction now that children accumulate across rebirths. */
+  /* 🎯 [owner 2026-08-23] "การจุติ ให้เหมือนพ่อ ค่า lv โดนลดตาม โจมตี ป้องกัน hp ลดตาม" — halve the
+   * LEVEL and the stats follow, because they are derived from it. Same floor rule the father has:
+   * a second rebirth in quick succession must never compute something lower than the last one left
+   * behind. XP is halved rather than zeroed, so an odd level keeps its remainder instead of
+   * throwing away most of a level's progress. */
+  for (const k of P.kids || []) {
+    const wasLv = childLevel(k);
+    k.xp = Math.floor((k.xp || 0) / 2);
+    k.lvFloor = Math.max(k.lvFloor || 1, Math.floor(wasLv / 2));
+    const floorXp = petXpToReach(Math.max(1, k.lvFloor));
+    if ((k.xp || 0) < floorXp) k.xp = floorXp;
+    k.nextHunt = null;          // a new life, a new schedule
+  }
+
   const repaired = P.family?.kidsRepaired;
+  const noKids = P.family?.noKids || {};
   P.family = { arrears: 0, noteDay: null, lastBirthDay: null, lastBirthByWife: {},
-               bornThisLife: 0, monthPaid: 0, kidsRepaired: repaired };
+               bornThisLife: 0, monthPaid: 0, kidsRepaired: repaired, noKids };
 }
 
 /* ---------- 📜 เควส ----------
@@ -2479,7 +2694,7 @@ let ART_STAMP = "";
 
 function artImg(kind, id, alt, cls) {
   const key = `${kind}/${id}`;
-  if (ART_MISSING.has(key)) return null;
+  if (ART_MISSING.has(key) || artKindDead(kind)) return null;
   const v = ART_STAMP ? `?v=${ART_STAMP}` : "";
   /* 🐛 [owner 2026-08-22: "บางจังหวะ มันโหลดรูปไอเทมช้า แต่ซักพักรูปก็มา"] The emoji underneath used to
    * be hidden the moment this <img> existed, which is a different moment from the picture arriving —
@@ -2504,6 +2719,23 @@ function artImg(kind, id, alt, cls) {
 const ART_TRIES = new Map();
 const ART_RETRY_LIMIT = 2;
 
+/* 🐛 [owner 2026-08-23: "ในกระเป๋า ... ยังติดรีโหลด 2-3 วิในบางครั้ง"] Items have no art folder — they
+ * were always meant to be emoji — so opening a full bag fired 62 requests that could only 404, and
+ * the retry logic above then fired each of them twice more with backoff. Measured: the render itself
+ * takes 5ms and the art took 6.5 SECONDS to settle, during which every icon sat blank.
+ *
+ * Retrying is for a network that dropped a request. A whole KIND that has never once loaded is not a
+ * dropped request, it is a folder that does not exist — so after a few failures with no successes,
+ * that kind stops being asked for at all and its icons render as emoji immediately. Per page load,
+ * and cleared by the `online` handler with everything else, so adding art/item/ later just works. */
+const ART_KIND_OK = new Set();
+const ART_KIND_FAIL = new Map();
+const ART_KIND_GIVE_UP = 3;
+const artKindOf = (key) => String(key).split("/")[0];
+function artKindDead(kind) {
+  return !ART_KIND_OK.has(kind) && (ART_KIND_FAIL.get(kind) || 0) >= ART_KIND_GIVE_UP;
+}
+
 /* The picture is really on screen now: reveal it, retire the emoji, and forget the retry counter.
  *
  * 🐛 [audit-qa 2026-08-22, unconfirmed but correct anyway] ART_TRIES was only ever cleared by the
@@ -2512,7 +2744,9 @@ const ART_RETRY_LIMIT = 2;
  * is present the whole time. A success is the strongest possible evidence the earlier failures were
  * transient, so it clears the count here rather than waiting for an event that may never come. */
 window.markArtReady = (el) => {
-  ART_TRIES.delete(el.getAttribute("src").replace(/^art\//, "").replace(/\.jpg.*$/, ""));
+  const key = el.getAttribute("src").replace(/^art\//, "").replace(/\.jpg.*$/, "");
+  ART_TRIES.delete(key);
+  ART_KIND_OK.add(artKindOf(key));   // this kind exists; keep retrying its transient failures
   const holder = el.parentElement;
   if (holder) holder.classList.add("art-on");
 };
@@ -2520,7 +2754,10 @@ window.markArtReady = (el) => {
 window.markArtMissing = (key, el) => {
   const n = (ART_TRIES.get(key) || 0) + 1;
   ART_TRIES.set(key, n);
-  if (n <= ART_RETRY_LIMIT && el.isConnected) {
+  const kind = artKindOf(key);
+  ART_KIND_FAIL.set(kind, (ART_KIND_FAIL.get(kind) || 0) + 1);
+  /* No retries for a kind that has never produced a single picture — see the note above. */
+  if (n <= ART_RETRY_LIMIT && !artKindDead(kind) && el.isConnected) {
     /* ART_STAMP is empty when the game is opened without the server, so the src may carry no query
      * at all — the separator has to be chosen, not assumed. */
     const base = el.getAttribute("src").replace(/[?&]retry=\d+/, "");
@@ -2543,6 +2780,7 @@ window.addEventListener("online", () => {
   if (!ART_MISSING.size && !ART_TRIES.size) return;
   ART_MISSING.clear();
   ART_TRIES.clear();
+  ART_KIND_FAIL.clear();
   try { renderView(); refreshSidebar(); } catch (e) { /* pre-boot; the next render picks it up */ }
 });
 
@@ -2824,8 +3062,17 @@ function today() { return gameDate(P.gameDays); }
 function dateLabel(d = today()) { return `ปีที่ ${d.year} · ${d.monthName} วันที่ ${d.day}`; }
 
 /* The views a daily system can change under the player's feet. Kept beside calendarTick rather than
- * spread across the systems, so adding one is a single edit in an obvious place. */
-const DAILY_VIEWS = new Set(["family", "shops", "bank"]);
+ * spread across the systems, so adding one is a single edit in an obvious place.
+ *
+ * 🐛 [owner 2026-08-23: "ในหน้าครอบครัว มันกระพริบทุกครั้งที่มี notis ... ให้มันเหมือนโปรเซสอื่นที่ทำงาน
+ * แบบไม่เห็น ... เหมือนระบบขั้นความชำนาญ"] The family page is deliberately NOT here. My first fix cut
+ * the repaints from twenty per catch-up to one, and one is still one too many: a day boundary fires
+ * a toast and a rebuild together, so every notification came with a visible flash. Mastery is the
+ * model — it accrues all day and the screen simply shows the current number the next time you look.
+ *
+ * Shops and bank stay, because both are pages you sit and watch a number move on. Nothing on the
+ * family screen moves while you watch it. */
+const DAILY_VIEWS = new Set(["shops", "bank"]);
 
 function calendarTick(dtSeconds) {
   const before = today();
@@ -2857,6 +3104,7 @@ function onNewDay(date) {
   refreshQuests(questDay());
   childrenAgeDay();
   childBirthRoll();
+  childrenHuntDay();
   /* After the birth roll so a child born today is fed from today, and before taxDebtCheck so that a
    * day whose upkeep pushed the balance negative starts the 90-day clock on that same day rather
    * than a day late. */
@@ -2866,6 +3114,8 @@ function onNewDay(date) {
    * called from a monthly wrapper that only ran on day 1 of each month — so a seized business accrued
    * its "daily" late fee at 1/30th the advertised speed, and the toast the owner asked for ("daily
    * late-fee deductions with notifications") fired once a month instead of daily. */
+  /* Before taxEnforce and taxDebtCheck, so a day's charge is on the books when they read them. */
+  taxAccrueDay();
   taxEnforce(date);
   taxDebtCheck();
   if (date.day === 1 && date.month === 1) onNewYear(date);
@@ -2955,9 +3205,13 @@ function guildMember(id) { return (P.guild?.roster || []).find((m) => m.id === i
 function guildIsHurt(m) { return (m.hurtUntil || 0) > P.gameDays; }
 /* The zones an institute may write contracts for. This is the wall a squad grows into, and the
  * reason upgrading the school is the loop rather than a nicety. */
+/* 🎯 [owner 2026-08-23] "สมาคมฮันเตอร์ก็ใช้กฎเดียวกับลูกนะ ต้องให้เราผ่านการล่าก่อน ถึงจะไปล่าได้" —
+ * the institute's contract list was gated only by its own tier, so a young school could be sent to
+ * a zone the owner had never walked into. Same rule as the children now: somewhere he has fought. */
 function guildTargets() {
   return LOCATIONS.slice(0, guildTier().zones).flatMap((loc, li) =>
-    loc.stages.map((st, si) => ({ loc, st, key: `${loc.id}:${si}`, li, si })).filter((x) => !x.st.boss));
+    loc.stages.map((st, si) => ({ loc, st, key: `${loc.id}:${si}`, li, si }))
+      .filter((x) => !x.st.boss && stageKills(loc.id, x.si) > 0));
 }
 function guildTargetByKey(key) { return guildTargets().find((t) => t.key === key) || null; }
 
@@ -3572,6 +3826,21 @@ function doRebirth() {
   if (P.bank) P.bank.sinceDay = 0;
   /* Elapsed grace is preserved deliberately: rebirth must not be a way to buy three fresh months. */
   if (P.tax?.debtSinceDay != null) P.tax.debtSinceDay -= clockShift;
+
+    /* 🐛 [owner 2026-08-22: "ภารกิจ 3 ตัวล่าง cool down นาน ไม่ยอมเปลี่ยนภารกิจให้"] Quests expire by
+     * absolute day — `until = day + QUEST_DAYS` — and the calendar restarting at 0 left every board
+     * entry from the previous life dated past day 360. refreshQuests only drops a quest once
+     * `until <= today`, so those sat there permanently advertising "เหลือ 353 วัน", and their
+     * villagers could never be given a new job. Only the ones that happened to expire before the
+     * rebirth were replaced, which is why it looked like three specific people were stuck.
+     *
+     * Shifted rather than cleared, so a job already half-collected is not confiscated by a decision
+     * about a different system — and anything that would land in the past expires today and is
+     * reissued by the next refresh. */
+    for (const q of P.quests || []) {
+      q.until = Math.max(0, (q.until || 0) - clockShift);
+      if (q.day != null) q.day = Math.max(0, q.day - clockShift);
+    }
   /* 🐛 [fixed 2026-08-17, owner: "ยอดกำไรสุทธิ ผิด"] The calendar restarts here but the tax
    * accumulator did not, so "กำไรลงทุนปีที่ 1" showed a figure earned in a life that no longer
    * exists — and the next year-end would bill it against the savings, which is the one thing
@@ -3939,9 +4208,42 @@ function taxYearElapsed() {
   const d = today();
   return Math.min(1, ((d.month - 1) * DAYS_PER_MONTH + (d.day - 1)) / DAYS_PER_YEAR);
 }
+
+/* 🐛 [owner 2026-08-22: "ภาษีมันควรคิดสดต่อวัน ไม่ใช่ต่อปี"] — and he was right that it was not.
+ *
+ * This used to be `full(TODAY's holdings) × fraction-of-year-elapsed`, which reads as daily accrual
+ * and is not: it recomputes the whole year from whatever you happen to hold at the moment of asking.
+ * Measured before changing it — hold 500,000,000 for the entire year, move it out on day 359, and
+ * the running figure AND the year-end bill both fall to zero. A full year of wealth tax, dodged by
+ * one transfer. The estate tax had the same hole: sell the house on the last day, buy it back on
+ * the first.
+ *
+ * So the charge is now genuinely per day and genuinely kept: each game-day adds that day's share of
+ * that day's holdings to a stored total, and lowering the balance afterwards does not refund it —
+ * the owner's call, and the only version where "คิดสดต่อวัน" means anything. Money moved out early
+ * still helps, because every day after the move is charged on the smaller pile.
+ *
+ * Business income stays outside this: yearProfit is already a year-to-date total that only grows, so
+ * charging a slice of it daily would tax the same profit repeatedly. */
+function taxAccrueDay() {
+  if (P.dead) return;
+  P.tax = P.tax || {};
+  P.tax.accrued = P.tax.accrued || {};
+  for (const k of TAX_KINDS) {
+    if (k.id === "business") continue;         // already cumulative — see above
+    const full = taxOwedFor(k.id, taxBaseFor(k.id));
+    if (full <= 0) continue;
+    P.tax.accrued[k.id] = (P.tax.accrued[k.id] || 0) + full / DAYS_PER_YEAR;
+  }
+}
+
 function taxRunningFor(kindId) {
-  const full = taxOwedFor(kindId, taxBaseFor(kindId));
-  return kindId === "business" ? full : Math.round(full * taxYearElapsed());
+  if (kindId === "business") return taxOwedFor(kindId, taxBaseFor(kindId));
+  /* Fall back to the old proration for a save that has not accrued a day yet, so the figure does not
+     read as zero on the tick before the first charge lands. */
+  const acc = P.tax?.accrued?.[kindId];
+  if (acc == null) return Math.round(taxOwedFor(kindId, taxBaseFor(kindId)) * taxYearElapsed());
+  return Math.round(acc);
 }
 function taxPrepaid(kindId) { return Math.floor(P.tax?.prepaid?.[kindId] || 0); }
 /* What this kind owes right now, before the year has even ended. */
@@ -4036,7 +4338,14 @@ function settleTaxYear(date) {
      * countdown apply. Anything paid ahead during the year is already gone from this figure, so
      * settling as you go simply leaves nothing behind. */
     const base = taxBaseFor(k.id);
-    const full = k.id === "business" ? taxOwedFor(k.id, base) : taxOwedFor(k.id, base);
+    /* What the YEAR actually accrued, not what today's holdings would imply — the whole point of
+       charging per day is that the bill remembers the year you had, not the balance you end on.
+       Not taxRunningFor: its fallback prorates by elapsed-fraction-of-year, and this runs on the
+       first day of the new year when that fraction is exactly 0 — a save upgrading from before the
+       daily accrual would be assessed nothing at all. A finished year is a whole year. */
+    const acc = P.tax?.accrued?.[k.id];
+    const full = k.id === "business" || acc == null
+      ? taxOwedFor(k.id, base) : Math.round(acc);
     const amount = Math.max(0, full - taxPrepaid(k.id));
     if (amount <= 0) continue;
     P.tax.bills.push({ id: `${k.id}-${year}`, kind: k.id, year, base, amount, paid: 0,
@@ -4044,6 +4353,7 @@ function settleTaxYear(date) {
     raised.push(`${k.icon} ${amount.toLocaleString()}`);
   }
   P.tax.prepaid = {};   // a new year starts owing nothing and having paid nothing
+  P.tax.accrued = {};   // and accrues from zero — last year's total is now a dated bill
   const profit = Math.round(P.tax.yearProfit || 0);
   P.tax.lastBill = { year, profit, bill: raised.length ? P.tax.bills.slice(-raised.length)
     .reduce((t, b) => t + b.amount, 0) : 0 };
@@ -4053,7 +4363,49 @@ function settleTaxYear(date) {
     if (profit > 0) toast(`🧾 สรุปปีที่ ${year}: กำไรลงทุน ${profit.toLocaleString()} — ยังไม่ถึงเกณฑ์เสียภาษี`);
     return;
   }
-  toast(`🧾 ประเมินภาษีปีที่ ${year} แล้ว: ${raised.join(" · ")} — ไปที่หน้าภาษีเพื่อชำระ`, "warn");
+  toast(`🧾 ประเมินภาษีปีที่ ${year} แล้ว: ${raised.join(" · ")}`, "warn");
+  collectAssessedTax(year);
+}
+
+/* 🎯 [owner 2026-08-22: "ถ้าเราเคลียร์ยอดไม่หมด ปีใหม่ระบบจะบังคับหักเงินตอนสิ้นปีจากกระเป๋า แต่ถ้าเงิน
+ * ในกระเป๋าไม่พอ จะเกิดค่าติดลบ"] The year end used to raise a bill and wait. It now takes what it
+ * can the moment the year turns, wallet first and then the bank, and leaves the rest as a real
+ * negative balance rather than a polite request.
+ *
+ * That negative is what the existing clocks already read: taxDebtCheck ends the run after
+ * TAX_GRACE_DAYS at a negative balance, and taxEnforce seizes the businesses after
+ * TAX_SEIZE_DAYS. Nothing new had to be invented for the teeth — only for the bite.
+ *
+ * Paying ahead during the year still avoids all of it, which is the point of accruing daily. */
+function collectAssessedTax(year) {
+  const bills = (P.tax.bills || []).filter((b) => b.year === year);
+  const owed = bills.reduce((t, b) => t + (b.amount - (b.paid || 0)), 0);
+  if (owed <= 0) return;
+
+  const took = takeGoldThenBank(owed);
+  let left = owed - took;
+  /* Spread what was taken across the year's bills oldest first, so a partly-paid year shows which
+     bill is still open rather than three bills all half-settled. */
+  let pot = took;
+  for (const b of bills) {
+    if (pot <= 0) break;
+    const due = b.amount - (b.paid || 0);
+    const pay = Math.min(due, pot);
+    b.paid = (b.paid || 0) + pay;
+    pot -= pay;
+  }
+  P.tax.paidTotal = (P.tax.paidTotal || 0) + took;
+  if (took > 0) ledger("🧾", `หักภาษีปีที่ ${year} อัตโนมัติ`, -took);
+
+  if (left > 0) {
+    /* The shortfall becomes a real debt in the pocket, the same shape family arrears take — which
+       is what starts taxDebtCheck's countdown on this very day rather than the next one. */
+    P.gold -= left;
+    toast(`🚨 หักภาษีปีที่ ${year} ได้ ${took.toLocaleString()} 💰 — ขาดอีก ${Math.round(left).toLocaleString()}`
+          + ` · เงินติดลบครบ ${TAX_GRACE_DAYS} วันคือจบเกม`, "warn");
+  } else {
+    toast(`🧾 หักภาษีปีที่ ${year} เรียบร้อย ${took.toLocaleString()} 💰`, "", "money");
+  }
 }
 
 /* 🎯 [owner 2026-08-17] "ถ้าไม่จ่ายนาน ... ระบบจะล็อกธุรกิจนั้นๆ เริ่มยึด ทำให้รายได้เป็น 0 จนกว่าจะ
@@ -4081,7 +4433,17 @@ function taxEnforce(date) {
   if (!P.tax.seizeNotedDay || Math.floor(P.gameDays) - P.tax.seizeNotedDay >= 1) {
     P.tax.seizeNotedDay = Math.floor(P.gameDays);
     toast(`🚨 ค้างภาษี ${owed.toLocaleString()} เกิน ${TAX_SEIZE_DAYS} วัน — ธุรกิจถูกยึด รายได้เป็น 0`
-          + ` · หักค่าปรับล่าช้า ${took.toLocaleString()} 💰`, "warn", "money");
+          + ` · ดอกเบี้ยทบวันละ ${Math.round(TAX_LATE_DAILY * 1000) / 10}%`
+          + (took > 0 ? ` · หักไป ${took.toLocaleString()} 💰` : "")
+          + ` · เหลืออีก ${Math.max(0, TAX_FATAL_DAYS - overdue)} วันก่อนจบเกม`, "warn", "money");
+  }
+
+  /* 🎯 [owner 2026-08-22] "จนถึงเดือนสามคือ 90 วัน ถ้ายังไม่จ่ายก็แปลว่าเกมโอเวอร์" — counted from
+   * the assessment, not from the wallet going negative. taxDebtCheck already ends a run that stays
+   * in the red, but a player can sit on an unpaid bill with a positive balance indefinitely, and
+   * that is the case this closes. */
+  if (overdue >= TAX_FATAL_DAYS) {
+    endRun(`ค้างภาษี ${owed.toLocaleString()} เกิน ${TAX_FATAL_DAYS} วันในเกม`);
   }
 }
 
@@ -5706,9 +6068,13 @@ function renderFamily() {
      the yearly clock belongs to her, so it is read where she is. */
   const spouseCard = wives.length ? wives.map((w) => {
     const hers = kids.filter((k) => k.parent === w.id).length;
-    const last = P.family?.lastBirthByWife?.[w.id]
+    const left = CHILD_MAX - (P.family?.bornThisLife ?? kids.length);
+    /* Both gates, because they answer different questions and either can be the one stopping you:
+       her own year, and the household's quota for this life. */
+    const lastHers = P.family?.lastBirthByWife?.[w.id]
       ?? (wives.length === 1 ? P.family?.lastBirthDay : null);
-    const wait = last != null ? Math.ceil(DAYS_PER_YEAR - (questDay() - last)) : 0;
+    const wait = lastHers != null
+      ? Math.max(0, Math.ceil(DAYS_PER_YEAR - (questDay() - lastHers))) : 0;
     return `
     <div class="fam-card is-spouse">
       <div class="fam-face">${iconArt("char", w.id, w.icon, w.name, "big")}</div>
@@ -5716,7 +6082,15 @@ function renderFamily() {
         <b>💍 ${escapeHtml(w.name)}</b>
         <small>${escapeHtml(w.job)}</small>
         <div class="fam-note">${escapeHtml(REL_BONUS[w.id]?.label || "")}</div>
-        <small>${hers ? `ลูก ${hers} คน · ` : ""}${wait > 0 ? `มีลูกได้อีกใน ${wait} วัน` : "พร้อมมีลูกได้"}</small>
+        <!-- 🎯 [owner 2026-08-23] "โควตารอบไม่ต้องแสดงตรงการ์ด ให้แสดงข้อความล่างสุดพอ" — the card
+             answers only what is true of HER: her year, or that she is not trying. The quota belongs
+             to the household and is stated once at the bottom of the page. -->
+        <small>${hers ? `ลูก ${hers} คน · ` : ""}${wifeOnControl(w.id) ? "คุมกำเนิดอยู่"
+          : wait > 0 ? `มีลูกได้อีกใน ${wait} วัน` : "พร้อมมีลูกได้"}</small>
+        <div class="wife-acts">
+          <button class="btn ghost tiny${wifeOnControl(w.id) ? " on" : ""}" data-control="${w.id}">
+            ${wifeOnControl(w.id) ? "🚫 คุมกำเนิดอยู่" : "👶 มีลูกได้"}</button>
+        </div>
       </div>
     </div>`;
   }).join("") : `
@@ -5765,7 +6139,13 @@ function renderFamily() {
         <div class="fam-face">${iconArt("child", childFaceId(k, adult), adult ? "🧑" : "👶", k.name, "big")}</div>
         <div class="fam-body">
           <b>${escapeHtml(k.name)}</b>
-          <small>${adult ? T("โตแล้ว — ออกผจญภัยเอง") : `${T("อายุ")} ${k.age || 0}/${CHILD_ADULT_DAY} ${T("วัน")}`}</small>
+          <small>${adult
+            ? `${T("ขั้น")} ${childLevel(k)}/${CHILD_MAX_LEVEL} · ${
+                k.nextHunt == null ? T("กำลังจะออกล่า")
+                  : Math.max(0, Math.ceil(k.nextHunt - questDay())) > 0
+                    ? `${T("ล่าอีก")} ${Math.ceil(k.nextHunt - questDay())} ${T("วัน")}`
+                    : T("ออกล่าวันนี้")}`
+            : `${T("อายุ")} ${k.age || 0}/${CHILD_ADULT_DAY} ${T("วัน")}`}</small>
           <!-- 🎯 [owner 2026-08-22] "ในตัวของลูก เช่น อาริน ควรมีข้อความเล็กๆ บอกว่าลูกเรากับของใคร"
                — and this is the same thread as the rebirth rule: a child records his mother,
                which is why annulling marriages was wrong. Now the record is visible.
@@ -5776,7 +6156,11 @@ function renderFamily() {
           })()}</small>
           ${adult ? "" : `<div class="kid-track"><div style="width:${pct}%"></div></div>`}
           <div class="fam-row">${COMBAT_STATS.map((st) =>
-            `<span>${st.icon} ${(k.stats || {})[st.id] || 1}</span>`).join("")}</div>
+            `<span>${st.icon} ${adult ? childStat(k, st.id) : ((k.stats || {})[st.id] || 1)}</span>`).join("")}</div>
+          <!-- 🎯 [owner 2026-08-23] "ไม่ต้องมีแถบ hp ให้เห็นเพราะเราไม่สนใจ" — no bar, no controls.
+               The last three outings are the whole report a child owes you. -->
+          ${adult && (k.log || []).length
+            ? `<div class="detail kid-log">${k.log.map(escapeHtml).join(" · ")}</div>` : ""}
           <div class="edu-list">${tracks}</div>
           <div class="kid-acts">
             <button class="btn ghost tiny" data-disown="${k.id}">💔 ${T("ไล่ออกจากตระกูล")}</button>
@@ -5817,11 +6201,15 @@ function renderFamily() {
       const rule = `กฎ: จุติหนึ่งรอบมีลูกได้ ${CHILD_MAX} คน — ลูกที่ติดตัวมาจากชาติก่อนไม่นับ`;
       if (left <= 0) return `<div class="fam-hint">${rule}<br>รอบจุตินี้มีลูกครบแล้ว — จุติใหม่ถึงจะเริ่มนับใหม่</div>`;
       if (!spouseIds().length) return `<div class="fam-hint">${rule}<br>รอบจุตินี้ยังมีลูกได้อีก ${left} คน — ต้องมีคู่ชีวิตก่อน</div>`;
-      return `<div class="fam-hint">${rule}<br>ภรรยาแต่ละคนมีลูกได้ปีละคน · แต่ละวันมีโอกาส ${Math.round(CHILD_BIRTH_CHANCE * 100)}% · รอบจุตินี้ยังมีลูกได้อีก ${left} คน</div>`;
+      return `<div class="fam-hint">${rule}<br>ภรรยาแต่ละคนมีลูกได้ปีละคน · แต่ละวันมีโอกาส ${Math.round(CHILD_BIRTH_CHANCE * 100)}% · รอบจุตินี้ยังมีลูกได้อีก ${left} คน · กดปุ่มบนการ์ดภรรยาเพื่อคุมกำเนิดได้</div>`;
     })();
 
   /* Confirmed, and the dialog names what is lost: this is permanent and refunds nothing spent on
      their schooling, which is not something to find out afterwards. */
+  $("#action-grid").querySelectorAll("[data-control]").forEach((b) => {
+    b.onclick = () => { toggleWifeControl(b.dataset.control); renderView(); };
+  });
+
   $("#action-grid").querySelectorAll("[data-disown]").forEach((b) => {
     b.onclick = () => {
       const k = childrenOf().find((x) => x.id === b.dataset.disown);
@@ -7493,8 +7881,26 @@ function renderTax() {
         <b>${fmtNum(Math.round(P.tax?.paidTotal || 0))}</b></div>
       <div class="money-stat"><span>${T("สถานะ")}</span>
         <b class="${seized ? "bad" : "good"}">${seized ? "🚨 ธุรกิจถูกยึด" : "ปกติ"}</b></div>
-      ${owed > 0 ? `<div class="money-stat"><span>ค้างมาแล้ว</span>
-        <b class="${overdue >= TAX_SEIZE_DAYS ? "bad" : ""}">${overdue}/${TAX_SEIZE_DAYS} วัน</b></div>` : ""}
+      ${owed > 0 ? `<div class="money-stat"><span>${overdue < TAX_SEIZE_DAYS ? "ปลอดดอกอีก" : "เหลือก่อนจบเกม"}</span>
+        <b class="${overdue >= TAX_SEIZE_DAYS ? "bad" : ""}">${overdue < TAX_SEIZE_DAYS
+          ? `${TAX_SEIZE_DAYS - overdue} วัน` : `${Math.max(0, TAX_FATAL_DAYS - overdue)} วัน`}</b></div>` : ""}
+    </div>
+    <!-- 🎯 [owner 2026-08-22] He asked for the timeline written out in his own framing: what happens
+         at year end, the thirty clear days, and what the interest costs after. A rule the player has
+         to infer from a countdown is a rule they meet by surprise. -->
+    <div class="action-card full-card tax-explain">
+      <div class="detail">
+        <b>ภาษีเดินทุกวัน</b> — คิดจากสิ่งที่ถืออยู่จริงในวันนั้น แล้วสะสมไว้
+        ย้ายเงินออกทีหลังไม่ลบของที่สะสมไปแล้ว แต่ทุกวันหลังจากนั้นจะคิดจากกองที่เล็กลง
+        <br><b>จ่ายล่วงหน้าเท่าไหร่ก็ได้ เมื่อไหร่ก็ได้</b> — ที่จ่ายแล้วหักออกจากบิลสิ้นปี
+        <br><br><b>สิ้นปี</b> ส่วนที่ยังไม่ได้จ่ายจะถูกหักทันที จากกระเป๋าก่อนแล้วธนาคาร
+        ถ้ารวมกันยังไม่พอ <b class="bad">เงินจะติดลบ</b> และกลายเป็นบิลค้าง
+        <br><br><b>หลังจากนั้น</b>
+        <br>· วันที่ 1–${TAX_SEIZE_DAYS} — ปลอดดอกเบี้ย จ่ายได้ตามสบาย
+        <br>· วันที่ ${TAX_SEIZE_DAYS + 1} เป็นต้นไป — <b class="bad">ดอกทบต้นทบดอกวันละ ${Math.round(TAX_LATE_DAILY * 1000) / 10}%</b> และธุรกิจถูกยึด รายได้เป็น 0
+        <br>· ค้างครบ <b class="bad">${TAX_FATAL_DAYS} วัน</b> — จบเกม
+        <br><br><span class="muted">ตัวอย่าง: ค้าง ${fmtNum(1000000)} ไม่จ่ายเลยจนครบ ${TAX_FATAL_DAYS} วัน จะกลายเป็น ${fmtNum(Math.round(1000000 * Math.pow(1 + TAX_LATE_DAILY, TAX_FATAL_DAYS - TAX_SEIZE_DAYS)))}</span>
+      </div>
     </div>`;
 
   const grid = $("#action-grid");
@@ -7509,7 +7915,7 @@ function renderTax() {
   if (!bills.length) {
     const none = document.createElement("div");
     none.className = "action-card full-card";
-    none.innerHTML = `<div class="detail">ประเมินภาษีตอนขึ้นปีใหม่ — ยังไม่มีอะไรต้องจ่ายตอนนี้</div>`;
+      none.innerHTML = `<div class="detail">ภาษีเดินสะสมทุกวันตามที่ถืออยู่จริงในวันนั้น — จ่ายล่วงหน้าเท่าไหร่ก็ได้ เมื่อไหร่ก็ได้\n<br>ขึ้นปีใหม่ ส่วนที่ยังไม่ได้จ่ายจะถูกหักจากกระเป๋าแล้วธนาคารทันที ถ้าไม่พอจะติดลบ\n<br>หลังประเมิน มีเวลา ${TAX_SEIZE_DAYS} วันก่อนเริ่มคิดดอกทบวันละ ${Math.round(TAX_LATE_DAILY * 1000) / 10}% · ค้างครบ ${TAX_FATAL_DAYS} วันคือจบเกม</div>`;
     grid.appendChild(none);
   } else {
     const payAll = document.createElement("div");
@@ -7531,9 +7937,12 @@ function renderTax() {
           <div class="req ${late >= TAX_SEIZE_DAYS ? "bad" : ""}">${fmtNum(b.amount - b.paid)}</div></div>
         <div class="detail">ประเมินจาก ${fmtNum(b.base)} (${escapeHtml(k.what)})
           ${b.paid ? `<br>จ่ายไปแล้ว ${fmtNum(b.paid)} จาก ${fmtNum(b.amount)}` : ""}
-          <br>ค้างมา ${late} วัน${late >= TAX_SEIZE_DAYS
-            ? ` — <b class="bad">ถูกยึดแล้ว ค่าปรับวันละ ${Math.round(TAX_LATE_DAILY * 1000) / 10}%</b>`
-            : ` · ยึดเมื่อครบ ${TAX_SEIZE_DAYS} วัน`}</div>
+            <!-- 🎯 [owner 2026-08-22] The timeline he set: one month clear, then daily
+                 compounding, then the run ends at three. All three numbers belong on the card — a
+                 deadline the player cannot see is not a deadline, it is an ambush. -->
+            <br>ค้างมา ${late} วัน${late >= TAX_SEIZE_DAYS
+              ? ` — <b class="bad">ดอกเบี้ยทบวันละ ${Math.round(TAX_LATE_DAILY * 1000) / 10}% · ธุรกิจถูกยึด · เหลือ ${Math.max(0, TAX_FATAL_DAYS - late)} วันก่อนจบเกม</b>`
+              : ` · ยังไม่มีดอก เริ่มคิดเมื่อครบ ${TAX_SEIZE_DAYS} วัน (อีก ${TAX_SEIZE_DAYS - late} วัน) · ค้างครบ ${TAX_FATAL_DAYS} วันคือจบเกม`}</div>
         <div class="cd-actions"><button class="farm-btn harvest" data-paytax="${b.id}">${T("ชำระใบนี้")}</button></div>`;
       grid.appendChild(card);
     }

@@ -712,6 +712,13 @@ const I18N = (() => {
     "ล่า 20 สายพันธุ์จนถึงชั้นโกลาหล": "Twenty species hunted to Chaos",
     "เก็บรอยล่าครบทุกดวง": "Every slayer mark there is",
     "ล่าครบทุกสายพันธุ์จนถึงชั้นโกลาหล": "Every species in Mythwood hunted to Chaos",
+    "เดินสะสมทุกวัน · จ่ายล่วงหน้าได้ตลอด · สิ้นปีหักอัตโนมัติ":
+      "Accrues daily · pay ahead any time · collected at year end",
+    "ปลอดดอกอีก": "Interest-free for", "เหลือก่อนจบเกม": "Left before the run ends",
+    "คุมกำเนิดอยู่": "Not trying for children",
+    "🚫 คุมกำเนิดอยู่": "🚫 No children", "👶 มีลูกได้": "👶 Children allowed",
+    "ขั้น": "Level", "ล่าอีก": "Hunts in", "ออกล่าวันนี้": "Hunting today",
+    "กำลังจะออกล่า": "Setting out",
     "⚙️ ตั้งค่า": "⚙️ Settings",
     "ภาษา / Language": "Language / ภาษา",
     "🇹🇭 ไทย": "🇹🇭 Thai",

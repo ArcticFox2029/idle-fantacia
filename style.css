@@ -878,6 +878,19 @@ body {
 .sidebar-backdrop { display: none; }
 
 @media (max-width: 760px) {
+  /* 🐛 [owner 2026-08-23: "ในมือให้ตัวสัญลักษณ์ต่อสู้ลงมาอีกบรรทัดแล้วเอามอนลงมา ... เพราะในภาพไม่
+     เห็นมอนสเตอร์ แต่ถ้าในเว็บให้แสดงอีกแบบ"] The scene is one flex row with overflow:hidden, and
+     measured at 393px it needs 492px — so the monster sat at x=329 and was simply cut off. The fight
+     you are watching had no visible opponent.
+
+     On a phone it wraps: you and your companion on one line, the ⚔️ on its own, the monster below.
+     Desktop keeps the single row, where it measures fine. */
+  .fight-scene { flex-wrap: wrap; justify-content: center; gap: 12px; padding: 18px 14px; }
+  .fight-scene .fighter { flex: 1 1 40%; min-width: 0; }
+  .fight-scene .vs { flex: 1 0 100%; text-align: center; font-size: 24px; margin: 2px 0; }
+  .fight-scene #f-mon { flex: 1 1 100%; }
+  .fight-scene .f-avatar .icon-art { width: 64px; height: 64px; }
+  .fight-scene #f-mon .f-avatar .icon-art { width: 88px; height: 88px; }
   .menu-chip {
     display: inline-flex; align-items: center; justify-content: center;
     /* 44px is the smallest reliably tappable target; the chips around it are smaller because
@@ -1807,3 +1820,19 @@ body::after {
 .equip-slot-box.seed-box .detail { font-size: 11.5px; line-height: 1.5; }
 .equip-slot-box.seed-box .seed-buy { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; }
 .equip-slot-box.seed-box.locked { opacity: .55; }
+
+/* 🎯 [owner 2026-08-22] The tax rules, written out. Quieter than a bill and never mistakable for
+   one — it is the only card on this page the player is not being asked to act on. */
+.tax-explain { border-style: dashed; }
+.tax-explain .detail { line-height: 1.85; }
+.tax-explain .muted { color: var(--text-dim); }
+
+/* 🎯 [owner 2026-08-22] Birth control sits on the wife's own card, because it is a decision about
+   her and the game now remembers it across rebirths. Lit when ON, since "no more children" is the
+   state worth spotting at a glance — the default needs no announcement. */
+.wife-acts { display: flex; justify-content: flex-end; margin-top: 6px; }
+.wife-acts .btn.on { color: var(--danger); border-color: var(--danger); }
+
+/* The last three outings on a grown child's card. Deliberately plain — it is a report, not a status
+   bar, and the owner asked for no HP anywhere on it. */
+.kid-log { color: var(--text-dim); font-size: 11.5px; }

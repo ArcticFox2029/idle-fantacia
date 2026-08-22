@@ -6,7 +6,7 @@
  * v5 combat-stat split shipped with this left at 4: freshProfile stamped v4, migrate pushed
  * it to v5, and the `p.v === GAME_VERSION` guard then rejected every profile — the game
  * silently refused to create or load anything. balance_check.mjs now fails if the two drift. */
-const GAME_VERSION = 52;
+const GAME_VERSION = 54;
 /* 🎯 [owner 2026-08-22] "avatar คน เพดานน่าจะไม่กำหนด เพราะวางไว้ว่าให้โตได้เรื่อยๆ ... จริงๆ อยากให้ถึง 999"
  *
  * 99 was reachable in about four hours of the best XP route, which is the whole reason it felt like
@@ -1426,6 +1426,33 @@ const CHILD_TRACKS = [
   { id: "craft", icon: "⚒️", name: "สายผลิต", kind: "xpBonus",   per: 0.02,
     desc: "ได้ XP ทุกสายมากขึ้น" },
 ];
+/* 🎯 [owner 2026-08-23] "ลูกต้องทำการล่ามอน ... เราไม่ได้คุมเอง มันจะทำงานตามระบบหลังบ้าน ล่ามอน
+ * เลเวลน้อยๆ ค่อยๆ เติบโต ซึ่งการล่าจะเฉลี่ยทุก 3-7 วัน ลูกเลเวลตันแค่ 99 เหมือน pet"
+ *
+ * A grown child is not a unit you play. It is something that reports back. Everything here is
+ * therefore about pace and legibility rather than about tactics: how often it happens, what comes
+ * back, and how long the climb takes.
+ *
+ * The level curve is the pet's, deliberately — petXpToReach is already fitted against what this
+ * game actually yields, and a second curve would drift from it the first time either is retuned.
+ * At roughly 72 hunts a game-year, a child reaches 99 in something like a decade of game time,
+ * which is the "ค่อยๆ เติบโต" he asked for rather than a bar that fills in an evening. */
+const CHILD_MAX_LEVEL = 99;
+const CHILD_HUNT_MIN_DAYS = 3;
+const CHILD_HUNT_MAX_DAYS = 7;
+const CHILD_HURT_REST_DAYS = 2;      // added to the next gap after a hunt goes badly
+const CHILD_GROWTH = 0.02;           // +2% of birth stats per level, the pet's rate
+/* How much of a stage's bounty a child brings home. Below the guild's share on purpose: a squad is
+ * a business you pay wages for, a child is one person doing this on their own. */
+const CHILD_HUNT_GOLD_SHARE = 0.55;
+const CHILD_HUNT_LOOT_SHARE = 0.30;
+/* The success floor a child holds out for when choosing where to hunt. They pick the hardest stage
+ * they can still clear comfortably, which is what makes levelling visibly move them up the map. */
+const CHILD_HUNT_MIN_SUCCESS = 0.60;
+/* 🎯 [owner 2026-08-23] "เกี่ยว เพราะว่ายิ่งเรียนรู้ยิ่งเอาโบนัสนั้นมาใช้ได้" — the hunting track a
+ * child studies now also makes THEM stronger, not only their parent. */
+const CHILD_HUNT_TRACK_POWER = 0.08;   // per level of the hunt track, on their own power
+
 const CHILD_TRACK_MAX = 5;
 /* Cost of taking a track from `lv` to `lv + 1`. Cubic on purpose: level 1 is pocket change and
  * level 5 is a decision you make instead of buying a building. */
@@ -2413,7 +2440,7 @@ function furniturePrice(kind, f) {
  * passive income from running away from the game, not to punish playing it.
  *
  * The ladder is marginal, so crossing a threshold never costs more than it earns. */
-const TAX_FREE_ALLOWANCE = 700000;
+const TAX_FREE_ALLOWANCE = 1000000;
 /* 🎯 [rescaled 2026-08-17, owner: "ปรับ logic เรื่องภาษี ให้สมเหตุผล แล้วเข้ากับรายได้ ... ให้มันผ่าน
  * เงื่อนไข กรณีเล่นระยะยาว"] The ladder used to end at 6m, which was the whole income range when it
  * was written. A full property portfolio now pays 73m of rent a game-year, so everything past the
@@ -2422,15 +2449,18 @@ const TAX_FREE_ALLOWANCE = 700000;
  * so the effective rate climbs smoothly from 2% at a million to 39% at a hundred and fifty. The
  * bands below 6m are untouched: early play should feel exactly as it did. */
 const TAX_BRACKETS = [
-  { upTo:   1200000, rate: 0.07 },
-  { upTo:   2000000, rate: 0.12 },
-  { upTo:   3500000, rate: 0.20 },
-  { upTo:   6000000, rate: 0.25 },
-  { upTo:  15000000, rate: 0.30 },
-  { upTo:  40000000, rate: 0.35 },
+  { upTo:  10000000, rate: 0.07 },
+  { upTo:  50000000, rate: 0.12 },
+  { upTo: 100000000, rate: 0.20 },
+  { upTo: 150000000, rate: 0.25 },
+  { upTo: 200000000, rate: 0.30 },
+  { upTo: 300000000, rate: 0.35 },
   { upTo:  Infinity, rate: 0.42 },
 ];
 const TAX_GRACE_DAYS = 90;        // three game months to clear a debt before the run ends
+/* The same three months, counted from the assessment rather than from the balance going negative —
+   an unpaid bill ends the run even if the wallet never dipped below zero. */
+const TAX_FATAL_DAYS = 90;
 
 /* ---------- Tax, in three kinds (owner, 2026-08-17) ----------
  * "ภาษีแยกเป็นสามประเภท ... การจ่ายภาษี แก้เป็นแยกออกมาเป็นหมวดพิเศษ ให้ผู้เล่นกดชำระเอง"
@@ -2447,15 +2477,23 @@ const TAX_KINDS = [
    * This is the load-bearing one, and deliberately so: shop takings and rent are NOT income-taxed,
    * they land in the pocket, and this is what finds them there. Which makes it a tax on HOARDING
    * rather than on earning — money put back into shops, property or the market leaves the base,
-   * and only the pile that sits still pays. The rates are set so that ten years of endgame income
-   * left untouched costs about what the income ladder would have taken from it. */
+   * and only the pile that sits still pays.
+   *
+   * 🎯 [owner 2026-08-23] The rates USED to be set so ten years of hoarded endgame income cost about
+   * what the income ladder would have taken. That calibration is gone on purpose: children now
+   * outlive a rebirth, so household upkeep has no ceiling — four births a life, none ever cleared —
+   * and the hoarding tax was cut to a quarter to leave room for it. Hoarding is still not free, just
+   * no longer the largest line on the page. */
   { id: "wealth", name: "ภาษีทรัพย์สิน", icon: "💰",
     what: "ทองในมือ + เงินฝากธนาคาร รวมกัน",
+    /* 🎯 [owner 2026-08-22→23] Cut from 2/4/6 to 0.5/1/2 in the same breath as children being made
+       to outlive a rebirth. That change removed the ceiling on household upkeep — four births per
+       life, none of them ever cleared — so the hoarding tax had to come down to leave room for it. */
     free: 100000000,
     brackets: [
-      { upTo:  300000000, rate: 0.02 },
-      { upTo: 1000000000, rate: 0.04 },
-      { upTo:   Infinity, rate: 0.06 },
+      { upTo:  500000000, rate: 0.005 },
+      { upTo: 1000000000, rate: 0.010 },
+      { upTo:   Infinity, rate: 0.020 },
     ] },
   { id: "business", name: "ภาษีเงินได้", icon: "🏪",
     what: "กำไรลงทุนทั้งปี — ปันผล กำไรจากการขาย ดอกเบี้ยธนาคาร",
@@ -2463,15 +2501,26 @@ const TAX_KINDS = [
     brackets: TAX_BRACKETS },
   { id: "estate", name: "ภาษีอสังหา", icon: "🏠",
     what: "ราคาบ้านรวมกับเฟอร์นิเจอร์ที่ลงไป",
-    free: 30000000,
+    free: 50000000,
     brackets: [
-      { upTo: 100000000, rate: 0.005 },
-      { upTo:  Infinity, rate: 0.010 },
+      { upTo: 300000000, rate: 0.005 },
+      { upTo: 600000000, rate: 0.010 },
+      /* 🎯 [owner 2026-08-22] His table read "600m–900m 2.0%" and then "800m+ 3.0%". Taken as 900m,
+         since the ladder's own upper edge is the only number both rows agree on and an overlapping
+         bracket would charge two rates on the same slice. */
+      { upTo: 900000000, rate: 0.020 },
+      { upTo:  Infinity, rate: 0.030 },
     ] },
 ];
 /* Unpaid this long and the businesses that earned it are seized: income falls to zero until the
  * bill is settled. Three game months, the same countdown the game already uses elsewhere. */
-const TAX_SEIZE_DAYS = 90;
+/* 🎯 [owner 2026-08-22] "หลังปีใหม่ มีเวลาชำระใน 30 วัน เหลือเดือนแรก หลังจากนั้นดอกเบี้ยเดินเรื่อยๆ
+ * รายวันทบต้นทบดอกที่ค้าง ... จนถึงเดือนสามคือ 90 วัน ถ้ายังไม่จ่ายก็แปลว่าเกมโอเวอร์"
+ *
+ * One month to pay in peace, then two months of daily compounding, then the run ends. This used to
+ * be 90 — the same number as the game-over clock, which made the whole penalty unreachable: the run
+ * ended on the very day the fee was first charged. */
+const TAX_SEIZE_DAYS = 30;
 /* Late interest, per game-day, on what is still owed. It is charged AND collected daily from the
  * pocket first and the bank second, so ignoring a bill costs more than paying it. */
 const TAX_LATE_DAILY = 0.004;

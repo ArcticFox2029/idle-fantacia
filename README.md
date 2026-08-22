@@ -4,7 +4,11 @@
 
 **An idle RPG that runs entirely in your browser — no install, no account, no server**
 
+**Plays on a phone as well as a desktop** — the layout adapts, and the screen stays awake while you watch
+
 **เกม idle ที่รันในเบราว์เซอร์ล้วน — ไม่ต้องติดตั้ง ไม่ต้องสมัคร ไม่ต้องมีเซิร์ฟเวอร์**
+
+**เล่นบนมือถือได้เหมือนกัน** — หน้าจอปรับตามขนาดเครื่อง และมีระบบกันจอดับตอนนั่งดู
 
 ### ▶︎ **[Play now / เล่นเลย](https://arcticfox2029.github.io/idle-fantacia/)**
 
@@ -73,7 +77,7 @@ finds, or more XP.
 
 ### 4. Family
 
-Once married there is a **1% chance each in-game day** of a child, and each wife may have one per game-year. Four children per life; being reborn starts that count over, and a child carried over from a previous life does not spend the new life's quota. A household costs money every day — a wife, each child, and every level of schooling a child holds — and falling behind suspends what the family gives back. A child starts at half of what
+Once married there is a **1% chance each in-game day per wife** of a child, and each wife has her own switch to stop trying. Four children per life; being reborn starts that count over, and a child carried over from a previous life does not spend the new life's quota. A household costs money every day — a wife, each child, and every level of schooling a child holds — and falling behind suspends what the family gives back. A child starts at half of what
 you were the day they were born, then grows. You choose what to have them taught — **the higher the
 tier, the more it costs and the slower it pays back**.
 
@@ -86,11 +90,11 @@ stays with you forever. What survives and what does not is designed to be predic
 
 | Survives | Halved | Lost |
 |---|---|---|
-| Achievements and titles · slayer marks · deposits, shares, businesses, property · **marriages and every relationship** | Combat stats | Gold in hand · children and their education |
+| Achievements and titles · slayer marks · deposits, shares, businesses, property · marriages and every relationship · **children and everything you taught them** | Combat stats | Gold in hand |
 
-Relationships are **not touched at all** by a rebirth, and neither are marriages. A child, though,
-belongs to the life he was born into — which is why the wives stay: his record names his mother, and
-she should not be a stranger the next time you meet her.
+A rebirth costs you your combat stats and the gold in your hand. It does **not** touch the people:
+relationships, marriages, children and everything you paid to teach them all carry over. What resets
+is the quota — four births per life — so a household only ever grows, and the daily upkeep with it.
 
 ### 6. Statistics — one page for everything
 
@@ -202,7 +206,7 @@ Art in `art/` was generated with [pollinations.ai](https://pollinations.ai).
 
 ### 4. ครอบครัว
 
-แต่งงานแล้วมีลูกได้ (โอกาส **1% ต่อวันในเกม** และภรรยาแต่ละคนมีลูกได้ปีละคน) รอบจุติหนึ่งมีลูกได้ 4 คน ลูกที่ติดตัวมาจากชาติก่อนไม่นับ · ครอบครัวมีค่าเลี้ยงดูรายวัน ถ้าจ่ายไม่ไหวโบนัสจะหยุดจนกว่าจะเคลียร์ ลูกเริ่มด้วยค่าสถานะครึ่งหนึ่งของคุณตอนที่เขาเกิด แล้วค่อย ๆ โต
+แต่งงานแล้วมีลูกได้ (โอกาส **1% ต่อวันในเกม** และภรรยาแต่ละคนมีลูกได้ปีละคน) รอบจุติหนึ่งมีลูกได้ 4 คน — เพดานเป็นของทั้งครัวเรือน ไม่ใช่ของภรรยาแต่ละคน และคุมกำเนิดรายคนได้จากการ์ดของภรรยา ลูกที่ติดตัวมาจากชาติก่อนไม่นับ · ครอบครัวมีค่าเลี้ยงดูรายวัน ถ้าจ่ายไม่ไหวโบนัสจะหยุดจนกว่าจะเคลียร์ ลูกเริ่มด้วยค่าสถานะครึ่งหนึ่งของคุณตอนที่เขาเกิด แล้วค่อย ๆ โต
 คุณเลือกได้ว่าจะให้เรียนอะไร — **ยิ่งขั้นสูงยิ่งแพงและคืนทุนช้า**
 
 ### 5. การจุติ — และสิ่งที่รอด
@@ -212,9 +216,9 @@ Art in `art/` was generated with [pollinations.ai](https://pollinations.ai).
 
 | รอดถาวร | หารครึ่ง | หายไป |
 |---|---|---|
-| ความสำเร็จและฉายา · รอยล่า · เงินฝาก หุ้น ธุรกิจ อสังหา · **การแต่งงานและความสัมพันธ์ทั้งหมด** | สเตตัสการต่อสู้ | ทองในมือ · ลูกและการเรียนของเขา |
+| ความสำเร็จและฉายา · รอยล่า · เงินฝาก หุ้น ธุรกิจ อสังหา · การแต่งงานและความสัมพันธ์ทั้งหมด · **ลูกและการเรียนทั้งหมดของเขา** | สเตตัสการต่อสู้ | ทองในมือ |
 
-การจุติ **ไม่แตะความสัมพันธ์และการแต่งงานเลย** ส่วนลูกเป็นของชาติที่เขาเกิด — ซึ่งเป็นเหตุผลที่ภรรยาต้องอยู่ต่อ เพราะประวัติของลูกระบุแม่ไว้ ถ้าแม่กลายเป็นคนแปลกหน้า ชื่อนั้นก็ไม่เหลือความหมาย
+การจุติเสียแค่สเตตัสการต่อสู้กับทองในมือ **ไม่แตะผู้คนเลย** — ความสัมพันธ์ การแต่งงาน ลูก และการเรียนทั้งหมดที่ลงทุนไป อยู่ต่อครบ สิ่งที่รีเซ็ตคือโควตา 4 คนต่อรอบจุติ ครอบครัวจึงมีแต่โตขึ้น และค่าเลี้ยงดูโตตาม
 
 ## เซฟอยู่ไหน
 
