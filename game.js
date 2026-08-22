@@ -1390,12 +1390,6 @@ function familyUpkeepDay() {
     toast(`👨‍👩‍👧 ค่าเลี้ยงดูครอบครัววันนี้ ${due.toLocaleString()} 💰`, "", "family");
   }
 
-  /* 🐛 [owner 2026-08-22: "ตอนแรกเงินติดลบขึ้นข้อมูลแดง พอเงินกลับมาปกติ ตัวแดงไม่หาย"] The arrears
-   * DID clear — the first fully-paid day zeroes them. What did not clear was the screen: onNewDay
-   * repaints only the bank view, and every other daily system repaints its own (runShopsDay and
-   * runEstatesDay both end this way). This one did not, so the family page kept showing a debt that
-   * had been settled, which reads as the game refusing to let go of it. */
-  if (view.kind === "family") renderView();
 }
 
 function childBirthRoll() {
@@ -2829,6 +2823,10 @@ function checkAchievements() {
 function today() { return gameDate(P.gameDays); }
 function dateLabel(d = today()) { return `ปีที่ ${d.year} · ${d.monthName} วันที่ ${d.day}`; }
 
+/* The views a daily system can change under the player's feet. Kept beside calendarTick rather than
+ * spread across the systems, so adding one is a single edit in an obvious place. */
+const DAILY_VIEWS = new Set(["family", "shops", "bank"]);
+
 function calendarTick(dtSeconds) {
   const before = today();
   P.gameDays += dtSeconds / GAME_DAY_SECONDS;
@@ -2836,6 +2834,15 @@ function calendarTick(dtSeconds) {
   if (after.totalDays === before.totalDays) return;
   for (let d = before.totalDays + 1; d <= after.totalDays; d++) onNewDay(gameDate(d), d);
   updateTopbar();
+  /* 🐛 [owner 2026-08-22: "มันกระพริบ รีเฟรชรัวๆ ... รีเฟรชเฉพาะตอนกดเข้ามาดูอีกครั้ง"] The daily
+   * systems used to repaint from inside onNewDay, which is fine at one day per 100 seconds and
+   * awful the moment this loop catches up. A backgrounded tab throttles the 250ms timer, so coming
+   * back runs twenty days in one pass — and the page was rebuilt twenty times in a row. Measured:
+   * 20 renders back to back, which is exactly what he was watching.
+   *
+   * One repaint after the whole catch-up, and only for the pages a daily system actually changes.
+   * Anything else is picked up when the player opens it. */
+  if (DAILY_VIEWS.has(view.kind)) renderView();
 }
 
 /* One game day passed. Kept deliberately small: each subsystem gets its own function so a new
@@ -2863,7 +2870,6 @@ function onNewDay(date) {
   taxDebtCheck();
   if (date.day === 1 && date.month === 1) onNewYear(date);
   else if (date.day === 1) onNewMonth(date);
-  if (view.kind === "bank") renderView();
 }
 
 function onNewMonth(date) {
@@ -3438,7 +3444,6 @@ function runShopsDay(date) {
     toast(`${total >= 0 ? "🏪 กำไรร้านค้า" : "🏪 ขาดทุนร้านค้า"} ${Math.abs(n).toLocaleString()} 💰`,
           total >= 0 ? "" : "warn", "money");
   }
-  if (view.kind === "shops") renderView();
 }
 
 /* ---------- Rebirth (จุติ) ----------
@@ -6439,7 +6444,6 @@ function runEstatesDay() {
     P.estateMonth = (P.estateMonth || 0) + Math.round(total);
     toast(`🏘️ ค่าเช่า ${Math.round(total).toLocaleString()} 💰`, "", "money");
   }
-  if (view.kind === "shops") renderView();
 }
 
 /* ---------- Shops view ---------- */
