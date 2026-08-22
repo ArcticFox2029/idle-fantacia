@@ -660,6 +660,10 @@ function migrate(p) {
      * at 99 stops being at the ceiling. Both curves were re-fitted rather than reset, so no save
      * loses a level — the same XP buys at least the same rank it bought yesterday. */
   }
+  if (p.v === 49) {
+    p.v = 50;
+    /* Auto-fuse is a button, not stored state. Nothing to migrate. */
+  }
   return p.v === GAME_VERSION ? p : null;
 }
 
@@ -2301,9 +2305,79 @@ function petFuse(iA, iB) {
   P.seenPets[species] = true;
   const st = petStats(child);
   const upgraded = graded !== f.grade.cls;
-  toast(`🧬 ผสมพันธุ์สำเร็จ! ได้ ${st.icon} ${st.name} ขั้น ${st.lv} คุณภาพ ${st.grade.name} (${st.grade.pct}%)`
+  if (!autoFuseQuiet) toast(`🧬 ผสมพันธุ์สำเร็จ! ได้ ${st.icon} ${st.name} ขั้น ${st.lv} คุณภาพ ${st.grade.name} (${st.grade.pct}%)`
     + (upgraded ? " — เลื่อนขั้นคุณภาพสำเร็จ!" : ""), "levelup");
   return true;
+}
+
+/* ---------- 🧬 ผสมอัตโนมัติ ----------
+ * 🎯 [owner 2026-08-22] "ถ้ามีการสะสมมอนจำนวนมาก ก็จะลำบากที่จะไล่ผสม ดังนั้นจะมีปุ่มข้างๆ auto
+ * ผสมพันธุ์ มันจะจับคู่ผสมให้อัตโนมัติ ยกเว้นตัวที่ใช้เป็นตัวหลักจะไม่โดนเลือกเข้าไป"
+ *
+ * The design asks the player to hoard companions; hoarding thirty and then pairing them by hand is
+ * where that design stops being fun. This pairs everything it safely can in one pass.
+ *
+ * Two things it refuses to touch, because both would take something from the player without asking:
+ *
+ *   - THE COMPANION YOU ARE FIELDING. The owner's rule, and the right one: it is the one pet with a
+ *     meaning the roster cannot see.
+ *   - THE TOP GRADE. Two เทพสวรรค์ have nothing to climb to, so fusing them turns two into one and
+ *     calls it a success. Manual fusion lets you do that if you insist; a button pressed once for
+ *     the whole roster must not.
+ *
+ * It cascades: a pair of ดี that becomes a ยอดเยี่ยม can immediately pair with another ยอดเยี่ยม.
+ * That is what "auto" has to mean, or you would press it five times in a row.
+ */
+let autoFuseQuiet = false;   // set while a batch runs, so each fusion does not announce itself
+
+function autoFusePlan() {
+  const top = PET_GRADE_RANK[PET_GRADE_RANK.length - 1];
+  const groups = {};
+  P.pets.forEach((pet, i) => {
+    if (i === P.activePet) return;                 // never the one you are carrying
+    const cls = petStats(pet).grade.cls;
+    if (cls === top) return;                       // nothing above it to reach
+    (groups[cls] = groups[cls] || []).push(i);
+  });
+  let pairs = 0;
+  for (const list of Object.values(groups)) pairs += Math.floor(list.length / 2);
+  return { pairs, groups };
+}
+
+/* Runs the plan and keeps going while new pairs appear. Returns a tally rather than toasting per
+ * fusion — twenty toasts in two seconds is not a report, it is a wall. */
+function autoFuseRun() {
+  const before = P.pets.length;
+  let done = 0, upgraded = 0, guard = 0;
+  /* petFuse announces every fusion, which is right for one deliberate click and wrong for twenty in
+   * a row — twenty toasts in two seconds is a wall, not a report. A flag rather than swapping the
+   * toast function out: reassigning a function declaration mid-run is the kind of trick that works
+   * until someone makes the file a module. */
+  autoFuseQuiet = true;
+  try {
+    for (;;) {
+      if (guard++ > 500) break;                     // a roster this size cannot need more rounds
+      const plan = autoFusePlan();
+      if (!plan.pairs) break;
+      /* 🎯 [owner 2026-08-22] "มันต้องเล่นผสมจากระดับต่ำให้เสร็จ ไล่ไปจนสูง"
+       *
+       * Strictly lowest grade first, and finish it before moving up. Object key order — which is
+       * the order the pets happen to sit in the roster — was what this used before, and that is not
+       * an order at all: it made the same roster fuse differently depending on the sequence you
+       * caught things in. Bottom-up is also what actually feeds the ladder, since every pair of
+       * ธรรมดา that succeeds becomes a พอใช้ waiting for a partner one rung up. */
+      const list = PET_GRADE_RANK
+        .map((cls) => plan.groups[cls])
+        .find((g) => g && g.length >= 2);
+      if (!list) break;
+      const [iA, iB] = list.slice(0, 2).sort((a, b) => a - b);
+      const gradeBefore = petStats(P.pets[iA]).grade.cls;
+      if (!petFuse(iA, iB)) break;
+      done++;
+      if (petStats(P.pets[P.pets.length - 1]).grade.cls !== gradeBefore) upgraded++;
+    }
+  } finally { autoFuseQuiet = false; }
+  return { done, upgraded, before, after: P.pets.length };
 }
 
 /* Letting one go. The active index has to move with the array, or releasing an early pet would
@@ -7298,7 +7372,11 @@ function renderPetPanel(extra) {
   panel.innerHTML = summary + (P.pets.length ? `
     ${P.pets.length >= 2 ? `
     <div class="train-row">
-      <button class="btn ${petFuseMode ? "" : "ghost"} small" id="fuse-toggle">🧬 ผสมพันธุ์</button>
+      <button class="btn ${petFuseMode ? "" : "ghost"} small" id="fuse-toggle">🧬 ${T("ผสมพันธุ์")}</button>
+      ${(() => {
+        const plan = autoFusePlan();
+        return `<button class="btn ghost small" id="fuse-auto"${plan.pairs ? "" : " disabled"} title="${T("จับคู่ผสมให้อัตโนมัติ — ไม่แตะตัวที่พาลงสนาม และไม่ผสมขั้นสูงสุด")}">⚡ ${T("ผสมอัตโนมัติ")}${plan.pairs ? ` (${plan.pairs})` : ""}</button>`;
+      })()}
       ${petFuseMode ? `<span class="train-sub">เลือกสัตว์เลี้ยงคุณภาพเดียวกัน 2 ตัว มารวมร่างเป็น 1 ตัว — ทั้งสองตัวหายไป</span>` : ""}
     </div>` : ""}
     <div class="equip-slots">
@@ -7374,6 +7452,21 @@ function renderPetPanel(extra) {
   extra.appendChild(panel);
 
   panel.querySelector("#pet-toggle").onclick = () => { petOpen = false; renderView(); };
+    const autoBtn = panel.querySelector("#fuse-auto");
+    if (autoBtn) autoBtn.onclick = () => {
+      const plan = autoFusePlan();
+      if (!plan.pairs) { toast(T("ไม่มีคู่ที่ผสมได้"), "warn"); return; }
+      /* Confirmed first: this consumes companions, and how many is not obvious from a button. */
+      if (!confirm(`${T("จะผสมอัตโนมัติ")} ${plan.pairs} ${T("คู่")}\n\n`
+        + `${T("ตัวที่พาลงสนามและขั้นสูงสุดจะไม่ถูกแตะ")}\n`
+        + `${T("ผสมแล้วสัตว์เลี้ยงสองตัวจะกลายเป็นตัวเดียว")}`)) return;
+      const r = autoFuseRun();
+      if (!r.done) { toast(T("ไม่มีคู่ที่ผสมได้"), "warn"); return; }
+      toast(`⚡ ${T("ผสมอัตโนมัติ")} ${r.done} ${T("คู่")} — ${T("เลื่อนขั้นสำเร็จ")} ${r.upgraded} ${T("ตัว")}`
+        + ` · ${r.before} → ${r.after} ${T("ตัว")}`, r.upgraded ? "levelup" : "", "combat");
+      save("ผสมอัตโนมัติ");
+      renderView();
+    };
   const ft = panel.querySelector("#fuse-toggle");
   if (ft) ft.onclick = () => { petFuseMode = !petFuseMode; petFusePick = []; renderView(); };
   panel.querySelectorAll("[data-fusepick]").forEach((b) => b.onclick = () => {

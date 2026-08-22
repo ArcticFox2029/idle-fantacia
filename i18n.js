@@ -304,6 +304,15 @@ const I18N = (() => {
     "ธรรมดา": "Common", "พอใช้": "Fair", "ดี": "Good", "ยอดเยี่ยม": "Excellent", "ตำนาน": "Legendary",
     "กึ่งเทวะ": "Demigod", "เทพสวรรค์": "Celestial",
 
+    "ผสมพันธุ์": "Fuse", "ผสมอัตโนมัติ": "Auto-fuse", "คู่": "pairs",
+    "จับคู่ผสมให้อัตโนมัติ — ไม่แตะตัวที่พาลงสนาม และไม่ผสมขั้นสูงสุด":
+      "Pairs everything it safely can — never the companion you are fielding, never the top grade",
+    "ไม่มีคู่ที่ผสมได้": "No pair can be fused",
+    "จะผสมอัตโนมัติ": "This will fuse",
+    "ตัวที่พาลงสนามและขั้นสูงสุดจะไม่ถูกแตะ": "The companion you are fielding and the top grade are left alone",
+    "ผสมแล้วสัตว์เลี้ยงสองตัวจะกลายเป็นตัวเดียว": "Each fusion turns two companions into one",
+    "เลื่อนขั้นสำเร็จ": "moved up a grade", "ตัว": "",
+
     /* ---- companion skills ---- */
     "เขี้ยวคม": "Sharp Fangs", "เขี้ยวคมขึ้น": "Sharper Fangs",
     "เขี้ยวสังหาร": "Killing Fangs", "เขี้ยวทำลายล้าง": "Ruinous Fangs", "เขี้ยวเทพ": "Divine Fangs",
