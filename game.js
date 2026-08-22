@@ -646,6 +646,20 @@ function migrate(p) {
     p.v = 47;
     /* Panel labels translated. Nothing stored changes. */
   }
+  if (p.v === 47) {
+    p.v = 48;
+    /* Two grades above ตำนาน, and new band edges. Existing companions keep their stored IV and are
+     * simply re-read against the new table, which is why nothing is rewritten here: a pet that was
+     * ยอดเยี่ยม at 1.12 is still ยอดเยี่ยม, and one at 1.16 becomes ตำนาน because the bar moved from
+     * 1.18 to 1.15. Nobody loses a grade — every new edge sits at or below the old one. */
+  }
+  if (p.v === 48) {
+    p.v = 49;
+    /* Level caps and the companion skill ladder. Nothing stored is rewritten: levels are derived
+     * from XP, so a companion sitting at the old cap of 38 simply keeps climbing, and a character
+     * at 99 stops being at the ceiling. Both curves were re-fitted rather than reset, so no save
+     * loses a level — the same XP buys at least the same rank it bought yesterday. */
+  }
   return p.v === GAME_VERSION ? p : null;
 }
 
@@ -2190,10 +2204,13 @@ function petStats(pet) {
   const sp = petSpecies(pet.species);
   const lv = petLevel(pet);
   const iv = pet.iv || { hp: 1, atk: 1, def: 1 };
-  return { lv, name: sp.name, icon: sp.icon, tier: sp.tier, grade: petGrade(iv),
+  /* Passive skills are part of what the companion IS, so they belong in the stats every screen and
+   * every fight already reads — not in a second pass that some call site will forget. */
+  const sk = petSkillsAt(lv);
+  return { lv, name: sp.name, icon: sp.icon, tier: sp.tier, grade: petGrade(iv), skills: sk,
            maxHp: Math.round(petStat(sp.hp, lv) * iv.hp),
-           atk: Math.max(1, Math.round(petStat(sp.atk, lv) * iv.atk)),
-           def: Math.round(petStat(sp.def, lv) * iv.def) };
+           atk: Math.max(1, Math.round(petStat(sp.atk, lv) * iv.atk * (1 + sk.atk))),
+           def: Math.round(petStat(sp.def, lv) * iv.def * (1 + sk.def)) };
 }
 function activePet() {
   const i = P.activePet;
@@ -2214,7 +2231,11 @@ function rollPetDrop(loc, stage) {
   const ceiling = stage.boss ? tier + 1 : tier;
   const pool = PET_SPECIES.filter((sp) => sp.tier <= ceiling && sp.tier >= Math.max(1, ceiling - 1));
   const sp = pool[Math.floor(Math.random() * pool.length)] || PET_SPECIES[0];
-  const roll = () => Math.round(rand(PET_IV_MIN, PET_IV_MAX) * 100) / 100;
+  /* A wild catch stops at the top of ตำนาน — unless it is blessed, which is rare enough to be a
+   * story rather than a strategy. See PET_BLESSED_CATCH. */
+  const blessed = Math.random() < PET_BLESSED_CATCH;
+  const ivCeiling = blessed ? PET_IV_MAX : PET_IV_CATCH_MAX;   // `ceiling` is already the tier gate
+  const roll = () => Math.round(rand(PET_IV_MIN, ivCeiling) * 100) / 100;
   const pet = { species: sp.id, xp: 0, iv: { hp: roll(), atk: roll(), def: roll() } };
   pet.hp = petStats(pet).maxHp;
   P.pets.push(pet);
@@ -2242,7 +2263,7 @@ function petFusionForecast(iA, iB) {
   const upCls = PET_GRADE_RANK[PET_GRADE_RANK.indexOf(ga.cls) + 1];
   const upName = upCls ? PET_GRADES.find((g) => g.cls === upCls).name : null;
   return {
-    grade: ga, upCls, upName, chance: upCls ? PET_FUSION_GRADE_UP : 0,
+    grade: ga, upCls, upName, chance: upCls ? (PET_FUSION_UP_BY_GRADE[ga.cls] ?? PET_FUSION_GRADE_UP) : 0,
     sameSpecies: a.species === b.species,
     levelAvg: (petLevelExact(a) + petLevelExact(b)) / 2,
   };
@@ -2252,7 +2273,10 @@ function petFuse(iA, iB) {
   if (!f) { toast("ผสมพันธุ์ได้เฉพาะคุณภาพเดียวกัน", "warn"); return false; }
   const a = P.pets[iA], b = P.pets[iB];
 
-  const graded = f.upCls && Math.random() < PET_FUSION_GRADE_UP ? f.upCls : f.grade.cls;
+  /* The chance depends on what you fed in, not on one number for the whole game — see
+   * PET_FUSION_UP_BY_GRADE. Read from the forecast so the odds shown and the odds rolled cannot
+   * drift apart. */
+  const graded = f.upCls && Math.random() < f.chance ? f.upCls : f.grade.cls;
   const band = petGradeBand(graded);
   const roll = () => Math.round(rand(band.lo, band.hi) * 100) / 100;
   const iv = { hp: roll(), atk: roll(), def: roll() };
@@ -4187,13 +4211,41 @@ function combatTick(now, slotIdx) {
     /* Its own swing count, so the heavy blow lands on the companion's rhythm rather than being
      * shaken loose by how fast the player happens to be hitting. */
     C.petHits = (C.petHits || 0) + 1;
-    const heavy = ps.lv >= PET_SPECIAL_LEVEL && C.petHits % PET_SPECIAL_EVERY === 0;
-    const pdmg = Math.max(1, Math.round(ps.atk * rand(0.7, 1.3) * armorMult()
-      * (heavy ? PET_SPECIAL_MULT : 1)));
+    const sk = ps.skills;
+
+    /* Combo before heavy: a companion that has learned to strike several times does that INSTEAD of
+     * winding up one big blow, not as well as. Otherwise the two land together on shared multiples
+     * and produce a spike nobody designed. */
+    const combo = sk.combo && C.petHits % sk.combo.every === 0 ? sk.combo : null;
+    const heavy = !combo && sk.heavy && C.petHits % sk.heavy.every === 0 ? sk.heavy : null;
+    const hits = combo ? combo.value : 1;
+    const mult = heavy ? heavy.value : 1;
+
+    let pdmg = 0;
+    for (let h = 0; h < hits; h++) {
+      pdmg += Math.max(1, Math.round(ps.atk * rand(0.7, 1.3) * armorMult() * mult));
+    }
     C.monHp -= pdmg;
     C.petNext = now + petAttackInterval(ps.lv);
     hitFx("#f-mon", pdmg, "dmg-pet");
-    if (heavy) toast(`${ps.icon} ${ps.name} ปล่อยท่าหนัก! ${pdmg} ดาเมจ`, "", "combat");
+    if (combo) toast(`${combo.icon} ${ps.name} ปล่อย${combo.name}! ${pdmg} ดาเมจ`, "", "combat");
+    else if (heavy) toast(`${heavy.icon} ${ps.name} ปล่อย${heavy.name}! ${pdmg} ดาเมจ`, "", "combat");
+
+    /* 🎯 [owner 2026-08-22] "ฮีล ซึ่งใช้ฮีลตัวเองและเจ้าของได้" — both, on the companion's own
+     * rhythm. Capped at each side's own maximum so it tops up rather than overflows, and it reports
+     * only what it actually restored: healing for zero and announcing it is worse than silence. */
+    if (sk.heal && C.petHits % sk.heal.every === 0) {
+      const petGain = Math.min(ps.maxHp - pet.hp, Math.round(ps.maxHp * sk.heal.value));
+      const ownGain = Math.min(maxHp() - P.hp, Math.round(maxHp() * sk.heal.value));
+      if (petGain > 0) pet.hp += petGain;
+      if (ownGain > 0) { P.hp += ownGain; hitFx("#f-me", -ownGain, "heal-mon"); updateTopbar(); }
+      if (petGain > 0 || ownGain > 0) {
+        toast(`${sk.heal.icon} ${ps.name} ใช้${sk.heal.name}`
+          + (ownGain > 0 ? ` — ฟื้นให้คุณ ${ownGain}` : "")
+          + (petGain > 0 ? `${ownGain > 0 ? " และ" : " — ฟื้น"}ตัวเอง ${petGain}` : ""), "", "combat");
+      }
+    }
+
     if (pet.hp / ps.maxHp < PET_EAT_BELOW) petEat();
     if (C.monHp <= 0) { onKill(loc, stage, C, slotIdx); return; }
   }
@@ -7184,6 +7236,27 @@ let petOpen = false;
 let petFuseMode = false;   // true while picking a pair to fuse
 let petFusePick = [];      // up to two pet indices, in pick order
 
+/* 🎯 [owner 2026-08-22] "ยังต้องสะสมมอนที่เจอ ค่อยๆ ผสมไปเรื่อยๆ เพื่อหาตัวดีสุด"
+ *
+ * That design asks the player to keep a lot of companions, and fusion needs two of the SAME grade —
+ * so the one thing the list has to do is put same-grade pets next to each other. Unsorted, finding
+ * a partner in a collection of two hundred is the part of the feature people would give up on.
+ *
+ * Grade first, then level, then IV: the pair you are looking for ends up adjacent, and the best of
+ * each grade sits at the top of its own run. Returns the original index alongside, because every
+ * action on this screen — field, fuse, release — addresses a pet by its position in P.pets. */
+function petListOrder() {
+  return P.pets
+    .map((pet, i) => ({ pet, i, st: petStats(pet) }))
+    .sort((a, b) => {
+      const ga = PET_GRADE_RANK.indexOf(a.st.grade.cls);
+      const gb = PET_GRADE_RANK.indexOf(b.st.grade.cls);
+      if (ga !== gb) return gb - ga;
+      if (a.st.lv !== b.st.lv) return b.st.lv - a.st.lv;
+      return (b.st.grade.pct || 0) - (a.st.grade.pct || 0);
+    });
+}
+
 function renderPetPanel(extra) {
   const panel = document.createElement("div");
   panel.className = "equip-panel" + (petOpen ? " open" : "");
@@ -7229,7 +7302,7 @@ function renderPetPanel(extra) {
       ${petFuseMode ? `<span class="train-sub">เลือกสัตว์เลี้ยงคุณภาพเดียวกัน 2 ตัว มารวมร่างเป็น 1 ตัว — ทั้งสองตัวหายไป</span>` : ""}
     </div>` : ""}
     <div class="equip-slots">
-      ${P.pets.map((pet, i) => {
+      ${petListOrder().map(({ pet, i }) => {
         const st = petStats(pet);
         const base = petXpToReach(st.lv), next = petXpToReach(st.lv + 1);
         const frac = st.lv >= PET_MAX_LEVEL ? 1 : (pet.xp - base) / (next - base);
@@ -7245,6 +7318,22 @@ function renderPetPanel(extra) {
           <div class="pet-stats">🗡️${st.atk} ${q(iv.atk)} · 🛡️${st.def} ${q(iv.def)}</div>
           <div class="pet-stats">❤️ ${Math.max(0, pet.hp)}/${st.maxHp} ${q(iv.hp)}</div>
           <div class="m-bar"><div style="width:${Math.round(frac * 100)}%; background:var(--gold)"></div></div>
+          ${(() => {
+            /* Ninety-nine ranks are only worth climbing if the climb is visible. The card shows what
+             * this companion has learned and what the next rank brings, so the bar above has a
+             * destination rather than only a percentage. */
+            const sk = st.skills;
+            const nx = petNextSkill(st.lv);
+            const has = [sk.heavy, sk.combo, sk.heal].filter(Boolean)
+              .map((s) => `<span class="pet-skill" title="${escapeHtml(s.name)}">${s.icon}</span>`).join("");
+            const passive = (sk.atk || sk.def)
+              ? `<span class="pet-skill-num">${sk.atk ? `🗡️+${Math.round(sk.atk * 100)}%` : ""}${
+                   sk.atk && sk.def ? " " : ""}${sk.def ? `🛡️+${Math.round(sk.def * 100)}%` : ""}</span>`
+              : "";
+            if (!has && !passive && !nx) return "";
+            return `<div class="pet-skills">${has}${passive}${
+              nx ? `<span class="pet-next">${T("ขั้น")} ${nx.lv}: ${nx.icon} ${escapeHtml(nx.name)}</span>` : ""}</div>`;
+          })()}
           ${petFuseMode
             ? `<button class="btn ${picked ? "" : "ghost"} small" data-fusepick="${i}" ${pickable ? "" : "disabled"}>
                  ${picked ? "✓ เลือกแล้ว" : "เลือกผสม"}</button>`

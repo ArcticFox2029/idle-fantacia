@@ -302,6 +302,17 @@ const I18N = (() => {
     /* ---- small tables ---- */
     "ปกติ": "Normal", "ชั้นยอด": "Elite", "ราตรีต้องสาป": "Cursed Night", "โกลาหล": "Chaos",
     "ธรรมดา": "Common", "พอใช้": "Fair", "ดี": "Good", "ยอดเยี่ยม": "Excellent", "ตำนาน": "Legendary",
+    "กึ่งเทวะ": "Demigod", "เทพสวรรค์": "Celestial",
+
+    /* ---- companion skills ---- */
+    "เขี้ยวคม": "Sharp Fangs", "เขี้ยวคมขึ้น": "Sharper Fangs",
+    "เขี้ยวสังหาร": "Killing Fangs", "เขี้ยวทำลายล้าง": "Ruinous Fangs", "เขี้ยวเทพ": "Divine Fangs",
+    "หนังหนา": "Thick Hide", "หนังหนาขึ้น": "Thicker Hide",
+    "เกล็ดแข็ง": "Hard Scales", "เกล็ดอมตะ": "Undying Scales", "เกราะเทพ": "Divine Scales",
+    "ท่าหนัก": "Heavy Blow", "ท่าหนักแท้": "True Heavy Blow", "ท่าหนักทำลายล้าง": "Ruinous Blow",
+    "คอมโบสามชั้น": "Three-hit Combo", "คอมโบสี่ชั้น": "Four-hit Combo", "คอมโบห้าชั้น": "Five-hit Combo",
+    "ลมหายใจฟื้นฟู": "Restoring Breath", "ลมหายใจศักดิ์สิทธิ์": "Sacred Breath",
+    "ลมหายใจอมตะ": "Undying Breath",
     "ฝึกหัด": "Apprentice", "ชั้นต้น": "Junior", "ชั้นกลาง": "Adept", "ชำนาญ": "Skilled",
     "เชี่ยวชาญ": "Expert", "ยอดฝีมือ": "Master",
     "เริ่มต้น": "Warming up", "เข้าจังหวะ": "In rhythm", "ลื่นไหล": "Flowing", "ไฟลุก": "On fire",

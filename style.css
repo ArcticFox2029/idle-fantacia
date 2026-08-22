@@ -560,6 +560,11 @@ body {
 
 /* Per-pet quality */
 .pet-grade { font-size: 12px; font-weight: 700; margin-bottom: 4px; }
+/* 🎯 [owner 2026-08-22] Two grades above ตำนาน, and they have to look like it from across the
+ * screen. Gold already meant "the best there is"; เทพสวรรค์ takes a light of its own and กึ่งเทวะ
+ * sits between the two so the ladder reads in colour as well as in words. */
+.grade-sss { color: #b9a7ff; text-shadow: 0 0 10px #8f7bff88; }
+.grade-ss  { color: #ffb3f0; text-shadow: 0 0 8px #ff8fe088; }
 .grade-s { color: #ffd66b; }
 .grade-a { color: #7ee787; }
 .grade-b { color: var(--text); }
@@ -1760,3 +1765,10 @@ body::after {
  * two options hides one of them behind a tap for no reason. */
 .lang-row { display: flex; gap: 8px; margin-bottom: 10px; }
 .lang-row .lang-btn { flex: 1; }
+
+/* 🐾 ทักษะสัตว์เลี้ยง — what it has learned, and what the next rank brings. Ninety-nine ranks are
+ * only worth climbing if the climb is visible, so the destination sits under the progress bar. */
+.pet-skills { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; margin-top: 4px; font-size: 12px; }
+.pet-skill { font-size: 14px; cursor: help; }
+.pet-skill-num { color: var(--gold); font-weight: 600; font-variant-numeric: tabular-nums; }
+.pet-next { color: var(--text-dim); font-size: 11px; margin-left: auto; white-space: nowrap; }

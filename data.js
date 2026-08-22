@@ -6,8 +6,16 @@
  * v5 combat-stat split shipped with this left at 4: freshProfile stamped v4, migrate pushed
  * it to v5, and the `p.v === GAME_VERSION` guard then rejected every profile — the game
  * silently refused to create or load anything. balance_check.mjs now fails if the two drift. */
-const GAME_VERSION = 47;
-const MAX_LEVEL = 99;
+const GAME_VERSION = 49;
+/* 🎯 [owner 2026-08-22] "avatar คน เพดานน่าจะไม่กำหนด เพราะวางไว้ว่าให้โตได้เรื่อยๆ ... จริงๆ อยากให้ถึง 999"
+ *
+ * 99 was reachable in about four hours of the best XP route, which is the whole reason it felt like
+ * a ceiling rather than a horizon. The curve underneath (75·L^1.62 + 40·(L−20)^2.3) is steep enough
+ * to carry 999 unchanged — no formula change, just a number that stops getting in the way.
+ *
+ * Not uncapped, which was the other option on the table: a rebirth halves your level, and that only
+ * means something while there is a top to be halved away from. */
+const MAX_LEVEL = 999;
 /* Farming plots grow in PARALLEL and cost no job slot, so the plot count is the real multiplier
  * on everything the skill pays. Every yield below is priced against PLOTS_MAX, not one plot. */
 const PLOTS_START = 3;
@@ -1663,14 +1671,52 @@ const PET_SPECIES = [
  * its own quality per stat, so catching a second slime is a real decision rather than a duplicate.
  * The spread is wide enough to matter and tight enough that a great low-tier pet never beats a
  * poor high-tier one — the tier ladder still leads. */
-const PET_IV_MIN = 0.8;
-const PET_IV_MAX = 1.25;
+/* 🎯 [owner 2026-08-22] Grade bands, the catch ceiling and the fusion ceiling, set by the owner.
+ *
+ * Two ceilings, not one. A wild catch rolls up to PET_IV_CATCH_MAX, which is exactly where ตำนาน
+ * ends — so the best thing the world hands you is a legend, and everything above it has to be bred.
+ * Sharing one constant would have made กึ่งเทวะ and เทพสวรรค์ catchable and emptied fusion of its
+ * purpose.
+ *
+ * The floor moved 0.80 → 0.70 because the owner's new bands put พอใช้ at 0.80: with the old floor
+ * nothing could ever roll below it, so ธรรมดา became a grade that could not occur and
+ * "ธรรมดา + ธรรมดา" was a rule about something that does not exist. It also pulls the catch curve
+ * back down — at 0.80 a wild catch was ยอดเยี่ยม 57% of the time, which made the good grade the
+ * default rather than a result. */
+const PET_IV_MIN = 0.70;
+/* 🎯 [owner 2026-08-22] "ควรเจอ ธรรมดา ดี ดีเยี่ยม เหมือนระบบเดิม แต่การจะหาสายพันธุ์ตำนาน กึ่งเทวะ
+ * เทพ จากการจับมันยากแสนยาก ต้องผสมเอา"
+ *
+ * 1.20 rather than 1.25, and the difference is the whole feel of catching. At 1.25 a legend turned
+ * up every 35 catches; at 1.20 it is one in two hundred, while ธรรมดา/พอใช้/ดี/ยอดเยี่ยม keep the
+ * spread the game has always had. กึ่งเทวะ starts at 1.25 and so cannot be caught at all — the two
+ * top grades are bred or they are not had.
+ *
+ * A caught legend also lands in the BOTTOM half of its band (1.15–1.20) and never the top, which
+ * falls out of this rather than being designed: the ones you find are the lesser legends, and the
+ * strong ones come from breeding. */
+const PET_IV_CATCH_MAX = 1.20;
+
+/* 🎯 [owner 2026-08-22] "กึ่งเทวะ เทพ ต้องผสมเอา จะง่ายกว่า แต่ถ้าถามว่ามีโอกาสไหมที่จะเจอจับได้ คือ <1%"
+ *
+ * So the door is not locked, it is just very rarely open. Two in a hundred wild catches are BLESSED
+ * and roll against the fusion ceiling instead of the catch ceiling. That works out at 0.14% กึ่งเทวะ
+ * and 0.15% เทพสวรรค์ across all catches — about one in seven hundred, which at the endgame catch
+ * rate is some twenty-eight thousand kills. A once-in-a-playthrough story rather than a plan.
+ *
+ * A flat "1% chance of a demigod" would have been the easy version and the wrong one: it would make
+ * the top grade a lottery you can grind, sitting alongside a breeding ladder that is supposed to be
+ * the way there. This keeps breeding as the route and leaves room for a miracle. */
+const PET_BLESSED_CATCH = 0.02;
+const PET_IV_MAX = 1.50;         // fusion can climb past it; nothing else can
 const PET_GRADES = [
-  { at: 1.18, name: "ตำนาน", cls: "s" },
-  { at: 1.10, name: "ยอดเยี่ยม", cls: "a" },
-  { at: 1.00, name: "ดี", cls: "b" },
-  { at: 0.92, name: "พอใช้", cls: "c" },
-  { at: 0,    name: "ธรรมดา", cls: "d" },
+  { at: 1.30, name: "เทพสวรรค์", cls: "sss" },
+  { at: 1.25, name: "กึ่งเทวะ",  cls: "ss" },
+  { at: 1.15, name: "ตำนาน",     cls: "s" },
+  { at: 1.00, name: "ยอดเยี่ยม", cls: "a" },
+  { at: 0.90, name: "ดี",        cls: "b" },
+  { at: 0.80, name: "พอใช้",     cls: "c" },
+  { at: 0,    name: "ธรรมดา",    cls: "d" },
 ];
 function petGrade(iv) {
   const avg = (iv.hp + iv.atk + iv.def) / 3;
@@ -1684,7 +1730,7 @@ function petGrade(iv) {
  * pet" would be a rule nobody can see the answer to without opening a menu, whereas the one walking
  * beside you is on screen already — which is exactly how the owner described it ("ดูง่ายคือ ตัวที่
  * ลงสนาม"). The two bars stop it being automatic: a companion has to have been worth raising. */
-const PET_GRADE_RANK = ["d", "c", "b", "a", "s"];
+const PET_GRADE_RANK = ["d", "c", "b", "a", "s", "ss", "sss"];
 /* 🎯 [owner 2026-08-17: "สัตว์เลี้ยงจุติ ไม่กำหนดขั้น ไม่งั้นมันจะยาก เพราะยิ่งต้นเกม กว่าจะไปขั้น 15
  * นานมาก"] There was a level-15 bar here as well. It was wrong for the moment it matters most: the
  * early rebirths come round fast, a companion takes many game-days to reach 15, and the bar meant
@@ -1701,7 +1747,21 @@ function petGradeAtLeast(cls, min) {
  * ขั้น สายพันธุ์เดียวกันได้สายพันธุ์เดิม ต่างสายพันธุ์แตกแขนงสุ่มได้ตัวใดตัวหนึ่งของพ่อแม่ ระดับ
  * ผสมกันแบบเฉลี่ยแต่มีโชคบวกได้เล็กน้อย modelled and checked in pet_fusion_sim.mjs before this
  * touched game.js — same discipline as guild_sim/shop_sim. */
-const PET_FUSION_GRADE_UP = 0.5;     // owner's own number: "ดี + ดี ก็จะมีโอกาสได้ดีเยี่ยม 50%"
+/* 🎯 [owner 2026-08-22] The chance of leaving a grade, keyed by the grade you are fusing FROM.
+ * It falls as you climb — the owner's ladder, and the reason the top is a project rather than a
+ * purchase. Missing is not a loss: you still get the grade you put in, so a fusion trades two
+ * companions for one and a roll, never for something worse. */
+const PET_FUSION_UP_BY_GRADE = {
+  d: 0.80,     // ธรรมดา   → พอใช้
+  c: 0.70,     // พอใช้    → ดี
+  b: 0.60,     // ดี       → ยอดเยี่ยม
+  a: 0.50,     // ยอดเยี่ยม → ตำนาน
+  s: 0.40,     // ตำนาน    → กึ่งเทวะ
+  ss: 0.30,    // กึ่งเทวะ  → เทพสวรรค์
+};
+/* Kept as the fallback for any grade not listed, and because the old constant is referenced by
+ * name in the fusion simulator's own commentary. */
+const PET_FUSION_GRADE_UP = 0.5;
 const PET_FUSION_LEVEL_LO = 0.90;    // combined-level random multiplier on the parents' average
 const PET_FUSION_LEVEL_HI = 1.35;    // owner's example: lv5 + lv1 (avg 3) "อาจได้ขั้น 3 หรือ 4"
 /* The IV band a fresh roll must land in to score as a given grade — every one of hp/atk/def is
@@ -1721,8 +1781,12 @@ function petGradeBand(cls) {
  * caught it. 38 is where the options separate again (1 / 24 / 31 / 36) AND where the effect
  * saturates — 40, 45 and 50 all produce those same four levels, so anything beyond 38 would be
  * ceiling for its own sake. */
-const PET_MAX_LEVEL = 38;
-const PET_GROWTH = 0.05;          // +5% of base per level
+/* 🎯 [owner 2026-08-22] "pet มีขั้นสูงสุดถึง 99" — and the growth per rank comes down to match, so
+ * ninety-nine ranks are a longer road rather than a stronger companion. At the old +5% a rank-99
+ * pet would sit at ×5.90 of its base, twice what rank 38 gave; at +2% it lands on ×2.96, which is
+ * where rank 38 already was. The power ceiling is unchanged and what fills the road is skills. */
+const PET_MAX_LEVEL = 99;
+const PET_GROWTH = 0.02;          // +2% of base per level
 const PET_DAMAGE_SHARE = 0.25;    // fraction of monster blows the pet soaks
 const PET_EAT_BELOW = 0.4;        // it eats from your provisions under this
 /* 🎯 [changed 2026-08-15, owner: "ดูดค่า exp เราไปใช้ 5-10%"] A companion no longer grows for
@@ -1749,16 +1813,81 @@ function petAttackInterval(level) {
   const t = (Math.min(Math.max(level, 1), PET_MAX_LEVEL) - 1) / (PET_MAX_LEVEL - 1);
   return Math.round(PET_ATTACK_INTERVAL - t * (PET_ATTACK_INTERVAL - PET_ATTACK_INTERVAL_MIN));
 }
-const PET_SPECIAL_LEVEL = 10;    // the rank a companion learns to land a heavy blow
-const PET_SPECIAL_EVERY = 6;     // every Nth of ITS OWN swings, not the fight's
+/* ---------- 🐾 ทักษะสัตว์เลี้ยง (companion skills) ----------
+ * 🎯 [owner 2026-08-22] "ทุก 5 ขั้น จะมีทักษะเพิ่มในการโจมตีหรือป้องกัน หรือ 10 จะมีสกิลคอมโบ สกิลใหญ่
+ * หรือฮีล ซึ่งใช้ฮีลตัวเองและเจ้าของได้"
+ *
+ * Ninety-nine ranks with nothing but a rising number is ninety-nine ranks nobody feels. Something
+ * lands every five, and the every-ten ones are the ones you notice in a fight.
+ *
+ * The heavy blow at rank 10 is not new — it already existed as PET_SPECIAL_* and is simply the
+ * first entry in this table now, so there is one place that answers "what does this rank give me".
+ *
+ * `kind`:
+ *   atk / def   passive, folded into petStats
+ *   heavy       a multiplied strike every Nth of its OWN swings
+ *   combo       several strikes at once, on the same rhythm
+ *   heal        restores the companion AND the player — the owner asked for both
+ */
+const PET_SKILLS = [
+  { lv: 5,  kind: "atk",   value: 0.06, icon: "🗡️", name: "เขี้ยวคม" },
+  { lv: 10, kind: "heavy", value: 2.0,  every: 6, icon: "💥", name: "ท่าหนัก" },
+  { lv: 15, kind: "def",   value: 0.06, icon: "🛡️", name: "หนังหนา" },
+  { lv: 20, kind: "heal",  value: 0.08, every: 8, icon: "💚", name: "ลมหายใจฟื้นฟู" },
+  { lv: 25, kind: "atk",   value: 0.08, icon: "🗡️", name: "เขี้ยวคมขึ้น" },
+  { lv: 30, kind: "combo", value: 3,    every: 9, icon: "🌀", name: "คอมโบสามชั้น" },
+  { lv: 35, kind: "def",   value: 0.08, icon: "🛡️", name: "หนังหนาขึ้น" },
+  { lv: 40, kind: "heavy", value: 2.6,  every: 6, icon: "💥", name: "ท่าหนักแท้" },
+  { lv: 45, kind: "atk",   value: 0.10, icon: "🗡️", name: "เขี้ยวสังหาร" },
+  { lv: 50, kind: "heal",  value: 0.14, every: 7, icon: "💚", name: "ลมหายใจศักดิ์สิทธิ์" },
+  { lv: 55, kind: "def",   value: 0.10, icon: "🛡️", name: "เกล็ดแข็ง" },
+  { lv: 60, kind: "combo", value: 4,    every: 8, icon: "🌀", name: "คอมโบสี่ชั้น" },
+  { lv: 65, kind: "atk",   value: 0.12, icon: "🗡️", name: "เขี้ยวทำลายล้าง" },
+  { lv: 70, kind: "heavy", value: 3.2,  every: 5, icon: "💥", name: "ท่าหนักทำลายล้าง" },
+  { lv: 75, kind: "def",   value: 0.12, icon: "🛡️", name: "เกล็ดอมตะ" },
+  { lv: 80, kind: "heal",  value: 0.20, every: 6, icon: "💚", name: "ลมหายใจอมตะ" },
+  { lv: 85, kind: "atk",   value: 0.15, icon: "🗡️", name: "เขี้ยวเทพ" },
+  { lv: 90, kind: "combo", value: 5,    every: 7, icon: "🌀", name: "คอมโบห้าชั้น" },
+  { lv: 95, kind: "def",   value: 0.15, icon: "🛡️", name: "เกราะเทพ" },
+];
+
+/* Everything unlocked at this rank. Later entries of the same kind REPLACE earlier ones rather than
+ * stacking — rank 70's heavy blow is the rank 10 one grown up, not a second blow beside it. The
+ * passives do stack, because "a little more attack every ten ranks" is the shape of the ladder. */
+function petSkillsAt(lv) {
+  const got = PET_SKILLS.filter((s) => lv >= s.lv);
+  const out = { atk: 0, def: 0, heavy: null, combo: null, heal: null, list: got };
+  for (const s of got) {
+    if (s.kind === "atk") out.atk += s.value;
+    else if (s.kind === "def") out.def += s.value;
+    else out[s.kind] = s;          // last one wins
+  }
+  return out;
+}
+function petNextSkill(lv) { return PET_SKILLS.find((s) => s.lv > lv) || null; }
+
+/* Kept for the save-compat path and because the fight code reads them as fallbacks. */
+const PET_SPECIAL_LEVEL = 10;
+const PET_SPECIAL_EVERY = 6;
 const PET_SPECIAL_MULT  = 2.0;
 
 const PET_XP_DEFAULT = 0.05;
 function petXpToReach(level) {
-  // Derived, not guessed: the whole game yields ~200k combat XP over one full clear, and the
-  // curve is set so 10% raises a companion to the cap, 8% to ~26 and 5% to ~20. Every setting
-  // therefore buys a visibly different animal, which is the point of making it a choice.
-  return level <= 1 ? 0 : Math.floor(950 * Math.pow(level - 1, 1.64));
+  /* Derived, not guessed: the whole game yields ~200k combat XP over one full clear, and the curve
+   * is set so the 10% share raises a companion to the cap. Every setting therefore buys a visibly
+   * different animal, which is the point of making it a choice.
+   *
+   * 🎯 [owner 2026-08-22] The cap moved 38 → 99, and the exponent came down 1.64 → 1.2916 to keep
+   * that promise: reaching rank 99 now costs what rank 38 used to (354,465), so the same play
+   * reaches the same place and what changed is how many stops there are on the way. Left at 1.64 a
+   * rank-99 companion would have needed 1.75 million — about a hundred and seventy-five full clears
+   * — which is not a ceiling, it is a number nobody would ever see.
+   *
+   * 1.2760 rather than the 1.2916 that merely matched the old cost: balance_check measures the XP
+   * the game actually yields (3,299,900 over a full clear) and holds the promise in the first line
+   * of this comment — the 10% share must reach the cap. At 1.2916 it stopped at rank 93, so the
+   * comment and the number disagreed and the check said so. Fitted to the real yield instead. */
+  return level <= 1 ? 0 : Math.floor(950 * Math.pow(level - 1, 1.2760));
 }
 function petStat(base, level) { return Math.round(base * (1 + (level - 1) * PET_GROWTH)); }
 
