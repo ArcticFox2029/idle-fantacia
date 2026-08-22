@@ -642,6 +642,10 @@ function migrate(p) {
     /* The dividend toast changed shape. Nothing stored is involved — divAccrual and the ledger are
      * untouched, only what the message says about them. */
   }
+  if (p.v === 46) {
+    p.v = 47;
+    /* Panel labels translated. Nothing stored changes. */
+  }
   return p.v === GAME_VERSION ? p : null;
 }
 
@@ -1569,26 +1573,26 @@ function renderProfiles() {
       card.classList.add("broken");
       card.innerHTML = `
         <div class="slot-icon">⚠️</div>
-        <h3>อ่านเซฟช่องนี้ไม่ได้</h3>
+        <h3>${T("อ่านเซฟช่องนี้ไม่ได้")}</h3>
         <div class="meta">${escapeHtml(p.__broken)}<br>
-          <b>ข้อมูลยังอยู่ครบ ไม่ได้ถูกลบ</b> — ลองรีเฟรชอีกครั้ง หรือกดสำรองไว้ก่อน</div>
-        <button class="btn" data-retry="${n}">ลองอ่านใหม่</button>
+          <b>${T("ข้อมูลยังอยู่ครบ ไม่ได้ถูกลบ")}</b> — ลองรีเฟรชอีกครั้ง หรือกดสำรองไว้ก่อน</div>
+        <button class="btn" data-retry="${n}">${T("ลองอ่านใหม่")}</button>
         <button class="btn ghost small" data-export="${n}" style="margin-top:8px">⬇️ สำรองเซฟไว้</button>`;
     } else if (p) {
       card.innerHTML = `
         <div class="slot-icon">🧙</div>
         <h3>${escapeHtml(p.name)}</h3>
         <div class="meta">${summarize(p)}</div>
-        <button class="btn" data-play="${n}">เล่นต่อ</button>
+        <button class="btn" data-play="${n}">${T("เล่นต่อ")}</button>
         <button class="btn ghost small" data-export="${n}" style="margin-top:8px">⬇️ ส่งออกเซฟ</button>
-        <button class="btn ghost small" data-del="${n}" style="margin-top:8px">ลบโปรไฟล์</button>`;
+        <button class="btn ghost small" data-del="${n}" style="margin-top:8px">${T("ลบโปรไฟล์")}</button>`;
     } else {
       card.innerHTML = `
         <div class="slot-icon">✨</div>
         <h3>ช่องว่าง ${n}</h3>
-        <div class="meta">เริ่มการผจญภัยใหม่</div>
+        <div class="meta">${T("เริ่มการผจญภัยใหม่")}</div>
         <input maxlength="16" placeholder="ตั้งชื่อนักผจญภัย" data-name="${n}">
-        <button class="btn" data-create="${n}">สร้างโปรไฟล์</button>
+        <button class="btn" data-create="${n}">${T("สร้างโปรไฟล์")}</button>
         <button class="btn ghost small" data-import="${n}" style="margin-top:8px">⬆️ นำเข้าไฟล์เซฟ</button>`;
     }
     row.appendChild(card);
@@ -1605,14 +1609,14 @@ function renderProfiles() {
     if (saveBackend === "server" && !anySave) {
       where.innerHTML = `📁 ยังไม่มีไฟล์เซฟใน <code>game/saves/</code><br>
         <span class="dim">ถ้าเคยเล่นค้างไว้แล้วไม่เห็นตรงนี้ แปลว่าเซฟนั้นอยู่ในเบราว์เซอร์ของ
-        <b>ที่อยู่อื่น</b> — เซฟผูกกับที่อยู่ที่เปิด และหน้านี้อ่านข้ามที่อยู่ไม่ได้<br>
+        <b>${T("ที่อยู่อื่น")}</b> — เซฟผูกกับที่อยู่ที่เปิด และหน้านี้อ่านข้ามที่อยู่ไม่ได้<br>
         ให้เปิดเกมแบบเดิมที่เคยเล่น (ดับเบิลคลิก <code>game/index.html</code>) ในเบราว์เซอร์ตัวเดิม
         กด <b>⬇️ ส่งออกเซฟ</b> แล้วก๊อปไฟล์นั้นมาวางใน <code>game/saves/</code> —
         ชื่อไฟล์อะไรก็ได้ เดี๋ยวระบบรับเข้าช่องให้เอง</span>`;
     } else if (saveBackend === "server") {
       where.innerHTML = `📁 เซฟเก็บเป็นไฟล์ใน <code>game/saves/</code> — คัดลอก สำรอง หรือย้ายเครื่องได้เหมือนไฟล์ทั่วไป
         <span class="dim">(สำรองอัตโนมัติทุกครั้งที่เขียนทับ เก็บไว้ใน <code>saves/backups/</code>)</span><br>
-        <span class="dim">จะนำเข้าด้วยปุ่มก็ได้ หรือก๊อปไฟล์ไปวางเป็น <code>game/saves/slot1.json</code>
+        <span class="dim">${T("จะนำเข้าด้วยปุ่มก็ได้ หรือก๊อปไฟล์ไปวางเป็น ")}<code>game/saves/slot1.json</code>
         แล้วรีเฟรชหน้านี้ก็ได้เหมือนกัน</span>`;
     }
   }
@@ -1834,7 +1838,7 @@ function openOfflinePopup(r) {
         <span class="dim">ตอนไม่อยู่ได้ ${Math.round(OFFLINE_RATE * 100)}% ของการเล่นเอง 
             — ปฏิทินไม่เดิน ความชำนาญไม่ขึ้น แปลงปลูกไม่โต และการล่ามอนสเตอร์ไม่เดินต่อ</span>
       </div>
-      <div class="modal-actions"><button class="btn" data-close>รับของ</button></div>
+      <div class="modal-actions"><button class="btn" data-close>${T("รับของ")}</button></div>
     </div>`;
   document.body.appendChild(back);
   const close = () => { save("กลับมาเล่น"); back.remove(); };
@@ -2068,7 +2072,7 @@ function chooseSource(itemId) {
           </button>`;
         }).join("")}
       </div>
-      <div class="modal-acts"><button class="btn ghost" data-close>ปิด</button></div>
+      <div class="modal-acts"><button class="btn ghost" data-close>${T("ปิด")}</button></div>
     </div>`;
   document.body.appendChild(back);
   const close = () => back.remove();
@@ -5081,7 +5085,7 @@ function openGiftDialog(villagerId) {
           </button>`;
         }).join("") || `<div class="empty-note">กระเป๋าว่าง — ไปหาของก่อน</div>`}
       </div>
-      <div class="modal-acts"><button class="btn ghost" data-close>ปิด</button></div>
+      <div class="modal-acts"><button class="btn ghost" data-close>${T("ปิด")}</button></div>
     </div>`;
   document.body.appendChild(back);
   const close = () => back.remove();
@@ -5136,8 +5140,8 @@ function renderFamily() {
     </div>` : `
     <div class="fam-card is-empty">
       <div class="fam-face">💗</div>
-      <div class="fam-body"><b>ยังไม่มีคู่ชีวิต</b>
-        <small>ไปสนิทกับใครสักคนที่ลานหมู่บ้านก่อน</small></div>
+      <div class="fam-body"><b>${T("ยังไม่มีคู่ชีวิต")}</b>
+        <small>${T("ไปสนิทกับใครสักคนที่ลานหมู่บ้านก่อน")}</small></div>
     </div>`;
 
   const petCard = pet ? (() => {
@@ -5155,8 +5159,8 @@ function renderFamily() {
   })() : `
     <div class="fam-card is-empty">
       <div class="fam-face">🐾</div>
-      <div class="fam-body"><b>ยังไม่มีเพื่อนร่วมทาง</b>
-        <small>จับสัตว์เลี้ยงได้จากการล่ามอนสเตอร์</small></div>
+      <div class="fam-body"><b>${T("ยังไม่มีเพื่อนร่วมทาง")}</b>
+        <small>${T("จับสัตว์เลี้ยงได้จากการล่ามอนสเตอร์")}</small></div>
     </div>`;
 
   const kidCards = kids.map((k) => {
@@ -5527,7 +5531,7 @@ function renderFarm() {
       const canPlant = seedId && (P.inv[seedId] || 0) > 0;
       card.innerHTML = `
         <div class="head"><div class="name">🪴 แปลงที่ ${i + 1}</div>
-          <div class="req">ว่าง</div></div>
+          <div class="req">${T("ว่าง")}</div></div>
         <div class="detail">${pick
           ? (canPlant ? `กดเพื่อปลูก${escapeHtml(farmAction(pick).name)}`
                       : `ไม่มี${escapeHtml(ITEMS[seedId].name)} — ซื้อที่แผงด้านล่าง หรือไปล่ามอนสเตอร์`)
@@ -5761,11 +5765,11 @@ function renderEstates(grid, extra) {
     const sum = document.createElement("div");
     sum.className = "money-summary";
     sum.innerHTML = `
-      <div class="money-stat"><span>บ้านที่ถือ</span><b>${owned.length} หลัง</b></div>
-      <div class="money-stat"><span>ทุนที่จมอยู่ (ขายคืนได้เต็ม)</span><b>${fmtNum(capital)}</b></div>
-      <div class="money-stat"><span>ค่าเช่า/วันในเกม</span><b class="good">${Math.round(rentDay).toLocaleString()}</b></div>
-      <div class="money-stat"><span>ผลตอบแทนต่อทุน</span><b>${capital > 0 ? (rentDay * DAYS_PER_YEAR / capital * 100).toFixed(1) : "0.0"}%/ปี</b></div>
-      <div class="money-stat"><span>ค่าเช่าสะสม</span><b>${fmtNum(Math.round(P.stats.rentEarned || 0))}</b></div>`;
+      <div class="money-stat"><span>${T("บ้านที่ถือ")}</span><b>${owned.length} หลัง</b></div>
+      <div class="money-stat"><span>${T("ทุนที่จมอยู่ (ขายคืนได้เต็ม)")}</span><b>${fmtNum(capital)}</b></div>
+      <div class="money-stat"><span>${T("ค่าเช่า/วันในเกม")}</span><b class="good">${Math.round(rentDay).toLocaleString()}</b></div>
+      <div class="money-stat"><span>${T("ผลตอบแทนต่อทุน")}</span><b>${capital > 0 ? (rentDay * DAYS_PER_YEAR / capital * 100).toFixed(1) : "0.0"}%/ปี</b></div>
+      <div class="money-stat"><span>${T("ค่าเช่าสะสม")}</span><b>${fmtNum(Math.round(P.stats.rentEarned || 0))}</b></div>`;
     extra.appendChild(sum);
   }
 
@@ -5791,9 +5795,9 @@ function renderEstateBuy(grid, owned) {
     const note = document.createElement("div");
     note.className = "action-card full-card";
     note.innerHTML = `<div class="detail">
-      อสังหาคือที่พักเงินก้อนที่ <b>ไม่ต้องลุ้น</b> — ราคาไม่ขึ้นไม่ลง ขายคืนได้เท่าที่ซื้อเสมอ
-      ค่าเช่าเปล่า ๆ ให้ ${Math.round(RENT_YIELD * 100)}%/ปี ซึ่ง<b>น้อยกว่าปันผลหุ้น</b> โดยตั้งใจ<br>
-      สิ่งที่ทำให้มันคุ้มคือ <b>เฟอร์นิเจอร์</b> — แต่ละชิ้นทำจากคนละสายอาชีพ
+      อสังหาคือที่พักเงินก้อนที่ <b>${T("ไม่ต้องลุ้น")}</b> — ราคาไม่ขึ้นไม่ลง ขายคืนได้เท่าที่ซื้อเสมอ
+      ค่าเช่าเปล่า ๆ ให้ ${Math.round(RENT_YIELD * 100)}%/ปี ซึ่ง<b>${T("น้อยกว่าปันผลหุ้น")}</b> โดยตั้งใจ<br>
+      สิ่งที่ทำให้มันคุ้มคือ <b>${T("เฟอร์นิเจอร์")}</b> — แต่ละชิ้นทำจากคนละสายอาชีพ
       แต่งครบทั้งหลังค่าเช่าเพิ่มได้ถึง ${Math.round(FURNITURE.reduce((t, f) => t + f.rent, 0) * 100)}%
       ของที่คุณผลิตเองจึงมีทางใช้นอกจากขายทิ้ง<br>
       <span class="rb-warn">ไม่มีค่าเสื่อม ไม่ต้องซ่อม — สิ่งที่บังคับให้ถือยาวคือค่าธรรมเนียมขาย
@@ -5922,10 +5926,10 @@ function renderGuild() {
   const summary = document.createElement("div");
   summary.className = "money-summary";
   summary.innerHTML = `
-    <div class="money-stat"><span>สถาบัน</span><b>${t.name}</b></div>
-    <div class="money-stat"><span>คนในสังกัด</span><b>${g.roster.length}/${t.beds}${hurt ? ` · เจ็บ ${hurt}` : ""}</b></div>
-    <div class="money-stat"><span>ค่าเลี้ยง/วันในเกม</span><b class="bad">${guildUpkeepPerDay().toLocaleString()}</b></div>
-    <div class="money-stat"><span>รอรับ</span><b class="${pending.gold > 0 ? "good" : ""}">${Math.floor(pending.gold).toLocaleString()}${nItems ? ` · ของ ${nItems}` : ""}</b></div>`;
+    <div class="money-stat"><span>${T("สถาบัน")}</span><b>${t.name}</b></div>
+    <div class="money-stat"><span>${T("คนในสังกัด")}</span><b>${g.roster.length}/${t.beds}${hurt ? ` · เจ็บ ${hurt}` : ""}</b></div>
+    <div class="money-stat"><span>${T("ค่าเลี้ยง/วันในเกม")}</span><b class="bad">${guildUpkeepPerDay().toLocaleString()}</b></div>
+    <div class="money-stat"><span>${T("รอรับ")}</span><b class="${pending.gold > 0 ? "good" : ""}">${Math.floor(pending.gold).toLocaleString()}${nItems ? ` · ของ ${nItems}` : ""}</b></div>`;
   extra.appendChild(summary);
 
   const tabs = document.createElement("div");
@@ -5949,7 +5953,7 @@ function renderGuild() {
     <div class="detail">ล่าไปแล้ว ${pending.rounds || 0} รอบตั้งแต่รับครั้งก่อน
       ${nItems ? `<br>${Object.entries(pending.items).map(([id, n]) => `${ITEMS[id]?.icon || "📦"} ${ITEMS[id]?.name || id} ×${n}`).join(" · ")}` : ""}</div>
     <div class="cd-actions">
-      <button class="farm-btn harvest" data-gcollect>รับของและเงิน</button>
+      <button class="farm-btn harvest" data-gcollect>${T("รับของและเงิน")}</button>
       <label class="chk"><input type="checkbox" data-gauto ${g.autoCollect ? "checked" : ""}> รับอัตโนมัติ</label>
     </div>`;
   grid.appendChild(take);
@@ -5967,12 +5971,12 @@ function renderGuildOpening(grid, extra) {
   const note = document.createElement("div");
   note.className = "shop-intro";
   note.innerHTML = `
-    <b>สถาบันฮันเตอร์คืออะไร</b><br>
+    <b>${T("สถาบันฮันเตอร์คืออะไร")}</b><br>
     ซื้อโรงเรียน รับเด็กเข้ามาเลี้ยง ฝึกจนสอบเลื่อนขั้นได้ แล้วส่งเป็นทีมออกล่ามอนสเตอร์แทนเรา<br>
-    ทีมจะล่าเองทุกวันในเกม ได้ทั้งค่าหัวและวัตถุดิบ — <b>แต่ช่วงแรกขาดทุนแน่นอน</b>
+    ทีมจะล่าเองทุกวันในเกม ได้ทั้งค่าหัวและวัตถุดิบ — <b>${T("แต่ช่วงแรกขาดทุนแน่นอน")}</b>
     เพราะเด็กขั้น F ยังหาเงินไม่คุ้มค่าข้าว กว่าจะคืนทุนใช้เวลาราวเจ็ดปีในเกม<br>
     เลี้ยงคนไว้เยอะเกินก็ขาดทุน ส่งไปเป้าที่เกินตัวก็มีคนตาย และคนที่ตายคือคนที่เราลงทุนฝึกมาหลายปี
-    <br><b>ไม่กินช่องงาน</b> — ทำงานอยู่เบื้องหลังพร้อมกับที่เราทำอย่างอื่น`;
+    <br><b>${T("ไม่กินช่องงาน")}</b> — ทำงานอยู่เบื้องหลังพร้อมกับที่เราทำอย่างอื่น`;
   extra.appendChild(note);
 
   const card = document.createElement("div");
@@ -5983,7 +5987,7 @@ function renderGuildOpening(grid, extra) {
       <div class="req ${can ? "good" : "bad"}">${t.cost.toLocaleString()} 💰</div></div>
     <div class="detail">เตียง ${t.beds} คน · ส่งได้ ${t.squads} ทีม · รับสัญญาได้ ${t.zones} โซนแรก
       <br>ค่าดูแลสถาบันคงที่ ${t.fixed.toLocaleString()} 💰/วันในเกม บวกค่าเลี้ยงรายหัว</div>
-    <div class="cd-actions"><button class="farm-btn harvest" data-gbuild ${can ? "" : "disabled"}>สร้างสถาบัน</button></div>`;
+    <div class="cd-actions"><button class="farm-btn harvest" data-gbuild ${can ? "" : "disabled"}>${T("สร้างสถาบัน")}</button></div>`;
   grid.appendChild(card);
   card.querySelector("[data-gbuild]").onclick = () => { if (guildBuild()) renderGuild(); };
 
@@ -6072,7 +6076,7 @@ function renderGuildSquads(grid) {
       <div class="detail">เตียง ${t.beds} → ${next.beds} · ทีม ${t.squads} → ${next.squads}
         · โซน ${t.zones} → ${next.zones} · ค่าเลี้ยงต่อหัว ×${t.upkeepMult.toFixed(2)} → ×${next.upkeepMult.toFixed(2)}
         <br>เด็กที่เก่งเกินโซนที่สถาบันรับได้ ก็ไม่มีที่ให้ไป — โรงเรียนที่ใหญ่ขึ้นคือสิ่งที่ปลดล็อกเป้าที่รวยกว่า</div>
-      <div class="cd-actions"><button class="farm-btn harvest" data-gup ${can ? "" : "disabled"}>อัปเกรด</button></div>`;
+      <div class="cd-actions"><button class="farm-btn harvest" data-gup ${can ? "" : "disabled"}>${T("อัปเกรด")}</button></div>`;
     grid.appendChild(c);
     c.querySelector("[data-gup]").onclick = () => { if (guildUpgrade()) { save(); renderGuild(); } };
   }
@@ -6122,7 +6126,7 @@ function renderGuildIntake(grid) {
   head.className = "action-card full-card";
   head.innerHTML = `<div class="detail">
     ผู้สมัครรอบใหม่มาทุก ${GUILD_APPLICANT_DAYS} วันในเกม · เตียงว่าง ${Math.max(0, t.beds - g.roster.length)} เตียง<br>
-    ทุกคนเข้ามาที่ขั้น F เหมือนกันหมด — สิ่งที่ต้องตัดสินใจคือ<b>รับกี่คน</b> ไม่ใช่รับใคร
+    ทุกคนเข้ามาที่ขั้น F เหมือนกันหมด — สิ่งที่ต้องตัดสินใจคือ<b>${T("รับกี่คน")}</b> ไม่ใช่รับใคร
     เพราะทุกปากที่รับเข้ามากินค่าอาหารทุกวัน ตั้งแต่วันแรกที่ยังหาเงินไม่ได้</div>`;
   grid.appendChild(head);
   for (const a of g.applicants || []) {
@@ -6130,7 +6134,7 @@ function renderGuildIntake(grid) {
     c.className = "action-card";
     c.innerHTML = `
       <div class="head"><div class="name">🧑‍🎓 ${a.name}</div><div class="req">ขั้น F</div></div>
-      <div class="detail">อยากเป็นฮันเตอร์ ยังไม่เคยออกสนามจริง</div>
+      <div class="detail">${T("อยากเป็นฮันเตอร์ ยังไม่เคยออกสนามจริง")}</div>
       <div class="cd-actions"><button class="farm-btn harvest" data-grecruit="${a.id}" ${full ? "disabled" : ""}>
         ${full ? "เตียงเต็ม" : "รับเลี้ยง"}</button></div>`;
     grid.appendChild(c);
@@ -6205,13 +6209,13 @@ function renderShops() {
   const summary = document.createElement("div");
   summary.className = "money-summary";
   summary.innerHTML = `
-    <div class="money-stat"><span>กำไรเฉลี่ย/วันในเกม</span>
+    <div class="money-stat"><span>${T("กำไรเฉลี่ย/วันในเกม")}</span>
       <b class="${perDay >= 0 ? "good" : "bad"}">${Math.round(perDay).toLocaleString()}</b></div>
-    <div class="money-stat"><span>ค่าจ้างรวม/วัน</span><b class="bad">${Math.round(shopWagesPerDay(sh)).toLocaleString()}</b></div>
-    <div class="money-stat"><span>ลูกค้าประจำ</span><b>${sh.regulars.toFixed(1)}/${tier.regulars}</b></div>
-    <div class="money-stat"><span>ชื่อเสียง</span><b class="${sh.rep > 0.7 ? "good" : sh.rep < 0.4 ? "bad" : ""}">${Math.round(sh.rep * 100)}%</b></div>
-    <div class="money-stat"><span>วัตถุดิบ / สินค้า</span><b>${sh.raw.toFixed(1)} / ${sh.goods.toFixed(1)}</b></div>
-    <div class="money-stat"><span>พนักงาน</span><b>${sh.staff.length}/${tier.slots}</b></div>`;
+    <div class="money-stat"><span>${T("ค่าจ้างรวม/วัน")}</span><b class="bad">${Math.round(shopWagesPerDay(sh)).toLocaleString()}</b></div>
+    <div class="money-stat"><span>${T("ลูกค้าประจำ")}</span><b>${sh.regulars.toFixed(1)}/${tier.regulars}</b></div>
+    <div class="money-stat"><span>${T("ชื่อเสียง")}</span><b class="${sh.rep > 0.7 ? "good" : sh.rep < 0.4 ? "bad" : ""}">${Math.round(sh.rep * 100)}%</b></div>
+    <div class="money-stat"><span>${T("วัตถุดิบ / สินค้า")}</span><b>${sh.raw.toFixed(1)} / ${sh.goods.toFixed(1)}</b></div>
+    <div class="money-stat"><span>${T("พนักงาน")}</span><b>${sh.staff.length}/${tier.slots}</b></div>`;
   extra.appendChild(summary);
 
   if (P.shops.length > 1 || SHOP_TIERS[sh.tier + 1] || true) {
@@ -6251,8 +6255,8 @@ function renderShopOpening(grid, extra) {
   const note = document.createElement("div");
   note.className = "action-card full-card";
   note.innerHTML = `<div class="detail">
-    ร้านทำงานเองทุกวันในเกม <b>ไม่กินช่องงาน</b> — แต่ค่าจ้างพนักงานออกทุกวันไม่ว่าจะขายได้หรือไม่
-    ซึ่งเป็นเหตุผลเดียวที่ธุรกิจนี้ <b class="bad">ขาดทุนได้จริง</b><br>
+    ร้านทำงานเองทุกวันในเกม <b>${T("ไม่กินช่องงาน")}</b> — แต่ค่าจ้างพนักงานออกทุกวันไม่ว่าจะขายได้หรือไม่
+    ซึ่งเป็นเหตุผลเดียวที่ธุรกิจนี้ <b class="bad">${T("ขาดทุนได้จริง")}</b><br>
     สายพานคือ 🏹 นักล่าหาวัตถุดิบ → 🔨 ช่างแปรรูป → 💁 พ่อค้าขาย · คุณส่งวัตถุดิบจากกระเป๋าเข้าไปเองก็ได้
     ${P.brand > 0.05 ? `<br><b class="good">⭐ ชื่อเสียงที่สะสมไว้จะพาลูกค้าประจำ ${(SHOP_BRAND_CARRY * P.brand).toFixed(1)} คนมาให้ร้านใหม่ตั้งแต่วันแรก</b>` : ""}
   </div>`;
@@ -6382,7 +6386,7 @@ function renderShopHiring(grid, sh, tier) {
   hint.className = "action-card full-card";
   hint.innerHTML = `<div class="detail">
     ค่าสถิติของผู้สมัครแสดงเป็นช่วงจนกว่าจะจ่ายค่าตรวจประวัติ ${SHOP_VETTING_COST} 💰<br>
-    <b>ความซื่อสัตย์คือค่าที่คุ้มที่สุดที่จะรู้</b> — คนซื่อกดค่าจ้างได้โดยไม่โดนยักยอก คนไม่ซื่อจ่ายเต็มก็ไม่ขโมย
+    <b>${T("ความซื่อสัตย์คือค่าที่คุ้มที่สุดที่จะรู้")}</b> — คนซื่อกดค่าจ้างได้โดยไม่โดนยักยอก คนไม่ซื่อจ่ายเต็มก็ไม่ขโมย
     แต่กดเมื่อไหร่เจอเมื่อนั้น</div>`;
   grid.appendChild(hint);
 
@@ -6430,8 +6434,8 @@ function openShipDialog(sh) {
         return `<button class="ship-row" data-item="${id}">
           <span>${ITEMS[id].icon} ${escapeHtml(ITEMS[id].name)} ×${n}</span>
           <span class="lr-amt">+${(ITEMS[id].sell * n / SHOP_RAW_PER_GOLD).toFixed(1)} หน่วย</span></button>`;
-      }).join("") : '<div class="modal-sub">ไม่มีของที่ส่งได้</div>'}</div>
-      <div class="modal-actions"><button class="btn" data-close>ปิด</button></div>
+      }).join("") : '<div class="modal-sub">${T("ไม่มีของที่ส่งได้")}</div>'}</div>
+      <div class="modal-actions"><button class="btn" data-close>${T("ปิด")}</button></div>
     </div>`;
   document.body.appendChild(back);
   const close = () => { back.remove(); renderShops(); refreshSidebar(); };
@@ -6459,11 +6463,11 @@ function renderMoney() {
   const summary = document.createElement("div");
   summary.className = "money-summary";
   summary.innerHTML = `
-    <div class="money-stat"><span>ทองในมือ</span><b class="${P.gold < 0 ? "bad" : ""}">${P.gold.toLocaleString()}</b></div>
-    <div class="money-stat"><span>ฝากธนาคาร</span><b>${Math.floor(bankBalance()).toLocaleString()}</b></div>
-    <div class="money-stat"><span>มูลค่าหุ้นที่ถือ</span><b>${Math.round(portfolioValue()).toLocaleString()}</b></div>
+    <div class="money-stat"><span>${T("ทองในมือ")}</span><b class="${P.gold < 0 ? "bad" : ""}">${P.gold.toLocaleString()}</b></div>
+    <div class="money-stat"><span>${T("ฝากธนาคาร")}</span><b>${Math.floor(bankBalance()).toLocaleString()}</b></div>
+    <div class="money-stat"><span>${T("มูลค่าหุ้นที่ถือ")}</span><b>${Math.round(portfolioValue()).toLocaleString()}</b></div>
     <div class="money-stat"><span>กำไรลงทุนปีที่ ${d.year}</span><b>${profit.toLocaleString()}</b></div>
-    <div class="money-stat"><span>ภาษีที่ต้องจ่ายถ้าจบปีนี้</span>
+    <div class="money-stat"><span>${T("ภาษีที่ต้องจ่ายถ้าจบปีนี้")}</span>
       <b class="${est > 0 ? "bad" : "good"}">${est.toLocaleString()}</b></div>`;
   extra.appendChild(summary);
 
@@ -6562,19 +6566,19 @@ function renderBankTab(grid) {
       ดอกเบี้ยวันละ <b class="good">${fmtNum(Math.round(bankSlips().reduce((t, sl) => t + sl.amount * slipRate(sl) / DAYS_PER_YEAR, 0)))}</b>
       · ได้รับปีที่ ${today().year} แล้ว <b class="good">${fmtNum(Math.round(P.bank.yearInterest || 0))}</b>
       · เข้าบัญชีทุกวันในเกม<br>
-      <b>ฝากแต่ละครั้งเป็นใบของตัวเอง</b> มีอายุและดอกเบี้ยของมันเอง — ถอนจะกินใบใหม่สุดก่อน
+      <b>${T("ฝากแต่ละครั้งเป็นใบของตัวเอง")}</b> มีอายุและดอกเบี้ยของมันเอง — ถอนจะกินใบใหม่สุดก่อน
       ใบเก่าจึงไม่เสียอายุ<br>
       ดอกเบี้ยนับเป็นกำไรลงทุน จึงถูกคิดภาษีปลายปีเหมือนปันผล
     </div>
     <div class="bank-row">
       <input type="number" id="bank-amt" min="1" placeholder="จำนวนทอง">
-      <button class="farm-btn plant" data-dep>ฝาก</button>
-      <button class="farm-btn harvest" data-wd>ถอน</button>
+      <button class="farm-btn plant" data-dep>${T("ฝาก")}</button>
+      <button class="farm-btn harvest" data-wd>${T("ถอน")}</button>
     </div>
     <div class="bank-row quick">
-      <button class="q-half" data-quick="dep-half">ฝากครึ่งหนึ่ง</button>
-      <button class="q-in" data-quick="dep-all">ฝากทั้งหมด</button>
-      <button class="q-out" data-quick="wd-all">ถอนทั้งหมด</button>
+      <button class="q-half" data-quick="dep-half">${T("ฝากครึ่งหนึ่ง")}</button>
+      <button class="q-in" data-quick="dep-all">${T("ฝากทั้งหมด")}</button>
+      <button class="q-out" data-quick="wd-all">${T("ถอนทั้งหมด")}</button>
     </div>`;
   grid.appendChild(card);
 
@@ -6660,9 +6664,9 @@ function renderMarketTab(grid, sizeId) {
         </div>
       </div>
       <div class="detail company-line">
-        <span>ปันผล <b>${(c.yield * 100).toFixed(0)}%/ปี</b></span>
-        <span>จ่ายทุก <b>${c.divDays} วัน</b></span>
-        <span>ถือ <b>${shares}%</b></span>
+        <span>${T("ปันผล ")}<b>${(c.yield * 100).toFixed(0)}%/ปี</b></span>
+        <span>${T("จ่ายทุก ")}<b>${c.divDays} วัน</b></span>
+        <span>${T("ถือ ")}<b>${shares}%</b></span>
         <span class="dim">ซื้อขาด ${(c.base * SHARES_PER_COMPANY).toLocaleString()}</span>
       </div>
       ${open ? companyDetailHtml(c, px, shares) : ""}`;
@@ -6685,10 +6689,10 @@ function companyDetailHtml(c, px, shares) {
   const room = SHARES_PER_COMPANY - shares;
   return `<div class="company-detail">
     <div class="cd-grid">
-      <div><span>ราคายุติธรรม</span><b>${c.base.toLocaleString()}</b></div>
-      <div><span>ราคาตอนนี้</span><b>${Math.round(px).toLocaleString()}</b></div>
-      <div><span>ความเหวี่ยงต่อวัน</span><b>±${(c.vol * 100).toFixed(1)}%</b></div>
-      <div><span>ปันผลรอบหน้าของคุณ</span><b>${perPayout.toLocaleString()}</b></div>
+      <div><span>${T("ราคายุติธรรม")}</span><b>${c.base.toLocaleString()}</b></div>
+      <div><span>${T("ราคาตอนนี้")}</span><b>${Math.round(px).toLocaleString()}</b></div>
+      <div><span>${T("ความเหวี่ยงต่อวัน")}</span><b>±${(c.vol * 100).toFixed(1)}%</b></div>
+      <div><span>${T("ปันผลรอบหน้าของคุณ")}</span><b>${perPayout.toLocaleString()}</b></div>
       ${h ? `<div><span>ต้นทุนที่จ่ายไป</span><b>${h.cost.toLocaleString()}</b></div>
              <div><span>กำไร/ขาดทุนถ้าขายตอนนี้</span>
                <b class="${pl >= 0 ? "good" : "bad"}">${pl >= 0 ? "+" : ""}${pl.toLocaleString()}</b></div>` : ""}
@@ -6699,10 +6703,10 @@ function companyDetailHtml(c, px, shares) {
     <div class="cd-actions">
       <button data-buy="1"${room < 1 ? " disabled" : ""}>ซื้อ 1%</button>
       <button data-buy="10"${room < 1 ? " disabled" : ""}>ซื้อ 10%</button>
-      <button data-buy="max"${room < 1 ? " disabled" : ""}>ซื้อเท่าที่ไหว</button>
+      <button data-buy="max"${room < 1 ? " disabled" : ""}>${T("ซื้อเท่าที่ไหว")}</button>
       <button data-sell="1"${shares < 1 ? " disabled" : ""}>ขาย 1%</button>
       <button data-sell="10"${shares < 1 ? " disabled" : ""}>ขาย 10%</button>
-      <button data-sell="all"${shares < 1 ? " disabled" : ""}>ขายทั้งหมด</button>
+      <button data-sell="all"${shares < 1 ? " disabled" : ""}>${T("ขายทั้งหมด")}</button>
     </div>
   </div>`;
 }
@@ -6773,13 +6777,13 @@ function renderTax() {
   const seized = taxSeized();
   $("#view-extra").innerHTML = `
     <div class="money-summary">
-      <div class="money-stat"><span>ค้างชำระ (ปีก่อน)</span>
+      <div class="money-stat"><span>${T("ค้างชำระ (ปีก่อน)")}</span>
         <b class="${owed > 0 ? "bad" : "good"}">${fmtNum(owed)}</b></div>
-      <div class="money-stat"><span>ปีนี้สะสมถึงวันนี้</span>
+      <div class="money-stat"><span>${T("ปีนี้สะสมถึงวันนี้")}</span>
         <b class="${running > 0 ? "" : "good"}">${fmtNum(running)}</b></div>
-      <div class="money-stat"><span>จ่ายภาษีสะสมทั้งชีวิต</span>
+      <div class="money-stat"><span>${T("จ่ายภาษีสะสมทั้งชีวิต")}</span>
         <b>${fmtNum(Math.round(P.tax?.paidTotal || 0))}</b></div>
-      <div class="money-stat"><span>สถานะ</span>
+      <div class="money-stat"><span>${T("สถานะ")}</span>
         <b class="${seized ? "bad" : "good"}">${seized ? "🚨 ธุรกิจถูกยึด" : "ปกติ"}</b></div>
       ${owed > 0 ? `<div class="money-stat"><span>ค้างมาแล้ว</span>
         <b class="${overdue >= TAX_SEIZE_DAYS ? "bad" : ""}">${overdue}/${TAX_SEIZE_DAYS} วัน</b></div>` : ""}
@@ -6805,7 +6809,7 @@ function renderTax() {
     payAll.innerHTML = `
       <div class="head"><div class="name">รวมทั้งหมด ${fmtNum(owed)} 💰</div>
         <div class="req">มีจ่าย ${fmtNum(Math.max(0, Math.floor(P.gold)) + Math.floor(bankBalance()))}</div></div>
-      <div class="detail">หักจากทองในมือก่อน แล้วจึงดึงจากเงินฝาก (ใบใหม่สุดก่อน)</div>
+      <div class="detail">${T("หักจากทองในมือก่อน แล้วจึงดึงจากเงินฝาก (ใบใหม่สุดก่อน)")}</div>
       <div class="cd-actions"><button class="farm-btn harvest" data-paytax="all">🧾 ชำระทั้งหมด</button></div>`;
     grid.appendChild(payAll);
 
@@ -6822,7 +6826,7 @@ function renderTax() {
           <br>ค้างมา ${late} วัน${late >= TAX_SEIZE_DAYS
             ? ` — <b class="bad">ถูกยึดแล้ว ค่าปรับวันละ ${Math.round(TAX_LATE_DAILY * 1000) / 10}%</b>`
             : ` · ยึดเมื่อครบ ${TAX_SEIZE_DAYS} วัน`}</div>
-        <div class="cd-actions"><button class="farm-btn harvest" data-paytax="${b.id}">ชำระใบนี้</button></div>`;
+        <div class="cd-actions"><button class="farm-btn harvest" data-paytax="${b.id}">${T("ชำระใบนี้")}</button></div>`;
       grid.appendChild(card);
     }
   }
@@ -6875,7 +6879,7 @@ function renderTax() {
   for (const k of TAX_KINDS) {
     const base = taxBaseFor(k.id);
     const would = taxOwedFor(k.id, base);
-    const rows = [`<tr><td>ไม่เกิน ${fmtNum(k.free)}</td><td>ยกเว้น</td><td></td></tr>`];
+    const rows = [`<tr><td>ไม่เกิน ${fmtNum(k.free)}</td><td>${T("ยกเว้น")}</td><td></td></tr>`];
     let floor = k.free;
     for (const b of k.brackets) {
       const hit = base > floor;
@@ -6890,7 +6894,7 @@ function renderTax() {
       <div class="head"><div class="name">${k.icon} ${k.name}</div>
         <div class="req">ตอนนี้ ${fmtNum(base)} → ${fmtNum(would)}</div></div>
       <div class="detail">${escapeHtml(k.what)}</div>
-      <table class="tax-table"><tr><th>ช่วง</th><th>อัตรา</th><th></th></tr>${rows.join("")}</table>`;
+      <table class="tax-table"><tr><th>${T("ช่วง")}</th><th>${T("อัตรา")}</th><th></th></tr>${rows.join("")}</table>`;
     grid.appendChild(card);
   }
 
@@ -6919,12 +6923,12 @@ function renderRebirth() {
   const keep = document.createElement("div");
   keep.className = "money-summary";
   keep.innerHTML = `
-    <div class="money-stat"><span>จุติมาแล้ว</span><b>${P.rebirths || 0} ครั้ง</b></div>
+    <div class="money-stat"><span>${T("จุติมาแล้ว")}</span><b>${P.rebirths || 0} ครั้ง</b></div>
     <div class="money-stat"><span>บุญเก่า — XP ทุกสาย</span><b class="good">+${(karmaXp() * 100).toFixed(1)}%</b></div>
     <div class="money-stat"><span>บุญเก่า — ทองที่หาได้</span><b class="good">+${(karmaGold() * 100).toFixed(1)}%</b></div>
-    <div class="money-stat"><span>จุติตอนนี้จะได้บุญ</span>
+    <div class="money-stat"><span>${T("จุติตอนนี้จะได้บุญ")}</span>
       <b class="${canRebirth() ? "good" : "bad"}">+${(karmaGainFor(combatLevel(), P.rebirths || 0).xp * 100).toFixed(1)}% XP</b></div>
-    <div class="money-stat"><span>เลเวลรวมตอนนี้</span><b>${combatLevel()}</b></div>
+    <div class="money-stat"><span>${T("เลเวลรวมตอนนี้")}</span><b>${combatLevel()}</b></div>
     ${(() => {
       /* Say what happens to the companion BEFORE the button is pressed. The bars are invisible
        * otherwise — a level and a grade you would have to go and check — and finding out that the
@@ -6939,7 +6943,7 @@ function renderRebirth() {
       <div class="money-stat"><span>สัตว์เลี้ยงที่จะเสียไป</span>
         <b class="${lost ? "bad" : ""}">${lost} ตัว</b></div>`;
     })()}
-    <div class="money-stat"><span>สายพันธุ์ที่เคยเจอ (เก็บไว้)</span>
+    <div class="money-stat"><span>${T("สายพันธุ์ที่เคยเจอ (เก็บไว้)")}</span>
       <b class="good">${Object.keys(P.seenPets || {}).length}/${PET_SPECIES.length}</b></div>
     <div class="money-stat"><span>🏦 เงินฝาก (รอด)</span>
       <b class="good">${fmtNum(Math.floor(bankBalance()))}</b></div>
@@ -6973,15 +6977,15 @@ function renderRebirth() {
   card.innerHTML = `
     <div class="detail keeps">
       <b>สิ่งที่ไม่หาย:</b> 🏆 ความสำเร็จทั้งหมดและโบนัสของมัน · 🎒 ของในกระเป๋าทุกชิ้น ·
-      🏦 <b class="good">เงินฝากในธนาคาร</b> · 🪴 แปลงปลูก · 🏪 ของที่ซื้อจากร้าน ·
+      🏦 <b class="good">${T("เงินฝากในธนาคาร")}</b> · 🪴 แปลงปลูก · 🏪 ของที่ซื้อจากร้าน ·
       📖 บันทึกสายพันธุ์สัตว์เลี้ยงที่เคยเจอ<br>
       <b class="good">เลเวลอาชีพทุกสายอยู่ครบ:</b> ${SKILLS.map((sk) =>
         `${sk.icon} ${escapeHtml(sk.name)} ${levelFromXp(P.xp[sk.id] || 0)}`).join(" · ")}
       — ความชำนาญที่สะสมไว้ไม่หายไปไหน รอบใหม่ไม่ต้องไต่ใหม่ทั้งหมด แค่ต้องหาเงินใหม่<br>
       <b>สิ่งที่ลดลง:</b> ค่าสเตตัสการล่าทั้งสามช่อง หารครึ่ง<br>
       <b class="bad">สิ่งที่หายไปทั้งหมด:</b> 🐾 สัตว์เลี้ยงทุกตัวถูกปล่อยคืนธรรมชาติ ·
-      💰 <b class="bad">ทองในมือ</b> · 📈 <b class="bad">หุ้นทุกตัว</b>
-      — เงินติดตัวได้เฉพาะที่อยู่ในธนาคาร ถ้าจะจุติ <b>ต้องขายแล้วเอาไปฝากก่อน</b><br>
+      💰 <b class="bad">${T("ทองในมือ")}</b> · 📈 <b class="bad">${T("หุ้นทุกตัว")}</b>
+      — เงินติดตัวได้เฉพาะที่อยู่ในธนาคาร ถ้าจะจุติ <b>${T("ต้องขายแล้วเอาไปฝากก่อน")}</b><br>
       <span class="rb-warn">หมายเหตุ: ดอกเบี้ยเงินฝากคิดจากจำนวนปีที่ไม่แตะบัญชี และการจุติจะรีเซ็ตนาฬิกานั้น
       — เงินต้นอยู่ครบ แต่เรทกลับไปเริ่มใหม่ · หนี้ภาษีที่ค้างอยู่ไม่หายไปด้วยการจุติ</span>
     </div>
@@ -7016,7 +7020,7 @@ function renderRebirth() {
       <span class="rb-note">ทอง · ${lv === now ? "จุติได้เลย" : `ไต่อีก ${lv - now} เลเวล ได้บุญ ${(karmaGainFor(lv, P.rebirths || 0).xp / Math.max(1e-9, karmaGainFor(now, P.rebirths || 0).xp)).toFixed(1)} เท่าของตอนนี้`}</span>
     </div>`;
   }).join("") + `<div class="detail">
-    บุญคิดจาก <b>เลเวลรวมตอนที่จุติ</b> เทียบกับประตู (ตอนนี้ ${gate}) — ยิ่งไต่ไกลก่อนจุติ ยิ่งได้เยอะแบบทวีคูณ
+    บุญคิดจาก <b>${T("เลเวลรวมตอนที่จุติ")}</b> เทียบกับประตู (ตอนนี้ ${gate}) — ยิ่งไต่ไกลก่อนจุติ ยิ่งได้เยอะแบบทวีคูณ
     ไม่ใช่ได้เท่ากันทุกครั้งเหมือนเมื่อก่อน<br>
     ประตูจะขยับขึ้น ${REBIRTH_GATE_STEP} เลเวลทุกครั้งที่จุติ (สูงสุด ${REBIRTH_GATE_MAX})
     — จุติรัว ๆ ที่เลเวลต่ำจึงไม่ใช่ทางลัดอีกต่อไป · เพดานบุญรวม +${Math.round(KARMA_CAP * 100)}%
@@ -7059,7 +7063,7 @@ function renderDead() {
       <div class="req">${escapeHtml(P.dead.date || "")}</div></div>
     <div class="detail">
       หนี้ภาษีค้างเกิน 3 เดือนในเกม รอบนี้จึงจบลง —
-      <b>ไม่เหมือนการจุติ ตรงที่ไม่มีอะไรถูกเก็บไว้เลย</b><br><br>
+      <b>${T("ไม่เหมือนการจุติ ตรงที่ไม่มีอะไรถูกเก็บไว้เลย")}</b><br><br>
       เซฟยังอยู่บนเครื่องและไม่ถูกลบ ถ้าอยากเริ่มใหม่ ให้กลับไปหน้าโปรไฟล์แล้วลบช่องนี้เอง
     </div>`;
   grid.appendChild(card);
@@ -7276,7 +7280,7 @@ function renderPetPanel(extra) {
     </div>
     <div class="detail">สัตว์เลี้ยงตีเสริมทุก 3 วินาที รับดาเมจแทนคุณ ${Math.round(PET_DAMAGE_SHARE * 100)}%
       และกินจากช่องเสบียงเดียวกับคุณเมื่อเลือดต่ำกว่า ${Math.round(PET_EAT_BELOW * 100)}%<br>
-      XP ที่แบ่งให้มันถูก<b>หักจากส่วนของคุณ</b> ไม่ใช่ของแถม — ไม่พาลงสนามก็ไม่เสีย XP เลย</div>`
+      XP ที่แบ่งให้มันถูก<b>${T("หักจากส่วนของคุณ")}</b> ไม่ใช่ของแถม — ไม่พาลงสนามก็ไม่เสีย XP เลย</div>`
     : `<div class="detail">ยังไม่มีสัตว์เลี้ยง — โอกาสจับได้จากการล่า ยิ่งด่านลึกยิ่งเจอสายพันธุ์ดี และบอสมีโอกาสสูงกว่ามาก</div>`);
   extra.appendChild(panel);
 
@@ -8168,7 +8172,7 @@ function renderInvTabs() {
     + `<button class="inv-tab add" id="inv-add">+ หมวดใหม่</button>`
     + (junkOnHand().n ? `<button class="inv-tab junk" id="inv-junk">🗑️ ขายขยะทั้งหมด (${junkOnHand().n} ชิ้น / ${junkOnHand().gold.toLocaleString()} 💰)</button>` : "")
     + tab({ label: "ทั้งหมด", name: "ทั้งหมด" })
-    + (P.cats.includes(invTab) ? `<button class="inv-tab del" id="inv-del">ลบหมวดนี้</button>` : "");
+    + (P.cats.includes(invTab) ? `<button class="inv-tab del" id="inv-del">${T("ลบหมวดนี้")}</button>` : "");
   bar.querySelectorAll("[data-tab]").forEach((b) => b.onclick = () => { invTab = b.dataset.tab; renderInventory(); });
   $("#inv-add").onclick = () => {
     const name = (prompt("ตั้งชื่อหมวดใหม่ (เช่น ของขาย / เก็บไว้คราฟต์)") || "").trim();
@@ -8243,7 +8247,7 @@ function renderInventory() {
       </div>
       <div class="inv-side">
         <div class="qty">×${n}${reservedCount(id) ? `<span class="lock-badge" title="สวมใส่อยู่ ${reservedCount(id)} ชิ้น">🔒${reservedCount(id)}</span>` : ""}</div>
-        <button class="btn small" data-sell="${id}">ขาย</button>
+        <button class="btn small" data-sell="${id}">${T("ขาย")}</button>
       </div>`;
     el.querySelector("[data-sell]").onclick = () => openSellDialog(id);
     el.querySelector("[data-cat]").onchange = (e) => {
@@ -8284,7 +8288,7 @@ function openIntroPopup() {
         ไปที่หน้าล่ามอนสเตอร์ แล้วเปิดแผงอาหารด้านล่าง เลือกของกินใส่ช่องไว้ก่อนออกไป<br><br>
         มีของกินอยู่ในกระเป๋าเฉยๆ โดยไม่ตั้งช่อง จะไม่ถูกกินเองเลย
       </div>
-      <div class="modal-actions"><button class="btn" data-close>เข้าใจแล้ว</button></div>
+      <div class="modal-actions"><button class="btn" data-close>${T("เข้าใจแล้ว")}</button></div>
     </div>`;
   document.body.appendChild(back);
   const close = () => { save("แนะนำครั้งแรก"); back.remove(); };
@@ -8417,7 +8421,7 @@ function openSettings() {
         <button class="btn lang-btn${currentLang() === "en" ? " primary" : ""}" data-lang="en">🇬🇧 English</button>
       </div>
       <div class="modal-sub">ยังแปลไม่ครบทุกคำ — คำที่ยังไม่ได้แปลจะแสดงเป็นภาษาไทยไว้ก่อน / Not everything is translated yet; untranslated text stays in Thai.</div>
-      <div class="modal-head" style="font-size:16px">การแจ้งเตือน</div>
+      <div class="modal-head" style="font-size:16px">${T("การแจ้งเตือน")}</div>
       <div class="modal-sub">เลือกว่าจะให้อะไรเด้งขึ้นมาบ้าง — คำเตือน ความพ่ายแพ้
         และข้อความที่ตอบสิ่งที่คุณเพิ่งกด จะแสดงเสมอ ปิดไม่ได้</div>
       <div class="notif-list">
@@ -8432,12 +8436,12 @@ function openSettings() {
       <!-- 🎯 [owner 2026-08-22] "เอาเสียงทั้งสองไปไว้ใต้สุด เพราะน่าจะปรับพวก Notis บ่อยกว่าเสียง"
            Sound is set once and left; the notification rows are the ones that get revisited. The
            thing you come back for goes where you land. -->
-      <div class="modal-head" style="font-size:16px; margin-top:18px">เสียงและหน้าจอ</div>
+      <div class="modal-head" style="font-size:16px; margin-top:18px">${T("เสียงและหน้าจอ")}</div>
       <div class="notif-list">
         <label class="notif-row">
           <input type="checkbox" data-sound="sfxOn"${soundPref("sfxOn", true) ? " checked" : ""}>
           <span class="notif-name">🔔 เสียงประกอบ</span>
-          <span class="notif-note">เสียงสั้น ๆ ตอนได้ของ เลเวลอัพ เก็บเกี่ยว หรือมีคำเตือน</span>
+          <span class="notif-note">${T("เสียงสั้น ๆ ตอนได้ของ เลเวลอัพ เก็บเกี่ยว หรือมีคำเตือน")}</span>
         </label>
         <label class="notif-row">
           <input type="checkbox" data-sound="musicOn"${soundPref("musicOn", false) ? " checked" : ""}>
@@ -8461,9 +8465,9 @@ function openSettings() {
         </label>
       </div>
       <div class="modal-actions">
-        <button class="btn ghost" data-notif-all="off">ปิดทั้งหมด</button>
-        <button class="btn ghost" data-notif-all="on">เปิดทั้งหมด</button>
-        <button class="btn" data-close>เสร็จ</button>
+        <button class="btn ghost" data-notif-all="off">${T("ปิดทั้งหมด")}</button>
+        <button class="btn ghost" data-notif-all="on">${T("เปิดทั้งหมด")}</button>
+        <button class="btn" data-close>${T("เสร็จ")}</button>
       </div>
     </div>`;
   document.body.appendChild(back);
@@ -8531,8 +8535,8 @@ function openSellDialog(id) {
       <input class="modal-input" id="sell-n" type="number" min="1" max="${sellable}" value="${sellable}">
       <div class="modal-total" id="sell-total"></div>
       <div class="modal-actions">
-        <button class="btn ghost" id="sell-cancel">ยกเลิก</button>
-        <button class="btn" id="sell-ok">ยืนยันขาย</button>
+        <button class="btn ghost" id="sell-cancel">${T("ยกเลิก")}</button>
+        <button class="btn" id="sell-ok">${T("ยืนยันขาย")}</button>
       </div>
     </div>`;
   document.body.appendChild(back);

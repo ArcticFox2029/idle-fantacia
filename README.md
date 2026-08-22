@@ -21,10 +21,13 @@
 > **The game opens in Thai by default.** Click the ⚙️ gear in the top bar and pick **🇬🇧 English**.
 > Your choice is remembered by the browser.
 >
-> Everything in the game world is fully translated — all 164 items, every monster, skill, job,
-> achievement, villager, company and property. Some deeper panels (bank, tax, guild) still show
-> Thai; anything untranslated falls back to Thai rather than breaking, and it is being worked
-> through.
+> **The game world is fully translated** — all 164 items, every monster, skill, job, achievement,
+> villager, company and property, plus the navigation, job cards, buttons and status bar.
+>
+> **The interface is not finished.** Longer explanations inside the achievements, shop, rebirth and
+> statistics panels are still Thai. Anything untranslated falls back to Thai rather than breaking,
+> so those screens read as Thai rather than as anything broken. The test suite measures exactly how
+> much is left on each screen and fails if it grows, so this only moves in one direction.
 
 ## What an idle game is
 

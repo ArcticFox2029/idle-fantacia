@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Idle Fantacia</title>
-<link rel="stylesheet" href="style.css?v=46">
+<link rel="stylesheet" href="style.css?v=47">
 </head>
 <body>
 
@@ -72,16 +72,16 @@
      audio.js. Loaded before game.js because toast() reaches for it. -->
 <!-- i18n.js before data.js and game.js: it holds the dictionary they are translated through,
      and initLang() runs before the first render so nothing is drawn twice. -->
-<script src="i18n.js?v=46"></script>
-<script src="audio.js?v=46"></script>
+<script src="i18n.js?v=47"></script>
+<script src="audio.js?v=47"></script>
 <!-- Keeps the screen awake where the Wake Lock API is not allowed — see the note at the top of
      nosleep.js. Needed because the LAN address is plain http, which is not a secure context. -->
-<script src="nosleep.js?v=46"></script>
-<script src="data.js?v=46"></script>
-<script src="game.js?v=46"></script>
+<script src="nosleep.js?v=47"></script>
+<script src="data.js?v=47"></script>
+<script src="game.js?v=47"></script>
 <!-- The React + MUI shell. Loaded after game.js because it reads window.__game, which game.js
      defines. Absent bundle = the legacy sidebar in game.js still runs, so a bare checkout with no
      node_modules still plays. Rebuild with:  npm --prefix ui run build -->
-<script src="dist/ui.js?v=46"></script>
+<script src="dist/ui.js?v=47"></script>
 </body>
 </html>

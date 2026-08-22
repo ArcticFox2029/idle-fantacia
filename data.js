@@ -6,7 +6,7 @@
  * v5 combat-stat split shipped with this left at 4: freshProfile stamped v4, migrate pushed
  * it to v5, and the `p.v === GAME_VERSION` guard then rejected every profile — the game
  * silently refused to create or load anything. balance_check.mjs now fails if the two drift. */
-const GAME_VERSION = 46;
+const GAME_VERSION = 47;
 const MAX_LEVEL = 99;
 /* Farming plots grow in PARALLEL and cost no job slot, so the plot count is the real multiplier
  * on everything the skill pays. Every yield below is priced against PLOTS_MAX, not one plot. */

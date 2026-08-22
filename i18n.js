@@ -581,6 +581,71 @@ const I18N = (() => {
     "ปันผล": "Dividends", "กิจการ": "companies",
     "ป่าชายเมือง": "Town Edge Wood", "ป่าชั้นใน": "Inner Forest",
 
+    /* ---- panel labels ----
+     * Wrapped by a rule rather than by hand: Thai text sitting cleanly between two HTML tags is a
+     * label, so >ทองในมือ< became >${T("ทองในมือ")}<. Anything with a value interpolated into it was
+     * left alone, which is why some sentences here are short and others are whole. */
+    "ทองในมือ": "Gold in hand", "ฝากธนาคาร": "In the bank", "เงินฝากในธนาคาร": "Bank deposits",
+    "มูลค่าหุ้นที่ถือ": "Value of shares held", "ปันผลรอบหน้าของคุณ": "Your next dividend",
+    "ราคาตอนนี้": "Price now", "ราคายุติธรรม": "Fair value", "ผลตอบแทนต่อทุน": "Return on capital",
+    "ความเหวี่ยงต่อวัน": "Daily volatility", "ถือ ": "Held ", "ปันผล ": "Dividend ",
+    "จ่ายทุก ": "Pays every ", "หุ้นทุกตัว": "All shares", "ซื้อเท่าที่ไหว": "Buy what you can afford",
+    "ยืนยันขาย": "Confirm sale", "ขายทั้งหมด": "Sell all", "ฝาก": "Deposit", "ถอน": "Withdraw",
+    "ฝากทั้งหมด": "Deposit all", "ฝากครึ่งหนึ่ง": "Deposit half", "ถอนทั้งหมด": "Withdraw all",
+    "ฝากแต่ละครั้งเป็นใบของตัวเอง": "Each deposit is its own certificate",
+    "ต้องขายแล้วเอาไปฝากก่อน": "Sell it and deposit the proceeds first",
+    "น้อยกว่าปันผลหุ้น": "Less than share dividends",
+    "กำไรเฉลี่ย/วันในเกม": "Average profit per in-game day",
+
+    "ภาษีที่ต้องจ่ายถ้าจบปีนี้": "Tax due if the year ended today",
+    "ปีนี้สะสมถึงวันนี้": "Accrued so far this year", "ค้างชำระ (ปีก่อน)": "Overdue (previous years)",
+    "ค้างมาแล้ว": "Overdue for", "จ่ายภาษีสะสมทั้งชีวิต": "Tax paid over this lifetime",
+    "ชำระใบนี้": "Pay this bill", "จ่ายส่วนนี้": "Pay this part", "ช่วง": "Band", "อัตรา": "Rate",
+    "ยกเว้น": "Exempt", "สถานะ": "Status",
+    "หักจากทองในมือก่อน แล้วจึงดึงจากเงินฝาก (ใบใหม่สุดก่อน)":
+      "Taken from gold in hand first, then from deposits (newest certificate first)",
+
+    "สถาบัน": "Institute", "คนในสังกัด": "Members", "ค่าเลี้ยง/วันในเกม": "Upkeep per in-game day",
+    "รอรับ": "Waiting to collect", "รับของและเงิน": "Collect goods and gold", "รับของ": "Collect",
+    "รับกี่คน": "How many to take", "สร้างสถาบัน": "Found the institute", "อัปเกรด": "Upgrade",
+    "ชื่อเสียง": "Reputation", "สถาบันฮันเตอร์คืออะไร": "What is the Hunters' Institute?",
+    "เลี้ยงเด็กเอง ฝึกเอง ส่งออกล่าเอง — ขาดทุนช่วงแรก คืนทุนในระยะยาว":
+      "Feed them, train them, send them hunting — a loss at first, and it pays back in time",
+    "อยากเป็นฮันเตอร์ ยังไม่เคยออกสนามจริง": "Wants to be a hunter, has never been in the field",
+    "แต่ช่วงแรกขาดทุนแน่นอน": "It will lose money at first, without question",
+    "ไม่กินช่องงาน": "Does not use a job slot",
+
+    "ค่าเช่า/วันในเกม": "Rent per in-game day", "ค่าเช่าสะสม": "Rent collected",
+    "ทุนที่จมอยู่ (ขายคืนได้เต็ม)": "Capital tied up (fully refundable)",
+    "บ้านที่ถือ": "Properties held", "ที่อยู่อื่น": "Other properties", "เฟอร์นิเจอร์": "Furniture",
+    "ค่าจ้างรวม/วัน": "Total wages per day", "ลูกค้าประจำ": "Regulars", "พนักงาน": "Staff",
+    "วัตถุดิบ / สินค้า": "Materials / goods", "หักจากส่วนของคุณ": "Taken from your share",
+    "ขาดทุนได้จริง": "It really can lose money", "ไม่ต้องลุ้น": "No gamble involved",
+
+    "จุติมาแล้ว": "Reborn", "จุติตอนนี้จะได้บุญ": "Rebirth now would grant karma",
+    "เลเวลรวมตอนนี้": "Total level now", "เลเวลรวมตอนที่จุติ": "Total level at rebirth",
+    "เริ่มการผจญภัยใหม่": "Begin a new adventure",
+    "ไม่เหมือนการจุติ ตรงที่ไม่มีอะไรถูกเก็บไว้เลย": "Unlike rebirth, nothing at all is carried over",
+
+    "สายพันธุ์ที่เคยเจอ (เก็บไว้)": "Species encountered (kept)",
+    "จับสัตว์เลี้ยงได้จากการล่ามอนสเตอร์": "Companions are caught while hunting",
+    "ยังไม่มีเพื่อนร่วมทาง": "No companion yet", "ยังไม่มีคู่ชีวิต": "No partner yet",
+    "ไปสนิทกับใครสักคนที่ลานหมู่บ้านก่อน": "Grow closer to someone in the village square first",
+    "ไม่มีของที่ส่งได้": "Nothing you can hand in",
+
+    "สร้างโปรไฟล์": "Create profile", "ลบโปรไฟล์": "Delete profile", "เล่นต่อ ": "Continue ",
+    "อ่านเซฟช่องนี้ไม่ได้": "This slot could not be read", "ลองอ่านใหม่": "Try again",
+    "ข้อมูลยังอยู่ครบ ไม่ได้ถูกลบ": "The data is still there; nothing has been deleted",
+    "จะนำเข้าด้วยปุ่มก็ได้ หรือก๊อปไฟล์ไปวางเป็น ": "Import it with the button, or copy the file in as ",
+    "ความซื่อสัตย์คือค่าที่คุ้มที่สุดที่จะรู้": "Being told the truth is worth more than a tidy screen",
+
+    "การแจ้งเตือน": "Notifications", "เสียงและหน้าจอ": "Sound and screen",
+    "เสียงสั้น ๆ ตอนได้ของ เลเวลอัพ เก็บเกี่ยว หรือมีคำเตือน":
+      "Short sounds when you gain something, level up, harvest, or are warned",
+    "เปิดทั้งหมด": "Turn all on", "ปิดทั้งหมด": "Turn all off", "ลบหมวดนี้": "Clear this category",
+    "เข้าใจแล้ว": "Got it", "เสร็จ": "Done", "ปิด": "Close", "ยกเลิก": "Cancel",
+    "ขาย": "Sell", "ว่าง": "Empty",
+
     /* ---- titles ---- */
     "คนแปลกหน้าจากนอกป่า": "Stranger from Beyond the Wood",
     "ผู้มาใหม่แห่งมิธวูด": "Newcomer of Mythwood",
