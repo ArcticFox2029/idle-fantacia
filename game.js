@@ -1186,31 +1186,35 @@ function propose(id) {
 /* What rebirth does. The owner's rule: halve the affection, roll back the marriage, and never drop
  * below the floor a previous life reached — the same shape as rebirthFloor for combat stats, so
  * each life courts the same person faster than the last. */
-/* 🎯 [owner 2026-08-22] "ภรรยา ... ไม่ต้องแต่งงานใหม่แล้ว ให้ยังคงค้างอยู่ดีกว่า ไม่งั้นมันจะสับสน
- * ว่าลูกเก่าเป็นลูกเรากับใคร" — marriages now survive a rebirth. They used to be annulled, which was
- * fine while children were annulled with them; it stopped being fine once a child could outlive the
- * life he was born into, because his mother would be a stranger again and the record of whose child
- * he is would point at nobody.
+/* 🎯 [owner 2026-08-22] Two rules changed here on the same day, and the second follows from the
+ * first. Marriages survive a rebirth — "ไม่งั้นมันจะสับสน ว่าลูกเก่าเป็นลูกเรากับใคร": a child can now
+ * outlive the life he was born into, his record names his mother, and annulling the marriage left
+ * that name pointing at a stranger.
  *
- * Everyone else's affection still halves. A spouse's is held at the wedding threshold instead —
- * being married to someone the game lists as a casual acquaintance is the same incoherence one rung
- * down. */
+ * And affection is no longer halved — "ความสัมพันธ์ต้องไม่ล้างค่าความสัมพันธ์ของ NPC". Once the
+ * marriages stay, halving everyone else says the village forgot you while your wives did not, which
+ * is the same incoherence the first change removed. The floor mechanic that existed to soften the
+ * halving is kept and simply tracks the current value, so nothing that reads r.floor breaks.
+ *
+ * REL_REBIRTH_MULT is deliberately left in data.js rather than deleted: it is the owner's dial, and
+ * a rebirth that costs relationships is one edit away if the halving is ever wanted back.
+ *
+ * gaveDay still resets. That is not a relationship value — it is "have you given a gift today", and
+ * a new life starts on a new calendar. */
 function relRebirth() {
   const married = new Set(spouseIds());
+  const WED_AT = REL_STAGES[REL_STAGES.length - 1].at;
   for (const id of Object.keys(P.rel || {})) {
     const r = P.rel[id];
-    const halved = Math.floor((r.aff || 0) * REL_REBIRTH_MULT);
-    r.floor = Math.max(r.floor || 0, halved);
-    r.aff = Math.max(r.floor, halved);
     if (married.has(id)) {
-      const WED_AT = REL_STAGES[REL_STAGES.length - 1].at;
-      r.floor = Math.max(r.floor, WED_AT);
-      r.aff = Math.max(r.aff, WED_AT);
+      r.aff = Math.max(r.aff || 0, WED_AT);
+      r.floor = Math.max(r.floor || 0, WED_AT);
     }
+    r.floor = Math.max(r.floor || 0, r.aff || 0);
     r.gaveDay = -1;
   }
   /* Keep both fields in step: spouseIds() merges them, so leaving one behind would be a marriage
-     that half the game can see. */
+     that only half the game can see. */
   P.spouses = spouseIds();
   P.spouse = P.spouses[0] || null;
 }
@@ -5464,7 +5468,10 @@ function renderVillage() {
         <div class="v-note">${next ? `อีก ${next.at - r.aff} เป็น${escapeHtml(next.name)}`
             : wed ? T("คู่ชีวิตของคุณ")
             : canPropose(v.id) ? T("สนิทที่สุดแล้ว — ขอแต่งงานได้") : T("สนิทที่สุดแล้ว")}
-          ${r.floor > 0 ? ` · พื้นจากชาติก่อน ${r.floor}` : ""}</div>
+          <!-- 🐛 [owner 2026-08-22] A "พื้นจากชาติก่อน" line used to sit here. The floor was
+               what a rebirth left you standing on after affection halved; nothing lowers
+               affection any more, so it just tracks the current value and the line printed
+               the same number twice, labelled as if it meant something. --></div>
         ${b ? `<div class="v-bonus">${escapeHtml(b.label)} +${b.kind === "dmg"
             ? Math.round(b.amount * 10) / 10
             : Math.round(b.amount * 100) + "%"}</div>`

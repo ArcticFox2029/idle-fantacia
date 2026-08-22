@@ -86,10 +86,11 @@ stays with you forever. What survives and what does not is designed to be predic
 
 | Survives | Halved | Lost |
 |---|---|---|
-| Achievements and titles · slayer marks · deposits, shares, businesses, property · **marriages** | Combat stats · relationships you have not married | Gold in hand · children and their education |
+| Achievements and titles · slayer marks · deposits, shares, businesses, property · **marriages and every relationship** | Combat stats | Gold in hand · children and their education |
 
-Relationships keep a **floor** so no life starts below the last one — court the same person across
-several lives and each time is faster than the one before.
+Relationships are **not touched at all** by a rebirth, and neither are marriages. A child, though,
+belongs to the life he was born into — which is why the wives stay: his record names his mother, and
+she should not be a stranger the next time you meet her.
 
 ### 6. Statistics — one page for everything
 
@@ -211,9 +212,9 @@ Art in `art/` was generated with [pollinations.ai](https://pollinations.ai).
 
 | รอดถาวร | หารครึ่ง | หายไป |
 |---|---|---|
-| ความสำเร็จและฉายา · รอยล่า · เงินฝาก หุ้น ธุรกิจ อสังหา · **การแต่งงาน** | สเตตัสการต่อสู้ · ความสัมพันธ์ที่ยังไม่ได้แต่งงาน | ทองในมือ · ลูกและการเรียนของเขา |
+| ความสำเร็จและฉายา · รอยล่า · เงินฝาก หุ้น ธุรกิจ อสังหา · **การแต่งงานและความสัมพันธ์ทั้งหมด** | สเตตัสการต่อสู้ | ทองในมือ · ลูกและการเรียนของเขา |
 
-ความสัมพันธ์มี **พื้น** กันไม่ให้ตกต่ำกว่าชาติก่อน — จุติหลายรอบเข้า การกลับไปหาคนเดิมยิ่งเร็วขึ้น
+การจุติ **ไม่แตะความสัมพันธ์และการแต่งงานเลย** ส่วนลูกเป็นของชาติที่เขาเกิด — ซึ่งเป็นเหตุผลที่ภรรยาต้องอยู่ต่อ เพราะประวัติของลูกระบุแม่ไว้ ถ้าแม่กลายเป็นคนแปลกหน้า ชื่อนั้นก็ไม่เหลือความหมาย
 
 ## เซฟอยู่ไหน
 
