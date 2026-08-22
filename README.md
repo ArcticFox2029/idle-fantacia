@@ -73,7 +73,7 @@ finds, or more XP.
 
 ### 4. Family
 
-Once married there is a **3% chance each in-game day** of a child. A child starts at half of what
+Once married there is a **1% chance each in-game day** of a child, and each wife may have one per game-year. Four children per life; being reborn starts that count over, and a child carried over from a previous life does not spend the new life's quota. A household costs money every day — a wife, each child, and every level of schooling a child holds — and falling behind suspends what the family gives back. A child starts at half of what
 you were the day they were born, then grows. You choose what to have them taught — **the higher the
 tier, the more it costs and the slower it pays back**.
 
@@ -86,7 +86,7 @@ stays with you forever. What survives and what does not is designed to be predic
 
 | Survives | Halved | Lost |
 |---|---|---|
-| Achievements and titles · slayer marks · deposits, shares, businesses, property | Combat stats · relationships | Gold in hand · children and their education |
+| Achievements and titles · slayer marks · deposits, shares, businesses, property · **marriages** | Combat stats · relationships you have not married | Gold in hand · children and their education |
 
 Relationships keep a **floor** so no life starts below the last one — court the same person across
 several lives and each time is faster than the one before.
@@ -201,7 +201,7 @@ Art in `art/` was generated with [pollinations.ai](https://pollinations.ai).
 
 ### 4. ครอบครัว
 
-แต่งงานแล้วมีลูกได้ (โอกาส **3% ต่อวันในเกม**) ลูกเริ่มด้วยค่าสถานะครึ่งหนึ่งของคุณตอนที่เขาเกิด แล้วค่อย ๆ โต
+แต่งงานแล้วมีลูกได้ (โอกาส **1% ต่อวันในเกม** และภรรยาแต่ละคนมีลูกได้ปีละคน) รอบจุติหนึ่งมีลูกได้ 4 คน ลูกที่ติดตัวมาจากชาติก่อนไม่นับ · ครอบครัวมีค่าเลี้ยงดูรายวัน ถ้าจ่ายไม่ไหวโบนัสจะหยุดจนกว่าจะเคลียร์ ลูกเริ่มด้วยค่าสถานะครึ่งหนึ่งของคุณตอนที่เขาเกิด แล้วค่อย ๆ โต
 คุณเลือกได้ว่าจะให้เรียนอะไร — **ยิ่งขั้นสูงยิ่งแพงและคืนทุนช้า**
 
 ### 5. การจุติ — และสิ่งที่รอด
@@ -211,7 +211,7 @@ Art in `art/` was generated with [pollinations.ai](https://pollinations.ai).
 
 | รอดถาวร | หารครึ่ง | หายไป |
 |---|---|---|
-| ความสำเร็จและฉายา · รอยล่า · เงินฝาก หุ้น ธุรกิจ อสังหา | สเตตัสการต่อสู้ · ความสัมพันธ์ | ทองในมือ · ลูกและการเรียนของเขา |
+| ความสำเร็จและฉายา · รอยล่า · เงินฝาก หุ้น ธุรกิจ อสังหา · **การแต่งงาน** | สเตตัสการต่อสู้ · ความสัมพันธ์ที่ยังไม่ได้แต่งงาน | ทองในมือ · ลูกและการเรียนของเขา |
 
 ความสัมพันธ์มี **พื้น** กันไม่ให้ตกต่ำกว่าชาติก่อน — จุติหลายรอบเข้า การกลับไปหาคนเดิมยิ่งเร็วขึ้น
 

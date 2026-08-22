@@ -677,6 +677,7 @@ const I18N = (() => {
     "โบนัสเต็ม · ขอแต่งงานได้": "Full bonus · you may propose",
     "คู่ชีวิตของคุณ": "Your spouse",
     "สนิทที่สุดแล้ว — ขอแต่งงานได้": "As close as it gets — you may propose",
+    "ไล่ออกจากตระกูล": "Disown",
     "⚙️ ตั้งค่า": "⚙️ Settings",
     "ภาษา / Language": "Language / ภาษา",
     "🇹🇭 ไทย": "🇹🇭 Thai",

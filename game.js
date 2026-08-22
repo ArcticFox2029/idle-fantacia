@@ -1186,18 +1186,33 @@ function propose(id) {
 /* What rebirth does. The owner's rule: halve the affection, roll back the marriage, and never drop
  * below the floor a previous life reached — the same shape as rebirthFloor for combat stats, so
  * each life courts the same person faster than the last. */
+/* 🎯 [owner 2026-08-22] "ภรรยา ... ไม่ต้องแต่งงานใหม่แล้ว ให้ยังคงค้างอยู่ดีกว่า ไม่งั้นมันจะสับสน
+ * ว่าลูกเก่าเป็นลูกเรากับใคร" — marriages now survive a rebirth. They used to be annulled, which was
+ * fine while children were annulled with them; it stopped being fine once a child could outlive the
+ * life he was born into, because his mother would be a stranger again and the record of whose child
+ * he is would point at nobody.
+ *
+ * Everyone else's affection still halves. A spouse's is held at the wedding threshold instead —
+ * being married to someone the game lists as a casual acquaintance is the same incoherence one rung
+ * down. */
 function relRebirth() {
+  const married = new Set(spouseIds());
   for (const id of Object.keys(P.rel || {})) {
     const r = P.rel[id];
     const halved = Math.floor((r.aff || 0) * REL_REBIRTH_MULT);
     r.floor = Math.max(r.floor || 0, halved);
     r.aff = Math.max(r.floor, halved);
+    if (married.has(id)) {
+      const WED_AT = REL_STAGES[REL_STAGES.length - 1].at;
+      r.floor = Math.max(r.floor, WED_AT);
+      r.aff = Math.max(r.aff, WED_AT);
+    }
     r.gaveDay = -1;
   }
-  /* Both, or a save carrying P.spouses would come out of a rebirth still married — spouseIds()
-     reads the array first, so clearing only the legacy field would have no effect at all. */
-  P.spouse = null;
-  P.spouses = [];
+  /* Keep both fields in step: spouseIds() merges them, so leaving one behind would be a marriage
+     that half the game can see. */
+  P.spouses = spouseIds();
+  P.spouse = P.spouses[0] || null;
 }
 
 /* ---------- 👶 ลูก ----------
@@ -1432,12 +1447,44 @@ function childBonusTotal(kind) {
  * today, so the two agree, but the rule the owner stated is about how many were BORN and should not
  * quietly change meaning the first time a grown child moves out. The spacing clock resets with it,
  * so a new marriage is not made to wait out the previous life's cooldown. */
+/* 🎯 [owner 2026-08-22] "เพิ่มปุ่มลูกที่มี เราสามารถเลือกลบ คือการไล่ออกจากตระกูลได้"
+ *
+ * A household is a running cost now, and the cap is on births rather than on who is still at home —
+ * so without this a player who schooled the wrong child is stuck paying for them for the rest of the
+ * life with no way out.
+ *
+ * It does NOT give the birth back. bornThisLife stays where it is, because the rule the owner set is
+ * four CHILDREN PER LIFE, and refunding a slot for a child sent away would turn the cost of a
+ * mistake into a way of rerolling one. What it does return is the daily upkeep, immediately.
+ *
+ * The mother's yearly clock is left alone for the same reason: her year is about when she last gave
+ * birth, and that did happen. */
+function disownChild(id) {
+  const kids = childrenOf();
+  const i = kids.findIndex((k) => k.id === id);
+  if (i < 0) return false;
+  const gone = kids[i];
+  kids.splice(i, 1);
+  toast(`💔 ${gone.name} ออกจากตระกูลแล้ว — ค่าเลี้ยงดูเหลือวันละ ${familyUpkeep().total.toLocaleString()} 💰`,
+        "warn", "family");
+  save("ไล่ลูกออกจากตระกูล");
+  return true;
+}
+
 function childrenRebirth() {
   P.kids = [];
-  P.family = P.family || {};
-  P.family.bornThisLife = 0;
-  P.family.lastBirthDay = null;
-  P.family.lastBirthByWife = {};
+  /* 🐛 [owner 2026-08-22: "เจอบัค จุติลูกหาย"] Losing the children is the design. Keeping their BILL
+   * was not. Arrears used to survive the rebirth, and since upkeep is 0 with no household there is
+   * nothing left to pay them down with — so the debt of a family that no longer exists suspended the
+   * spouse and child bonuses for the whole of the next life, permanently and with no way back.
+   * monthPaid survived too, which posted the dead household's charge in the new life's first month.
+   *
+   * Everything about the family resets together, because every field here describes a household that
+   * has just ceased to exist. kidsRepaired is the one exception: it records that a one-time repair
+   * already ran on this save, which is true regardless of how many lives it outlives. */
+  const repaired = P.family?.kidsRepaired;
+  P.family = { arrears: 0, noteDay: null, lastBirthDay: null, lastBirthByWife: {},
+               bornThisLife: 0, monthPaid: 0, kidsRepaired: repaired };
 }
 
 /* ---------- 📜 เควส ----------
@@ -5597,6 +5644,9 @@ function renderFamily() {
           <div class="fam-row">${COMBAT_STATS.map((st) =>
             `<span>${st.icon} ${(k.stats || {})[st.id] || 1}</span>`).join("")}</div>
           <div class="edu-list">${tracks}</div>
+          <div class="kid-acts">
+            <button class="btn ghost tiny" data-disown="${k.id}">💔 ${T("ไล่ออกจากตระกูล")}</button>
+          </div>
         </div>
       </div>`;
   }).join("");
@@ -5624,9 +5674,35 @@ function renderFamily() {
           🍚 ค่าเลี้ยงดูวันละ <b>${up.total.toLocaleString()}</b> 💰 — ภรรยา ${up.spouse.toLocaleString()}${up.kids ? ` · ลูก ${up.kids} คน ${up.heads.toLocaleString()}` : ""}${up.eduLevels ? ` · ค่าเรียน ${up.eduLevels} ขั้น ${up.edu.toLocaleString()}` : ""}
           ${familyInArrears() ? `<br><b>ค้างจ่าย ${Math.round(P.family.arrears).toLocaleString()} 💰 — โบนัสจากภรรยาและลูกหยุดอยู่</b> จ่ายครบแล้วกลับมาเหมือนเดิม · เงินติดลบครบ ${TAX_GRACE_DAYS} วันคือจบเกม` : ""}
         </div>` : "")
-    + (spouseIds().length && (P.family?.bornThisLife ?? kids.length) < CHILD_MAX
-        ? `<div class="fam-hint">ภรรยาแต่ละคนมีลูกได้ปีละคน — แต่ละวันมีโอกาส ${Math.round(CHILD_BIRTH_CHANCE * 100)}% · รอบจุตินี้มีลูกได้อีก ${CHILD_MAX - (P.family?.bornThisLife ?? kids.length)} คน</div>`
-        : `<div class="fam-hint">รอบจุตินี้มีลูกครบ ${CHILD_MAX} คนแล้ว — จุติแล้วเริ่มนับใหม่</div>`);
+    + (() => {
+      /* 🐛 [owner 2026-08-22] "คำอธิบายมันแปลกๆ เพราะเราเพิ่งจุติ" — a two-branch ternary made
+         "no wife" and "quota full" the same sentence, so a fresh life with an empty household was
+         told it had already had four children. Three states, because there are three. */
+      const born = P.family?.bornThisLife ?? 0;
+      const left = CHILD_MAX - born;
+      const rule = `กฎ: จุติหนึ่งรอบมีลูกได้ ${CHILD_MAX} คน — ลูกที่ติดตัวมาจากชาติก่อนไม่นับ`;
+      if (left <= 0) return `<div class="fam-hint">${rule}<br>รอบจุตินี้มีลูกครบแล้ว — จุติใหม่ถึงจะเริ่มนับใหม่</div>`;
+      if (!spouseIds().length) return `<div class="fam-hint">${rule}<br>รอบจุตินี้ยังมีลูกได้อีก ${left} คน — ต้องมีคู่ชีวิตก่อน</div>`;
+      return `<div class="fam-hint">${rule}<br>ภรรยาแต่ละคนมีลูกได้ปีละคน · แต่ละวันมีโอกาส ${Math.round(CHILD_BIRTH_CHANCE * 100)}% · รอบจุตินี้ยังมีลูกได้อีก ${left} คน</div>`;
+    })();
+
+  /* Confirmed, and the dialog names what is lost: this is permanent and refunds nothing spent on
+     their schooling, which is not something to find out afterwards. */
+  $("#action-grid").querySelectorAll("[data-disown]").forEach((b) => {
+    b.onclick = () => {
+      const k = childrenOf().find((x) => x.id === b.dataset.disown);
+      if (!k) return;
+      const lv = CHILD_TRACKS.reduce((n, tr) => n + childTrackLevel(k, tr.id), 0);
+      const born = P.family?.bornThisLife ?? childrenOf().length;
+      const msg = `ไล่ ${k.name} ออกจากตระกูล?\n\n`
+        + "· หายถาวร เอากลับมาไม่ได้\n"
+        + (lv ? `· ค่าเรียน ${lv} ขั้นที่ลงทุนไปหายไปด้วย ไม่คืนเงิน\n` : "")
+        + `· โควตาลูกรอบจุตินี้ไม่คืน (เกิดแล้ว ${born}/${CHILD_MAX})\n`
+        + "· ค่าเลี้ยงดูจะลดลงทันที";
+      if (!confirm(msg)) return;
+      if (disownChild(b.dataset.disown)) renderView();
+    };
+  });
 
   $("#action-grid").querySelectorAll("[data-train]").forEach((b) => {
     b.onclick = () => { if (trainChild(b.dataset.train, b.dataset.track)) renderView(); };

@@ -1791,3 +1791,9 @@ body::after {
 /* 🎯 [owner 2026-08-22] Arrears are the one state on the family screen that costs the player
    something, so the panel says so in the danger colour rather than in the same grey as the rest. */
 .fam-hint.is-debt { color: var(--danger); border-color: var(--danger); }
+
+/* 🎯 [owner 2026-08-22] Disowning a child is permanent and refunds nothing, so it sits apart from
+   the schooling buttons and stays quiet — findable when wanted, never the obvious thing to press. */
+.kid-acts { display: flex; justify-content: flex-end; margin-top: 8px; }
+.kid-acts .btn { color: var(--text-dim); }
+.kid-acts .btn:hover { color: var(--danger); border-color: var(--danger); }
