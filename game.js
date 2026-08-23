@@ -747,6 +747,12 @@ function migrate(p) {
      * (es.earned, es.spent), and the rebirth card swapped two class names. The version steps
      * because ?v= in index.html is the published site's only cache-buster. */
   }
+  if (p.v === 59) {
+    p.v = 60;
+    /* Nothing to move — the profile screen gained a warning box. The version steps because ?v= in
+     * index.html is the published site's only cache-buster, and this change matters most to the
+     * people playing the published build. */
+  }
   return p.v === GAME_VERSION ? p : null;
 }
 
@@ -2544,7 +2550,17 @@ function renderProfiles() {
   const anySave = [...Array(PROFILE_SLOTS)].some((_, i) => rawSlot(i + 1));
   const where = $("#save-location");
   if (where) {
-    where.style.display = saveBackend === "server" ? "block" : "none";
+    /* 🎯 [owner 2026-08-23] "อาจต้อง note สีแดงว่า ถ้าเล่นผ่าน git มัน save ลง local browser
+       จะเล่นต่อได้ถ้า browser local เดิม แต่ถ้าสลับ browser หรือเปลี่ยนเครื่อง เซฟจะไม่ตาม ต้องใช้ export
+       save / import เข้าไป"
+
+       This box was shown ONLY in server mode, so the person it matters most to — someone playing
+       the published build, whose save lives somewhere they cannot see and cannot copy — was told
+       nothing at all. Shown in both modes now; the local one is a warning rather than a note,
+       because the failure it describes is silent and total: clear the site data, or open the game
+       on a different machine, and there is nothing anywhere to recover from. */
+    where.style.display = "block";
+    where.classList.toggle("is-warn", saveBackend !== "server");
     // 🐛 [fixed 2026-08-18] This used to `return` here, which skipped every handler-attachment
     // call below (data-create/data-play/data-import/...) entirely. On a genuinely empty
     // game/saves/ — a brand-new install before the first-ever profile, or any time both slots
@@ -2557,6 +2573,12 @@ function renderProfiles() {
         ให้เปิดเกมแบบเดิมที่เคยเล่น (ดับเบิลคลิก <code>game/index.html</code>) ในเบราว์เซอร์ตัวเดิม
         กด <b>⬇️ ส่งออกเซฟ</b> แล้วก๊อปไฟล์นั้นมาวางใน <code>game/saves/</code> —
         ชื่อไฟล์อะไรก็ได้ เดี๋ยวระบบรับเข้าช่องให้เอง</span>`;
+    } else if (saveBackend !== "server") {
+      where.innerHTML = `⚠️ <b>${T("เซฟอยู่ในเบราว์เซอร์นี้เท่านั้น")}</b> — ${
+        T("เล่นต่อได้ถ้ากลับมาที่เบราว์เซอร์เดิมบนเครื่องเดิม")}<br>
+        <span class="dim">${T("สลับเบราว์เซอร์ เปลี่ยนเครื่อง หรือล้างข้อมูลเว็บไซต์ แล้วเซฟจะไม่ตามไป และกู้คืนไม่ได้ — ไม่มีสำเนาอยู่ที่ไหนเลย")}<br>
+        ${T("ก่อนย้าย ให้กด")} <b>⬇️ ${T("ส่งออกเซฟ")}</b> ${T("เก็บไฟล์ไว้ แล้วใช้")}
+        <b>⬆️ ${T("นำเข้าไฟล์เซฟ")}</b> ${T("ที่เครื่องใหม่")}</span>`;
     } else if (saveBackend === "server") {
       where.innerHTML = `📁 เซฟเก็บเป็นไฟล์ใน <code>game/saves/</code> — คัดลอก สำรอง หรือย้ายเครื่องได้เหมือนไฟล์ทั่วไป
         <span class="dim">(สำรองอัตโนมัติทุกครั้งที่เขียนทับ เก็บไว้ใน <code>saves/backups/</code>)</span><br>

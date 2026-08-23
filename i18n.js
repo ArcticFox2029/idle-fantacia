@@ -732,6 +732,15 @@ const I18N = (() => {
     "ยังไม่มี": "none", "ตัวโปรด": "favourite",
     "ของเรา": "ours", "ของ": "of ", "อยู่กับลูก": "with the children",
     "ตัวที่ลงสนาม": "fielded",
+    "เซฟอยู่ในเบราว์เซอร์นี้เท่านั้น": "Your save lives only in this browser",
+    "เล่นต่อได้ถ้ากลับมาที่เบราว์เซอร์เดิมบนเครื่องเดิม":
+      "you can carry on if you come back to the same browser on the same machine",
+    "สลับเบราว์เซอร์ เปลี่ยนเครื่อง หรือล้างข้อมูลเว็บไซต์ แล้วเซฟจะไม่ตามไป และกู้คืนไม่ได้ — ไม่มีสำเนาอยู่ที่ไหนเลย":
+      "Switch browsers, change machines, or clear site data and the save does not follow — and cannot be recovered, because no copy exists anywhere.",
+    "ก่อนย้าย ให้กด": "Before you move, press",
+    "เก็บไฟล์ไว้ แล้วใช้": "to keep the file, then use",
+    "ที่เครื่องใหม่": "on the new machine",
+    "ส่งออกเซฟ": "Export save", "นำเข้าไฟล์เซฟ": "Import save file",
     "ค่าเช่าที่เก็บได้แล้ว": "Rent collected so far",
     "ผลลัพธ์การลงทุน": "Net position",
     "ยังไม่คืนทุน": "not yet repaid", "กำไรสุทธิ": "net profit",

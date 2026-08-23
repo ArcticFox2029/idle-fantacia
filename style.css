@@ -804,6 +804,13 @@ body {
 }
 .save-location code { background: rgba(0,0,0,.35); padding: 1px 6px; border-radius: 5px; }
 .save-location .dim { color: #9aa1c0; }
+/* 🎯 [owner 2026-08-23] The same box, but red when the save lives only in the browser. The
+   server-mode text describes a folder you can copy; this one describes a save that vanishes with
+   the site data, which is a warning, not a note. */
+.save-location.is-warn {
+  border-color: var(--danger); background: rgba(232, 106, 106, .12); color: #ffd9d9;
+}
+.save-location.is-warn .dim { color: #f0bcbc; }
 
 /* Level beside HP: growth reads as one line. */
 .lvl-chip {
