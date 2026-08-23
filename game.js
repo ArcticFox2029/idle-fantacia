@@ -741,6 +741,12 @@ function migrate(p) {
      * still steps because ?v= in index.html is the published site's only cache-buster: without it a
      * returning player keeps the game.js their browser already has. */
   }
+  if (p.v === 58) {
+    p.v = 59;
+    /* Nothing to move — the property panel changed what it COMPUTES from fields that already exist
+     * (es.earned, es.spent), and the rebirth card swapped two class names. The version steps
+     * because ?v= in index.html is the published site's only cache-buster. */
+  }
   return p.v === GAME_VERSION ? p : null;
 }
 
@@ -7449,7 +7455,20 @@ function renderEstates(grid, extra) {
 
   const owned = P.estates || [];
   if (owned.length) {
-    const capital = owned.reduce((t, es) => t + estateKind(es.kind).price, 0);
+    /* 🎯 [owner 2026-08-23] "ผลลัพธ์การลงทุน ให้เอาค่าเช่าทั้งหมด - ทุน = x · หาก x ติดลบ ขึ้นสีแดง
+       (ยังไม่คืนทุน) · หาก x ไม่ติดลบ ขึ้นเขียว (กำไรสุทธิ)"
+
+       Both sides are scoped to the properties you HOLD, so the subtraction is honest. P.stats
+       .rentEarned is lifetime and survives selling, so pairing it with the capital of what you
+       still own would credit a sold house's rent against a capital figure it left — a portfolio
+       could read as profitable purely by having sold something.
+
+       Furniture counts as capital, which it was not doing before. It is money put in that the rent
+       has to pay back, and the sell card already calls it refundable on sale exactly like the house
+       ("ได้คืนตอนขาย ไม่มีค่าเสื่อม"). Leaving it out understated the capital and overstated the yield. */
+    const capital = owned.reduce((t, es) => t + estateKind(es.kind).price + (es.spent || 0), 0);
+    const collected = owned.reduce((t, es) => t + (es.earned || 0), 0);
+    const net = Math.round(collected - capital);
     const rentDay = owned.reduce((t, es) => t + estateRentPerDay(es), 0);
     const sum = document.createElement("div");
     sum.className = "money-summary";
@@ -7458,7 +7477,10 @@ function renderEstates(grid, extra) {
       <div class="money-stat"><span>${T("ทุนที่จมอยู่")}</span><b>${fmtNum(capital)}</b></div>
       <div class="money-stat"><span>${T("ค่าเช่า/วันในเกม")}</span><b class="good">${Math.round(rentDay).toLocaleString()}</b></div>
       <div class="money-stat"><span>${T("ผลตอบแทนต่อทุน")}</span><b>${capital > 0 ? (rentDay * DAYS_PER_YEAR / capital * 100).toFixed(1) : "0.0"}%/ปี</b></div>
-      <div class="money-stat"><span>${T("ค่าเช่าสะสม")}</span><b>${fmtNum(Math.round(P.stats.rentEarned || 0))}</b></div>`;
+      <div class="money-stat"><span>${T("ค่าเช่าที่เก็บได้แล้ว")}</span><b>${fmtNum(Math.round(collected))}</b></div>
+      <div class="money-stat"><span>${T("ผลลัพธ์การลงทุน")}</span><b class="${net < 0 ? "bad" : "good"}">${
+        net < 0 ? `-${fmtNum(-net)}` : `+${fmtNum(net)}`} <small>${
+        net < 0 ? T("ยังไม่คืนทุน") : T("กำไรสุทธิ")}</small></b></div>`;
     extra.appendChild(sum);
   }
 
@@ -8686,7 +8708,14 @@ function renderRebirth() {
       <span class="rb-name">${st.icon} ${st.name}</span>
       <span class="rb-num">${r.cur}</span>
       <span class="rb-arrow">→</span>
-      <span class="rb-num ${r.floored ? "good" : "bad"}">${r.after}</span>
+      <!-- 🎯 [owner 2026-08-23] "ค่าที่แสดงมากกว่าจุติเดิม มันควรเป็นสีเขียวไม่ใช่สีแดง · ค่าที่จุติ
+           แล้วค่าต่ำ ได้ค่าจุติเดิม ควรเป็นสีแดง · สีมันสลับกัน" — and they were, exactly.
+
+           floored means halving landed BELOW the floor the last rebirth left, so this run hands
+           back the old number: no progress, red. Not floored means the halved level clears that
+           floor and becomes a new, higher one: green. The colours had been written the other way
+           round, reading "the floor caught you" as the good outcome. -->
+      <span class="rb-num ${r.floored ? "bad" : "good"}">${r.after}</span>
       <span class="rb-note">${r.floored
         ? `หารครึ่งได้ ${r.halved} ซึ่งต่ำกว่าพื้นเดิม จึงคงไว้ที่ ${r.floor}`
         : `หารครึ่งจาก ${r.cur} · พื้นใหม่จะเป็น ${r.after}`}</span>
