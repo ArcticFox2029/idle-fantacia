@@ -51,7 +51,7 @@ const I18N_TABLES = () => [
   ACHIEVEMENTS, ARMOR_SETS, SLAYER_TIERS, SLAYER_REWARDS, ELITE_MODES,
   COMBAT_STATS, AUTO_EAT_OPTIONS, PET_SPECIES, PET_GRADES, COMPANY_SIZES, COMPANIES,
   SHOP_TYPES, SHOP_TIERS, STAFF_ROLES, PROPERTIES, FURNITURE, TAX_KINDS, AUTO_CATEGORIES,
-  GUILD_TIERS, GUILD_RANKS, NOTIF_KINDS,
+  GUILD_TIERS, GUILD_RANKS, NOTIF_KINDS, CRYPTOS,
 ];
 
 /* Short name for the one call every hand-written UI string goes through. */
@@ -223,6 +223,8 @@ function freshProfile(name) {
     bank: { slips: [], sinceDay: 0, yearInterest: 0 },   // each deposit is its own dated slip
     market: {},             // companyId -> current price per share (persisted: it is world state)
     holdings: {},           // companyId -> { shares, cost }  (cost = gold paid, for realised P/L)
+    coins: {},              // coinId -> { units, cost }  (cost = AVERAGE paid per unit — see buyCoin)
+    crypto: {},             // coinId -> current price; absent means it has never moved off `base`
     shops: [],              // your own businesses — see runShopDay
     brand: 0,               // best customer base any shop of yours ever reached
     estates: [],            // property you own and rent out — see runEstatesDay
@@ -752,6 +754,57 @@ function migrate(p) {
     /* Nothing to move — the profile screen gained a warning box. The version steps because ?v= in
      * index.html is the published site's only cache-buster, and this change matters most to the
      * people playing the published build. */
+  }
+  if (p.v === 60) {
+    p.v = 61;
+    /* 🐛 [owner 2026-08-23] "ลูกที่เพิ่งเกิด เคนจิ ได้รูปผู้หญิง เลยมองว่าแปลกๆ" — patterns were drawn
+     * without regard to the name's sex, so existing children can be wearing the wrong one. Each is
+     * moved to a free portrait of its own sex; if none is free it takes an emoji, which says
+     * nothing false, rather than keeping a picture that does. */
+    const used = new Set((p.kids || []).map((k) => k.face).filter((f) => f != null));
+    for (const k of p.kids || []) {
+      const i = CHILD_NAMES.indexOf(k.name);
+      k.sex = i >= 0 ? CHILD_SEX[i] : null;
+      if (k.face != null && CHILD_FACE_SEX[k.face] === k.sex) continue;   // already right
+      used.delete(k.face);
+      let pick = null;
+      for (let f = 0; f < CHILD_ART_PATTERNS; f++) {
+        if (used.has(f) || CHILD_FACE_SEX[f] !== k.sex) continue;
+        pick = f; break;
+      }
+      k.face = pick;
+      if (pick != null) used.add(pick);
+    }
+  }
+  if (p.v === 61) {
+    p.v = 62;
+    /* Tax moves from holdings to income, and crypto arrives.
+     *
+     * The wealth tax is gone, so any accrued figure and any UNPAID wealth bill are dropped: they
+     * were charged for holding gold, which is now explicitly safe, and leaving them would collect a
+     * debt under a rule that no longer exists. Paid ones are history and stay in paidTotal.
+     *
+     * yearRent starts at zero rather than being reconstructed — rent collected under the old rule
+     * was already taxed by the property-value charge, and taxing it again on the way out would bill
+     * the same money twice. */
+    p.tax = p.tax || {};
+    p.tax.yearRent = p.tax.yearRent || 0;
+    p.tax.bills = (p.tax.bills || []).filter((b) => b.kind !== "wealth");
+    if (p.tax.accrued) delete p.tax.accrued.wealth;
+    if (p.tax.prepaid) delete p.tax.prepaid.wealth;
+    /* An estate bill assessed on VALUE is dropped for the same reason — it was raised by a rule
+     * that has been retired, and the new one has not had a year to run yet. */
+    p.tax.bills = p.tax.bills.filter((b) => b.kind !== "estate");
+    p.coins = p.coins || {};
+    p.crypto = p.crypto || {};
+  }
+  if (p.v === 62) {
+    p.v = 63;
+    /* Crypto page: percentage badges, price bands added and removed again in the same batch, and
+     * its own two list filters. Four more furniture kinds, so the biggest houses can be filled.
+     *
+     * Nothing stored changes: a house already furnished keeps exactly the pieces it has, and the
+     * new kinds simply become buyable. The version steps for the cache-buster. */
   }
   return p.v === GAME_VERSION ? p : null;
 }
@@ -1779,6 +1832,38 @@ function newChildStats() {
  * test "จำนวน pattern รูปตรงกับไฟล์ที่มีจริง" holds it to the files. */
 const CHILD_ART_PATTERNS = 29;
 
+/* 🎯 [owner 2026-08-23] "เราต้องทำการ mark ชื่อว่าเป็นผู้ชายหรือหญิง + pattern รูปเช่นกัน · เพื่อให้
+ * รูปมัน match กับชื่อว่าเพศไหน เพราะลูกที่เพิ่งเกิด เคนจิ ได้รูปผู้หญิง เลยมองว่าแปลกๆ"
+ *
+ * Names and portraits were decoupled so a freed name would not drag its old face back — but nothing
+ * then stopped a boy's name drawing a girl's portrait, which is the state the owner found.
+ *
+ * One list, same index as CHILD_NAMES and CHILD_FACES, because a name's sex and its picture's sex
+ * have to be compared and two separate tables would drift. The picture's sex is stated in its own
+ * prompt in tools/child_prompts.tsv, so this is derived from the art rather than guessed at it —
+ * test "เพศของ pattern ตรงกับที่เขียนไว้ใน prompt" holds the two together. */
+const CHILD_SEX = [
+  "f", "f", "m", "f", "m", "f", "f", "f", "f", "m", "m", "f", "m", "f", "f", "m", "f", "m",
+  "m", "f", "m", "f", "m", "f", "m", "f", "m", "f", "m", "f", "m", "f", "m", "f", "m", "f",
+  "m", "f", "m", "f", "m", "f", "m", "f", "m", "f", "m", "m", "f", "m", "f", "m", "f", "m",
+  "f", "m", "f", "m", "f", "m", "f", "m", "f", "m", "f", "m", "f", "m", "f", "m", "f", "m",
+  "f", "m", "f", "m", "f", "m", "f", "m", "f", "m", "f", "m", "f", "m", "f", "m", "f", "m",
+  "f", "m", "f", "m", "f", "m", "f", "m", "f", "m",
+];
+
+/* 🎯 [owner 2026-08-23] "เพราะเราไม่ได้ฟิกชื่อต่อรูป" — the sex of a NAME and the sex of a
+ * PORTRAIT are two different facts, and this is the second one. I first tried to make them one
+ * table by regenerating the art to match the names, which was backwards: names and portraits were
+ * deliberately decoupled, so the picture is a given and the matching happens at assignment.
+ *
+ * Read off the existing art (the adult half of each pair settles the androgynous chibi children),
+ * and the prompts in tools/child_prompts.tsv are worded to agree, so a regeneration reproduces the
+ * same sex. Only the first CHILD_ART_PATTERNS entries exist, because only those have pictures.
+ *
+ * Currently f-heavy, which is a real constraint rather than a rounding error: a boy's name with no
+ * free male portrait takes an emoji rather than a girl's picture. */
+const CHILD_FACE_SEX = ["f", "f", "m", "f", "m", "f", "f", "f", "f", "f", "f", "f", "m", "f", "m", "f", "f", "f", "f", "f", "f", "f", "f", "f", "m", "f", "f", "m", "f"];
+
 /* One portrait id per pattern index. NOT keyed to CHILD_NAMES any more — see childFaceId. A face with no picture on disk falls back to
    its emoji through iconArt — the owner's own rule for outrunning the art we have: "ถ้ามีลูกเยอะจนใช้
    รูปหมดแล้ว คนใหม่ๆ ค่อยให้ใช้ emoji". Append only; see CHILD_NAMES. */
@@ -1825,12 +1910,29 @@ function childFaceTaken() {
   return taken;
 }
 
-/* A pattern for a newborn, or null when every one is spoken for — in which case they wear an emoji,
-   which is a look, not a bug. */
-function childPickFace() {
+/* The sex a name implies, and the sex a portrait was drawn as. Same table, because the whole point
+   is comparing them. */
+function childSexOfName(name) {
+  const i = CHILD_NAMES.indexOf(name);
+  return i >= 0 ? CHILD_SEX[i] : null;
+}
+function childSexOfFace(i) { return i != null && CHILD_FACE_SEX[i] ? CHILD_FACE_SEX[i] : null; }
+
+/* A pattern for a newborn, or null when none is free — in which case they wear an emoji, which is a
+ * look, not a bug.
+ *
+ * 🎯 [owner 2026-08-23] "เพื่อให้รูปมัน match กับชื่อว่าเพศไหน" — drawn only from portraits of the
+ * same sex as the name. Falling back to the whole pool when that runs out was considered and
+ * rejected: a boy in a girl's portrait is exactly the thing being fixed, and an emoji says nothing
+ * false. */
+function childPickFace(sex) {
   const taken = childFaceTaken();
   const free = [];
-  for (let i = 0; i < CHILD_ART_PATTERNS; i++) if (!taken.has(i)) free.push(i);
+  for (let i = 0; i < CHILD_ART_PATTERNS; i++) {
+    if (taken.has(i)) continue;
+    if (sex && childSexOfFace(i) !== sex) continue;
+    free.push(i);
+  }
   return free.length ? free[Math.floor(Math.random() * free.length)] : null;
 }
 
@@ -1989,7 +2091,8 @@ function childBirthRoll() {
        splits on this, and there was no per-child record of it: bornThisLife is a COUNT, which
        cannot say which child it refers to once they outlive the life they were born in. */
     kids.push({ id: `k${today}_${kids.length}`, name, bornDay: today, age: 0, bornLife: P.rebirths || 0,
-                face: childPickFace(), parent: id, stats: newChildStats(), edu: {} });
+                face: childPickFace(childSexOfName(name)), sex: childSexOfName(name),
+                parent: id, stats: newChildStats(), edu: {} });
     P.family.lastBirthByWife[id] = today;
     P.family.lastBirthDay = today;
     P.family.bornThisLife = (P.family.bornThisLife || 0) + 1;
@@ -2077,8 +2180,19 @@ function disownChild(id) {
   const i = kids.findIndex((k) => k.id === id);
   if (i < 0) return false;
   const gone = kids[i];
+  /* 🐛 [owner 2026-08-23: "เช็คว่าถ้าไล่ลูกที่โตและมีมอนสเตอร์อยู่ มอนสเตอร์จะโดนพากลับ ไม่ได้บัค
+     หายติดไปด้วย"] It was destroyed with the child. A companion is not part of the child — the family
+     page already lets you take one back — and a bred legendary handed down should not be something a
+     disown quietly eats. It comes home instead, keeping every level it earned. */
+  const pet = childPet(gone);
+  if (pet) {
+    P.pets.push(pet);
+    delete gone.pet;
+    if (P.activePet == null) P.activePet = P.pets.length - 1;
+  }
   kids.splice(i, 1);
-  toast(`💔 ${gone.name} ออกจากตระกูลแล้ว — ค่าเลี้ยงดูเหลือวันละ ${familyUpkeep().total.toLocaleString()} 💰`,
+  toast(`💔 ${gone.name} ออกจากตระกูลแล้ว — ค่าเลี้ยงดูเหลือวันละ ${familyUpkeep().total.toLocaleString()} 💰`
+        + (pet ? ` · ${petStats(pet).icon} ${petStats(pet).name} กลับมาอยู่กับเรา` : ""),
         "warn", "family");
   save("ไล่ลูกออกจากตระกูล");
   return true;
@@ -2633,74 +2747,145 @@ function applyOfflineProgress() {
   const awayMs = Date.now() - left;
   if (awayMs <= 0) return null;          // clock moved backwards; pay nothing rather than guess
 
-  const slot0 = (P.slots || []).find((sl) => sl && sl.type === "skill");
-  if (!slot0) return null;               // nothing was running — closing the app is not income
-
-  const skill = findSkill(slot0.skillId);
-  const action = findAction(skill, slot0.actionId);
-  if (!skill || !action) return null;
-
   const capMs = OFFLINE_CAP_HOURS * 3600 * 1000;
   const cappedMs = Math.min(awayMs, capMs);
   const seconds = cappedMs / 1000 * OFFLINE_RATE;
-  const per = effectiveSeconds(slot0.skillId, action);
-  let cycles = Math.floor(seconds / per);
-  if (cycles <= 0) return null;
 
-  const made = {};
-  let gold = 0, xp = 0, ran = 0, ranOut = false;
-  const beforeLvl = levelFromXp(P.xp[slot0.skillId] || 0);
-  for (let i = 0; i < cycles; i++) {
-    if (action.inputs) {
-      // Out of materials is a real stop, exactly as skillTick would have stopped — offline must not
-      // conjure inputs the player never had.
-      if (!canAfford(action)) { ranOut = true; break; }
-      for (const [id, n] of Object.entries(action.inputs)) P.inv[id] -= n;
-    }
-    if (action.steal) {
-      /* Expected value, not a per-cycle roll. Thousands of unwatched coin flips would land on the
-       * average anyway, and a visible number the player cannot verify should not also be random. */
-      const st = action.steal;
-      const mLvl = masteryLevelOf(slot0.skillId, slot0.actionId);
-      const chance = Math.min(0.95, st.success + 0.004 * (mLvl - 1));
-      gold += (st.gold[0] + st.gold[1]) / 2 * chance;
-    }
-    if (action.catch) {
-      // A catch table yields one of several species; offline credits the most common one rather
-      // than rolling, for the same reason as above.
-      const table = effectiveCatch(slot0.skillId, action);
-      const top = table.reduce((a, b) => (b.w > a.w ? b : a), table[0]);
-      P.inv[top.item] = (P.inv[top.item] || 0) + 1;
-      made[top.item] = (made[top.item] || 0) + 1;
-    } else {
-      for (const [id, n] of Object.entries(action.outputs || {})) {
-        P.inv[id] = (P.inv[id] || 0) + n;
-        made[id] = (made[id] || 0) + n;
-      }
-    }
-    xp += action.xp;
-    ran++;
-  }
-  if (!ran) return null;
-
-  gold = Math.round(gold * (1 + charmValue("gold") + perkTotal("goldBonus")));
-  P.gold += gold;
-  P.xp[slot0.skillId] = (P.xp[slot0.skillId] || 0) + Math.ceil(xp * (1 + tomeBonus(slot0.skillId)));
-  /* 🎯 [owner 2026-08-21] "ความชำนาญไม่ขึ้น" — no mastery offline, deliberately.
-   * Mastery is the thing that makes a job permanently faster and its drops better. Items are what
-   * you were away from; mastery is what you were there for. This used to grant xp * 0.6 and that
-   * was the one line separating "the game keeps ticking" from "there is no reason to open it". */
-  if (gold) bump("goldEarned", gold);
-  bump(action.steal ? "steals" : "actions", ran);
-
+  /* 🎯 [owner 2026-08-23] "แก้ปันผล ค่าเช่า ตอนเดินตอนออฟไลน์ แม้ว่าจะไม่เลือกสายอาชีพอะไร · หรือ
+   * อาจเลือกต่อสู้ไว้แล้วออก มันก็ไม่นับการต่อสู้ เป็นการถอนตัว แต่เงินค่าเช่า ปันผล ควรเดินต่อ"
+   *
+   * This used to return null the moment no SKILL job was running, before reaching the line that
+   * pays anything — so closing the browser without leaving woodcutting going paid nothing at all,
+   * not even rent from a house or a dividend from a company. The guard's own comment said "closing
+   * the app is not income", which is true of a job you were doing and false of capital that earns
+   * whether you are there or not.
+   *
+   * Passive income is settled first and unconditionally. The skill job, if there was one, is
+   * settled after; combat is still worth nothing offline, which is the owner's rule and is why the
+   * search below looks only for a "skill" slot. */
   const cash = offlineCashflow(seconds);
 
-  return {
-    action, skill, cycles: ran, gold, made, ranOut, cash,
-    rate: OFFLINE_RATE,
-    awayMs, cappedMs, capped: awayMs > capMs,
-    levelsGained: levelFromXp(P.xp[slot0.skillId]) - beforeLvl,
-  };
+  /* 🎯 [owner 2026-08-23] "สายผลิต มันมี ขโมย ตัดต้นไม้ ขุดแร่ ตกปลา ... ไม่ว่าผลิตสายไหน ถ้ามัน
+   * โดนล็อก" — this settled ONE slot, the first "skill" it found. With multi-processing bought you
+   * can leave several jobs running, and every one of them but the first was worth nothing for the
+   * whole absence. Every production slot is settled now; combat slots are still skipped, which is
+   * the owner's rule and is why the filter is on type.
+   *
+   * Their case 2 is exactly this: "สายผลิต + ตีมอนสเตอร์ จะโดนล็อกแค่ สายผลิต + ค่าเช่า + ปันผล". */
+  const slots = (P.slots || []).filter((sl) => sl && sl.type === "skill");
+  const made = {};
+  const jobs = [];
+  let gold = 0, ranAny = 0, ranOut = false, levelsGained = 0;
+
+  for (const sl of slots) {
+    const sk = findSkill(sl.skillId);
+    const act = sk ? findAction(sk, sl.actionId) : null;
+    if (!sk || !act) continue;
+    const per = effectiveSeconds(sl.skillId, act);
+    const cycles = Math.floor(seconds / per);
+    if (cycles <= 0) continue;
+
+    let jobGold = 0, xp = 0, ran = 0;
+    const beforeLvl = levelFromXp(P.xp[sl.skillId] || 0);
+    for (let i = 0; i < cycles; i++) {
+      if (act.inputs) {
+        // Out of materials is a real stop, exactly as skillTick would have stopped — offline must
+        // not conjure inputs the player never had.
+        if (!canAfford(act)) { ranOut = true; break; }
+        for (const [id, n] of Object.entries(act.inputs)) P.inv[id] -= n;
+      }
+      if (act.steal) {
+        /* Expected value, not a per-cycle roll. Thousands of unwatched coin flips would land on the
+         * average anyway, and a visible number the player cannot verify should not also be random. */
+        const st = act.steal;
+        const mLvl = masteryLevelOf(sl.skillId, sl.actionId);
+        const chance = Math.min(0.95, st.success + 0.004 * (mLvl - 1));
+        jobGold += (st.gold[0] + st.gold[1]) / 2 * chance;
+        for (const drop of st.loot || []) {
+          if (Math.random() < effectiveLootChance(sl.skillId, sl.actionId, drop.chance)) {
+            const n = randInt(drop.n[0], drop.n[1]);
+            P.inv[drop.item] = (P.inv[drop.item] || 0) + n;
+            made[drop.item] = (made[drop.item] || 0) + n;
+          }
+        }
+      }
+      if (act.catch) {
+        // A catch table yields one of several species; offline credits the most common one rather
+        // than rolling, for the same reason as above.
+        const table = effectiveCatch(sl.skillId, act);
+        const top = table.reduce((a, b) => (b.w > a.w ? b : a), table[0]);
+        P.inv[top.item] = (P.inv[top.item] || 0) + 1;
+        made[top.item] = (made[top.item] || 0) + 1;
+      } else if (act.outputs) {
+        for (const [id, n] of Object.entries(act.outputs)) {
+          P.inv[id] = (P.inv[id] || 0) + n;
+          made[id] = (made[id] || 0) + n;
+        }
+      }
+      xp += act.xp;
+      ran++;
+    }
+    if (!ran) continue;
+
+    /* 🎯 [owner 2026-08-23] "ตัดไม้ 54 ท่อน หายาก 3 = 57" — rare drops count toward the haul, and
+       they were not being granted offline at all. Expected value over the whole absence rather than
+       one roll per cycle, for the same reason the steal payout is: thousands of unwatched flips land
+       on the average anyway, and a number the player cannot verify should not also be random. */
+    for (const rare of act.rare ? [].concat(act.rare) : []) {
+      const mLvl = masteryLevelOf(sl.skillId, sl.actionId);
+      const chance = (rare.base + rare.perLevel * mLvl) * (1 + luckTotal());
+      const n = Math.floor(ran * chance);
+      if (n > 0) {
+        P.inv[rare.item] = (P.inv[rare.item] || 0) + n;
+        made[rare.item] = (made[rare.item] || 0) + n;
+      }
+    }
+
+    jobGold = Math.round(jobGold * (1 + charmValue("gold") + perkTotal("goldBonus")));
+    gold += jobGold;
+    P.gold += jobGold;
+    P.xp[sl.skillId] = (P.xp[sl.skillId] || 0) + Math.ceil(xp * (1 + tomeBonus(sl.skillId)));
+    /* 🎯 [owner 2026-08-21] "ความชำนาญไม่ขึ้น" — no mastery offline, deliberately. Mastery is
+     * what makes a job permanently faster and its drops better. Items are what you were away from;
+     * mastery is what you were there for. */
+    if (jobGold) bump("goldEarned", jobGold);
+    bump(act.steal ? "steals" : "actions", ran);
+    levelsGained += levelFromXp(P.xp[sl.skillId]) - beforeLvl;
+    jobs.push({ skill: sk, action: act, cycles: ran });
+    ranAny += ran;
+  }
+
+  const items = Object.values(made).reduce((t, n) => t + n, 0);
+  const earned = (cash.shops || 0) + (cash.div || 0) + (cash.rent || 0);
+  /* An absence that produced nothing at all gets no popup and no ledger row, rather than a card
+     saying zero. */
+  if (!items && !gold && !earned) return null;
+
+  const out = { cash, rate: OFFLINE_RATE, awayMs, cappedMs, capped: awayMs > capMs,
+                jobs, made, items, gold, ranOut, levelsGained,
+                total: Math.round(gold + earned) };
+  offlinePost(out);
+  return out;
+}
+
+/* 🎯 [owner 2026-08-23] "รวมกัน แล้วสรุป ในหน้า popup รวมถึงหน้าบัญชี ด้วย"
+ *
+ * One absence, one ledger row. Before this the account page told three different stories about the
+ * same night: shops posted their own row, dividends and rent went into the monthly pools where they
+ * were indistinguishable from time actually played, and the gold from the job you left running —
+ * often the largest of the four — reached the ledger not at all, so a night of stealing was money
+ * that appeared in the wallet from nowhere.
+ *
+ * Everything the absence earned is summed here and written once. The sources are named in the text
+ * because "where did this come from" is the only question the ledger exists to answer. */
+function offlinePost(r) {
+  const c = r.cash || {};
+  if (!r.total && !r.items) return;
+  /* 🎯 [owner 2026-08-23] "ให้มันสั้นๆ ตอนออฟไลน์ได้ ไอเทม 87 ชิ้น เงินรวม 512 ประมาณนี้พอ" — the
+     two numbers a player acts on. Which job or which company produced them is a question the rest
+     of the page answers; this row is the total for the absence. */
+  ledger("🌙", `${T("ระหว่างออฟไลน์")} ${(c.days || 0).toFixed(1)} ${T("วันในเกม")}`
+    + (r.items ? ` — ${T("ไอเทม")} ${r.items.toLocaleString()} ${T("ชิ้น")}` : ""), r.total);
 }
 
 /* 🎯 [owner 2026-08-21] "เงินกระแส ของรายได้ ค่าเช่า หรือ การลงทุน ก็ได้แค่ 30% จากที่ควรได้ 100%"
@@ -2714,7 +2899,7 @@ function applyOfflineProgress() {
  * calendar day passed. Paying it anyway would mean interest on time that did not exist. */
 function offlineCashflow(seconds) {
   const days = seconds / GAME_DAY_SECONDS;
-  if (days <= 0) return { shops: 0, div: 0, days };
+  if (days <= 0) return { shops: 0, div: 0, rent: 0, days };
 
   /* Shops: a fraction of the last settled day rather than by running the days themselves.
    * runShopsDay advances each shop's own history, fires its toasts and books tax, and a calendar
@@ -2729,9 +2914,39 @@ function offlineCashflow(seconds) {
        * do — not the rent a building collects while you are asleep. */
       P.gold += shops;
       if (shops > 0) bump("goldEarned", shops);
-      /* 🐛 [owner 2026-08-22] The offline catch-up credited this and left no trace, so a night's
-         trading was invisible in the one place that records where money came from. */
-      ledger("🏪", `ร้านค้าระหว่างออฟไลน์ ${Math.round(days)} วัน`, shops);
+      /* 🎯 [owner 2026-08-23] "รวมกัน แล้วสรุป ในหน้า popup รวมถึงหน้าบัญชี ด้วย" — this used to
+         post its own row. One absence is one event, so the ledger gets ONE line for it, written by
+         applyOfflineProgress once every source has been settled. Three rows for one night away is
+         the same fragmentation the dividend and rent pooling already fixed elsewhere. */
+    }
+  }
+
+  /* 🎯 [owner 2026-08-21] The quote at the top of this function names three things —
+   * "รายได้ ค่าเช่า หรือ การลงทุน" — and rent was the one never written. A property earning 10 a day
+   * paid exactly 0 for a night away, silently, while shops and dividends both paid.
+   *
+   * Same shape as shops: a fraction of the CURRENT daily rate, not by running the days. runEstatesDay
+   * advances each property's own earned total and posts to the monthly ledger, and a calendar that
+   * did not move must not gain days of history. es.earned is still credited per property, because
+   * the investment-result line on the property page is computed from it and would otherwise show a
+   * house paying for itself more slowly than it really does. */
+  let rent = 0;
+  if (P.estates?.length) {
+    const perDay = P.estates.reduce((t, es) => t + estateRentPerDay(es), 0);
+    rent = Math.round(perDay * days);
+    if (rent > 0) {
+      /* no-goldBonus: runEstatesDay does not apply it either — rent is return on capital. */
+      P.gold += rent;
+      bump("rentEarned", rent);
+      /* 🎯 [owner 2026-08-23] Rent is taxed on what it EARNED now, not on what the house is
+         worth, so every path that credits rent has to reach this counter or a night away would be
+         untaxed income. */
+      bookRentIncome(rent);
+      const share = rent / (perDay * days);
+      for (const es of P.estates) es.earned = (es.earned || 0) + estateRentPerDay(es) * days * share;
+      /* NOT added to estateMonth: the monthly rent row means "collected while playing", and this
+         gold is reported by the offline row instead. Adding it to both would count it twice in the
+         one place whose whole job is to account for where money came from. */
     }
   }
 
@@ -2768,49 +2983,48 @@ function offlineCashflow(seconds) {
       P.gold += div;
       bookInvestmentProfit(div);      // taxable exactly as it is online
       bump("divPaid", div);
-      /* Offline catch-up joins the same monthly pool. Three separate "ปันผลระหว่างออฟไลน์" lines in
-         one morning was the shape the owner saw on the account page. */
-      P.divMonth = P.divMonth || { gold: 0, days: 0, payers: 0 };
-      P.divMonth.gold += Math.round(div);
-      P.divMonth.days += Math.max(1, Math.round(days));
+      /* Same reasoning as rent above: reported by the single offline row, so it must not also go
+         into the monthly pool. The monthly ปันผล row means "paid while playing". */
     }
   }
 
-  return { shops, div, days };
+  return { shops, div, rent, days };
 }
 
+/* 🎯 [owner 2026-08-23] "ส่วนการแสดงข้อความ ให้มันสั้นๆ ตอนออฟไลน์ได้ ไอเทม 87 ชิ้น เงินรวม 512
+ * ประมาณนี้พอ" — two numbers. This used to itemise every drop, name the job, and list the sources of
+ * the money on separate lines; four seconds of reading for a card you dismiss. What was per-item is
+ * in the bag, what was per-source is in the ledger, and the jobs that ran are named in one dim line
+ * because "did the thing I left running actually run" is the one question the totals cannot answer. */
 function openOfflinePopup(r) {
   if (!r) return;
   const hrs = r.awayMs / 3600000;
   const away = hrs >= 1 ? `${hrs.toFixed(1)} ชั่วโมง` : `${Math.round(r.awayMs / 60000)} นาที`;
-  const items = Object.entries(r.made)
-    .map(([id, n]) => `${ITEMS[id].icon} ${escapeHtml(ITEMS[id].name)} ×${n.toLocaleString()}`)
-    .join(" · ");
+  const ran = r.jobs.map((j) => escapeHtml(j.skill.name)).join(" · ");
   const back = document.createElement("div");
   back.className = "modal-back";
   back.innerHTML = `
     <div class="modal">
-      <div class="modal-head">🌙 ระหว่างที่ไม่อยู่</div>
+      <div class="modal-head">🌙 ${T("ระหว่างที่ไม่อยู่")}</div>
       <div class="modal-sub">
-        หายไป <b>${away}</b>${r.capped
-          ? ` — คิดให้สูงสุด ${OFFLINE_CAP_HOURS} ชั่วโมง` : ""}<br>
-        <b>${escapeHtml(r.skill.name)} · ${escapeHtml(r.action.name)}</b>
-        ทำไป <b>${r.cycles.toLocaleString()}</b> รอบ
+        ${T("หายไป")} <b>${away}</b>${r.capped ? ` — ${T("คิดให้สูงสุด")} ${OFFLINE_CAP_HOURS} ${T("ชั่วโมง")}` : ""}
         <div class="offline-lines">
-          ${r.gold ? `<div>💰 ได้ทอง <b class="good">${fmtNum(r.gold)}</b></div>` : ""}
-          ${items ? `<div>🎒 ${items}</div>` : ""}
-          ${r.levelsGained > 0
-            ? `<div>🎉 ${escapeHtml(r.skill.name)} ขึ้น <b class="good">${r.levelsGained}</b> เลเวล</div>` : ""}
-            ${r.cash && r.cash.shops ? `<div>🏪 ${r.cash.shops > 0 ? "รายได้ร้านค้า" : "ขาดทุนร้านค้า"} <b class="${r.cash.shops > 0 ? "good" : "rb-warn"}">${fmtNum(Math.abs(r.cash.shops))}</b></div>` : ""}
-            ${r.cash && r.cash.div ? `<div>📈 ปันผลจากหุ้น <b class="good">${fmtNum(r.cash.div)}</b></div>` : ""}
-            ${/* 🎯 [owner] "มันไม่มีแจ้งว่าควรได้เงินเท่าไหร่ 30%" — say the arithmetic, not just the
-                 result. Without this the number is unverifiable: a player has no way to tell a
-                 correct 30% from a wrong one, and the whole feature is a promise about a fraction. */ ""}
-            ${r.cash && (r.cash.shops || r.cash.div) ? `<div class="dim">— คิดจาก ${r.cash.days.toFixed(1)} วันในเกม ที่ ${Math.round(r.rate * 100)}% ของอัตราปกติ</div>` : ""}
-          ${r.ranOut ? `<div class="rb-warn">⚠️ วัตถุดิบหมดก่อน งานเลยหยุดกลางทาง</div>` : ""}
+          <div class="offline-total">
+            ${r.items ? `🎒 ${T("ไอเทม")} <b class="good">${r.items.toLocaleString()}</b> ${T("ชิ้น")}` : ""}
+            ${r.items && r.total ? " · " : ""}
+            ${r.total ? `💰 ${T("เงินรวม")} <b class="${r.total > 0 ? "good" : "rb-warn"}">${
+              r.total > 0 ? "" : "-"}${fmtNum(Math.abs(r.total))}</b>` : ""}
+          </div>
+          ${ran ? `<div class="dim">${ran}${r.levelsGained > 0
+            ? ` · ${T("ขึ้น")} ${r.levelsGained} ${T("เลเวล")}` : ""}</div>` : ""}
+          ${/* 🎯 [owner] "มันไม่มีแจ้งว่าควรได้เงินเท่าไหร่ 30%" — say the arithmetic, not just the
+               result: a player has no way to tell a correct 30% from a wrong one otherwise, and the
+               whole feature is a promise about a fraction. */ ""}
+          <div class="dim">— ${T("คิดจาก")} ${(r.cash?.days || 0).toFixed(1)} ${T("วันในเกม")} ${
+            T("ที่")} ${Math.round(r.rate * 100)}% ${T("ของอัตราปกติ")}</div>
+          ${r.ranOut ? `<div class="rb-warn">⚠️ ${T("วัตถุดิบหมดก่อน งานเลยหยุดกลางทาง")}</div>` : ""}
         </div>
-        <span class="dim">ตอนไม่อยู่ได้ ${Math.round(OFFLINE_RATE * 100)}% ของการเล่นเอง 
-            — ปฏิทินไม่เดิน ความชำนาญไม่ขึ้น แปลงปลูกไม่โต และการล่ามอนสเตอร์ไม่เดินต่อ</span>
+        <span class="dim">${T("ปฏิทินไม่เดิน ความชำนาญไม่ขึ้น แปลงปลูกไม่โต และการล่ามอนสเตอร์ไม่เดินต่อ")}</span>
       </div>
       <div class="modal-actions"><button class="btn" data-close>${T("รับของ")}</button></div>
     </div>`;
@@ -3533,6 +3747,9 @@ function calendarTick(dtSeconds) {
 function onNewDay(date) {
   bankAccrue(date);
   marketTick(date);
+  /* 🎯 [owner 2026-08-23] "มีการปรับค่าทุกวัน" — every game-day, beside the share market, so the
+     two move on the same clock and neither can be timed against the other. */
+  cryptoTick();
   payDividends(date);
   runShopsDay(date);
   runEstatesDay();
@@ -4406,6 +4623,13 @@ function ledger(icon, text, amount) {
   P.ledger = P.ledger.slice(0, 60);
 }
 
+/* The single door rent walks through, so the rent-income tax cannot be dodged by a path that
+   forgets to report — the same reasoning as bookInvestmentProfit below. */
+function bookRentIncome(amount) {
+  P.tax = P.tax || { yearProfit: 0, paidTotal: 0, debtSinceDay: null, lastBill: null };
+  P.tax.yearRent = (P.tax.yearRent || 0) + amount;
+}
+
 /* The single door investment income walks through — so nothing can earn untaxed by accident. */
 function bookInvestmentProfit(amount) {
   P.tax = P.tax || { yearProfit: 0, paidTotal: 0, debtSinceDay: null, lastBill: null };
@@ -4555,6 +4779,101 @@ function portfolioValue() {
   return Object.keys(P.holdings || {}).reduce((t, id) => t + heldShares(id) * sharePrice(id), 0);
 }
 
+/* --- crypto ---------------------------------------------------------------------------
+ * 🎯 [owner 2026-08-23] "ไม่มีปันผล เลยต้องให้เน้นการเก็งกำไรการลงทุน หมวดนี้จะนับเป็นยอดขายของการ
+ * ลงทุน" — the whole instrument is the price. There is no payDividends equivalent here and there
+ * must never be one, or it becomes a worse version of the share market.
+ *
+ * Cost basis is tracked per coin as a running average, because that is what makes a SALE report a
+ * real gain or loss. Buying more at a different price moves the average rather than resetting it;
+ * without that, selling half a position at a profit and half at a loss could be made to look like
+ * two profits by choosing the order. */
+/* 🎯 [owner 2026-08-23] "ที่มันบ่งบอกความต่างของ % มีสัญลักษณ์ เขียว แดง ด้วย" — one place that
+ * turns a ratio into a coloured percentage, so every figure on the page reads the same way and a
+ * new one cannot invent its own scale. Dead flat is dim rather than green: nothing has happened,
+ * and calling that good is how a page starts lying gently. */
+function pctTag(ratio) {
+  if (!isFinite(ratio) || ratio <= 0) return "";
+  const pct = (ratio - 1) * 100;
+  const cls = pct > 0.5 ? "good" : pct < -0.5 ? "bad" : "dim";
+  const arrow = pct > 0.5 ? "▲" : pct < -0.5 ? "▼" : "▬";
+  const n = Math.abs(pct) >= 100 ? Math.round(Math.abs(pct)) : Math.abs(pct).toFixed(1);
+  return `<span class="pct ${cls}">${arrow} ${n}%</span>`;
+}
+/* Prices span 5 to 2,844, so a fixed number of decimals is wrong at one end or the other. */
+function money(n) { return n < 100 ? n.toFixed(2) : Math.round(n).toLocaleString(); }
+
+function findCoin(id) { return CRYPTOS.find((c) => c.id === id); }
+function coinPrice(id) {
+  const c = findCoin(id);
+  if (!c) return 0;
+  const px = (P.crypto || {})[id];
+  return px == null ? c.base : px;
+}
+function coinHeld(id) { return (P.coins?.[id]?.units) || 0; }
+function coinCost(id) { return (P.coins?.[id]?.cost) || 0; }   // average paid per unit
+function cryptoValue() {
+  return Object.keys(P.coins || {}).reduce((t, id) => t + coinHeld(id) * coinPrice(id), 0);
+}
+
+/* One day's move. Same shape as marketTick — a shock plus a pull back toward base, applied to the
+ * LOG distance so the pull is symmetric up and down — but each coin carries its own two dials, so
+ * fifty of them behave like fifty different things rather than one thing fifty times. */
+function cryptoTick() {
+  P.crypto = P.crypto || {};
+  for (const c of CRYPTOS) {
+    const px = coinPrice(c.id);
+    const shock = (Math.random() * 2 - 1) * c.vol;
+    const pull = (c.base - px) / c.base * c.rev;
+    const next = px * (1 + shock) + c.base * pull;
+    P.crypto[c.id] = Math.min(c.base * CRYPTO_CEIL, Math.max(c.base * CRYPTO_FLOOR, next));
+  }
+}
+
+function buyCoin(id, units) {
+  const c = findCoin(id);
+  units = Math.floor(units);
+  if (!c || units <= 0) return;
+  const room = CRYPTO_MAX_UNITS - coinHeld(id);
+  units = Math.min(units, room);
+  if (units <= 0) { toast(`ถือ ${c.name} เต็มเพดานแล้ว`, "warn"); return; }
+  const px = coinPrice(id);
+  const cost = Math.ceil(px * units);
+  if (P.gold < cost) { toast("ทองไม่พอ", "warn"); return; }
+  P.gold -= cost;
+  P.coins = P.coins || {};
+  const held = coinHeld(id), paid = coinCost(id) * held;
+  P.coins[id] = { units: held + units, cost: (paid + cost) / (held + units) };
+  ledger("🪙", `${T("ซื้อ")} ${c.name} ×${units.toLocaleString()}`, -cost);
+  toast(`${c.icon} ${T("ซื้อ")} ${c.name} ×${units.toLocaleString()} — ${cost.toLocaleString()} 💰`, "", "money");
+  renderView(); updateTopbar();
+}
+
+function sellCoin(id, units) {
+  const c = findCoin(id);
+  units = Math.min(Math.floor(units), coinHeld(id));
+  if (!c || units <= 0) return;
+  const px = coinPrice(id);
+  const got = Math.floor(px * units);
+  const basis = coinCost(id) * units;
+  P.gold += got;
+  const left = coinHeld(id) - units;
+  if (left > 0) P.coins[id] = { units: left, cost: coinCost(id) };   // average survives a part sale
+  else delete P.coins[id];
+  /* 🎯 "หมวดนี้จะนับเป็นยอดขายของการลงทุน" — only the GAIN is income, and only when realised.
+     A loss reduces the year's taxable profit, which is what makes speculation a real risk rather
+     than a one-way bet against the tax office. */
+  const gain = Math.round(got - basis);
+  if (gain !== 0) bookInvestmentProfit(gain);
+  if (got > 0) bump("goldEarned", got);
+  ledger("🪙", `${T("ขาย")} ${c.name} ×${units.toLocaleString()}`
+    + ` (${gain >= 0 ? "+" : ""}${Math.round(gain).toLocaleString()})`, got);
+  toast(`${c.icon} ${T("ขาย")} ${c.name} ×${units.toLocaleString()} — ${got.toLocaleString()} 💰`
+    + ` · ${gain >= 0 ? T("กำไร") : T("ขาดทุน")} ${Math.abs(Math.round(gain)).toLocaleString()}`,
+    gain >= 0 ? "" : "warn", "money");
+  renderView(); updateTopbar();
+}
+
 /* Prices random-walk but are pulled back toward `base` every day, so a company never drifts to
  * zero or to the moon — the profitable move is buying a dip and selling a spike, not holding and
  * hoping. Reversion is applied to the LOG distance so the pull is symmetric up and down. */
@@ -4665,15 +4984,13 @@ function sellShares(id, n) {
  * into the pocket and then the bank on its own; now it hands over a bill and the player settles it
  * from the tax page. Ignoring one has teeth — see taxEnforce below — but it is a decision rather
  * than something that happens to you while you are looking elsewhere. */
+/* 🎯 [owner 2026-08-23] Both bases are now year-to-date INCOME, so both are cumulative totals
+ * that only grow — never a snapshot of what you happen to hold at the moment of asking. That is what
+ * closes the dodge the old holdings taxes had (sell on the last day, buy back on the first) without
+ * needing the daily-accrual machinery at all, which is why taxAccrueDay now has nothing to do. */
 function taxBaseFor(kindId) {
-  if (kindId === "wealth") return Math.max(0, Math.floor(P.gold || 0)) + Math.floor(bankBalance());
   if (kindId === "business") return Math.round(P.tax?.yearProfit || 0);
-  if (kindId === "estate") {
-    return (P.estates || []).reduce((t, es) => {
-      const kind = estateKind(es.kind);
-      return t + (kind ? kind.price : 0) + Math.round(es.spent || 0);
-    }, 0);
-  }
+  if (kindId === "estate") return Math.round(P.tax?.yearRent || 0);
   return 0;
 }
 /* 🎯 [owner 2026-08-17] "เมื่อเงินถึงกำหนด มันจะคิดเรทเฉลี่ยรายวันสะสม ทำให้เราสามารถจ่ายเงินก่อนได้
@@ -4709,25 +5026,18 @@ function taxYearElapsed() {
  * Business income stays outside this: yearProfit is already a year-to-date total that only grows, so
  * charging a slice of it daily would tax the same profit repeatedly. */
 function taxAccrueDay() {
-  if (P.dead) return;
-  P.tax = P.tax || {};
-  P.tax.accrued = P.tax.accrued || {};
-  for (const k of TAX_KINDS) {
-    if (k.id === "business") continue;         // already cumulative — see above
-    const full = taxOwedFor(k.id, taxBaseFor(k.id));
-    if (full <= 0) continue;
-    P.tax.accrued[k.id] = (P.tax.accrued[k.id] || 0) + full / DAYS_PER_YEAR;
-  }
+  /* 🎯 [owner 2026-08-23] Nothing to do any more, and kept as a named no-op rather than deleted
+   * because onNewDay calls it and the shape of the tax year is easier to follow with the seam still
+   * visible. Both kinds are charged on income now: yearProfit and yearRent are year-to-date totals
+   * that only grow, so a daily slice of them would tax the same earnings again every day.
+   *
+   * P.tax.accrued is left alone rather than cleared — a save mid-year carries a figure from the old
+   * holdings taxes, and taxRunningFor no longer reads it. */
 }
-
-function taxRunningFor(kindId) {
-  if (kindId === "business") return taxOwedFor(kindId, taxBaseFor(kindId));
-  /* Fall back to the old proration for a save that has not accrued a day yet, so the figure does not
-     read as zero on the tick before the first charge lands. */
-  const acc = P.tax?.accrued?.[kindId];
-  if (acc == null) return Math.round(taxOwedFor(kindId, taxBaseFor(kindId)) * taxYearElapsed());
-  return Math.round(acc);
-}
+/* 🎯 [owner 2026-08-23] Both kinds are income now, so this is simply the ladder applied to what
+   the year has earned so far — no proration and no stored accrual, because the base itself is
+   already a year-to-date figure that only grows. */
+function taxRunningFor(kindId) { return taxOwedFor(kindId, taxBaseFor(kindId)); }
 function taxPrepaid(kindId) { return Math.floor(P.tax?.prepaid?.[kindId] || 0); }
 /* What this kind owes right now, before the year has even ended. */
 function taxAccruedFor(kindId) { return Math.max(0, taxRunningFor(kindId) - taxPrepaid(kindId)); }
@@ -4826,9 +5136,7 @@ function settleTaxYear(date) {
        Not taxRunningFor: its fallback prorates by elapsed-fraction-of-year, and this runs on the
        first day of the new year when that fraction is exactly 0 — a save upgrading from before the
        daily accrual would be assessed nothing at all. A finished year is a whole year. */
-    const acc = P.tax?.accrued?.[k.id];
-    const full = k.id === "business" || acc == null
-      ? taxOwedFor(k.id, base) : Math.round(acc);
+    const full = taxOwedFor(k.id, base);
     const amount = Math.max(0, full - taxPrepaid(k.id));
     if (amount <= 0) continue;
     P.tax.bills.push({ id: `${k.id}-${year}`, kind: k.id, year, base, amount, paid: 0,
@@ -4841,6 +5149,7 @@ function settleTaxYear(date) {
   P.tax.lastBill = { year, profit, bill: raised.length ? P.tax.bills.slice(-raised.length)
     .reduce((t, b) => t + b.amount, 0) : 0 };
   P.tax.yearProfit = 0;
+  P.tax.yearRent = 0;                 // the rent year restarts with the tax year
   if (P.bank) P.bank.yearInterest = 0;
   if (!raised.length) {
     if (profit > 0) toast(`🧾 สรุปปีที่ ${year}: กำไรลงทุน ${profit.toLocaleString()} — ยังไม่ถึงเกณฑ์เสียภาษี`);
@@ -6849,6 +7158,7 @@ function renderFamily() {
         + "· หายถาวร เอากลับมาไม่ได้\n"
         + (lv ? `· ค่าเรียน ${lv} ขั้นที่ลงทุนไปหายไปด้วย ไม่คืนเงิน\n` : "")
         + `· โควตาลูกรอบจุตินี้ไม่คืน (เกิดแล้ว ${born}/${CHILD_MAX})\n`
+        + (childPet(k) ? `· ${petStats(childPet(k)).name} จะกลับมาอยู่กับเรา ไม่หายไปด้วย\n` : "")
         + "· ค่าเลี้ยงดูจะลดลงทันที";
       if (!confirm(msg)) return;
       if (disownChild(b.dataset.disown)) renderView();
@@ -7333,7 +7643,12 @@ function renderBag() {
 let moneyTab = "ledger";     // ledger | bank | s | m | l
 let openCompany = null;      // the one expanded card
 
-function estimatedTaxNow() { return taxOwedOn(Math.round(P.tax?.yearProfit || 0)); }
+/* 🐛 [owner 2026-08-23: "ส่วนภาษีที่ต้องจ่าย มันต้องรวมทั้งสองภาษี แล้วโชว์"] This priced ONLY the
+ * investment ladder, through taxOwedOn — a standalone helper that predates there being more than one
+ * kind. The rent tax was invisible here, so the headline number under-reported the year for anyone
+ * who owned property. taxAccruedTotal walks every kind and subtracts what has already been paid,
+ * which is what "ถ้าจบปีนี้" actually means. */
+function estimatedTaxNow() { return taxAccruedTotal(); }
 
 
 
@@ -7447,6 +7762,7 @@ function runEstatesDay() {
    * — the same reasoning that keeps dividends and shop takings out of those multipliers */
   P.gold += Math.round(total);
   bump("rentEarned", total);
+  bookRentIncome(Math.round(total));
   /* Rent is not income-taxed either, for the same reason: the estate tax already charges the
    * property, and the rent it pays lands in the pocket where the wealth tax finds it. */
   /* 🐛 [owner 2026-08-22: "เช็คให้หน่อยว่าค่าเช่าทำไมไม่เห็นในบัญชี"] It toasted and vanished. The
@@ -7547,7 +7863,12 @@ function renderEstateBuy(grid, owned) {
     const afford = P.gold >= kind.price;
     const card = document.createElement("div");
     card.className = "action-card" + (afford ? "" : " locked");
-    const full = FURNITURE.slice(0, kind.slots).reduce((t, f) => t + f.rent, 0);
+    /* 🐛 [2026-08-23] This took the first N pieces in TABLE order, but the install list is sorted
+       best-first, so a player filling four slots buys the four highest — not the first four. The
+       figure therefore promised a number nobody would actually reach. Best N, on a copy: sorting
+       FURNITURE itself would change what every other reader of it means. */
+    const full = FURNITURE.slice().sort((a, b) => b.rent - a.rent)
+      .slice(0, kind.slots).reduce((t, f) => t + f.rent, 0);
     card.innerHTML = `
       <div class="head"><div class="name">${kind.icon} ${escapeHtml(kind.name)}</div>
         <div class="req">${kind.price.toLocaleString()} 💰</div></div>
@@ -8198,6 +8519,7 @@ function renderMoney() {
 
   // --- purse summary: the four numbers that matter, always visible ---
   const profit = Math.round(P.tax?.yearProfit || 0);
+  const rent = Math.round(P.tax?.yearRent || 0);
   const est = estimatedTaxNow();
   const summary = document.createElement("div");
   summary.className = "money-summary";
@@ -8205,6 +8527,11 @@ function renderMoney() {
     <div class="money-stat"><span>${T("ทองในมือ")}</span><b class="${P.gold < 0 ? "bad" : ""}">${P.gold.toLocaleString()}</b></div>
     <div class="money-stat"><span>${T("ฝากธนาคาร")}</span><b>${Math.floor(bankBalance()).toLocaleString()}</b></div>
     <div class="money-stat"><span>${T("มูลค่าหุ้นที่ถือ")}</span><b>${Math.round(portfolioValue()).toLocaleString()}</b></div>
+    ${/* 🎯 [owner 2026-08-23] "มันไม่ควรสร้างช่องใหม่มา · มันควรเอาค่าเช่าอสังหาปีที่ 2 ไปเพิ่ม ·
+         ส่วนกล่องเดิมมันยังมีเรื่องกำไรลงทุนปีที่ 2 อยู่แล้ว" — I had added a second summary box below
+         the tabs saying much of what this one already said. Rent belongs beside the profit it is
+         taxed alongside, in the box that is always on screen. */ ""}
+    <div class="money-stat"><span>${T("ค่าเช่าปีที่")} ${d.year}</span><b>${rent.toLocaleString()}</b></div>
     <div class="money-stat"><span>กำไรลงทุนปีที่ ${d.year}</span><b>${profit.toLocaleString()}</b></div>
     <div class="money-stat"><span>${T("ภาษีที่ต้องจ่ายถ้าจบปีนี้")}</span>
       <b class="${est > 0 ? "bad" : "good"}">${est.toLocaleString()}</b></div>`;
@@ -8228,6 +8555,11 @@ function renderMoney() {
   const tabs = [
     { id: "ledger", label: "🧾 บัญชี", count: "" },
     { id: "bank", label: "🏦 ธนาคาร", count: "" },
+    /* 🎯 [owner 2026-08-23] "ยุบรวมให้เหลือเมนูเดียว" — I had split these into three shelves by
+       price band. One tab: the coins are already sorted by price inside it, so the bands were a
+       navigation step that bought nothing. */
+    { id: "coin", label: "🪙 คริปโต",
+      count: `${CRYPTOS.filter((c) => coinHeld(c.id) > 0).length}/${CRYPTOS.length}` },
     ...COMPANY_SIZES.map((sz) => ({
       id: sz.id, label: `${sz.icon} ${sz.name}`,
       count: `${COMPANIES.filter((c) => c.size === sz.id && heldShares(c.id) > 0).length}/${COMPANIES.filter((c) => c.size === sz.id).length}`,
@@ -8247,18 +8579,26 @@ function renderMoney() {
    * is left to buy". Two complementary filters, remembered like the shop's and the achievement
    * page's, so the answer is one click rather than a scroll. Both are defined by holding at least
    * one share — the 👑 badge is a separate thing (100%) and is not what these hide. */
+  /* 🎯 [owner 2026-08-23] "bitcoin เพิ่มหัวข้อ ซ่อนที่มีแล้ว กับ ซ่อนที่ยังไม่ได้เป็นเจ้าของ" — the
+     same pair the share tabs have, and fifty coins is exactly the length that makes them worth
+     having. Their own preference keys, because "hide what I hold" means a different set on each
+     page and sharing one key would make ticking it on one silently filter the other. */
   if (moneyTab !== "bank" && moneyTab !== "ledger") {
-    const inTab = COMPANIES.filter((c) => c.size === moneyTab);
-    const held = inTab.filter((c) => heldShares(c.id) > 0).length;
+    const coins = moneyTab === "coin";
+    const inTab = coins ? CRYPTOS : COMPANIES.filter((c) => c.size === moneyTab);
+    const has = (x) => (coins ? coinHeld(x.id) > 0 : heldShares(x.id) > 0);
+    const keyHeld = coins ? "hideHeldCoin" : "hideHeldCo";
+    const keyUnheld = coins ? "hideUnheldCoin" : "hideUnheldCo";
+    const held = inTab.filter(has).length;
     const filters = document.createElement("div");
     filters.className = "money-filters";
     filters.innerHTML = `
       <label class="hide-owned">
-        <input type="checkbox" id="hide-held"${uiPref("hideHeldCo") ? " checked" : ""}>
+        <input type="checkbox" id="hide-held"${uiPref(keyHeld) ? " checked" : ""}>
         ซ่อนที่มีแล้ว (${held})
       </label>
       <label class="hide-owned">
-        <input type="checkbox" id="hide-unheld"${uiPref("hideUnheldCo") ? " checked" : ""}>
+        <input type="checkbox" id="hide-unheld"${uiPref(keyUnheld) ? " checked" : ""}>
         ซ่อนที่ยังไม่ได้เป็นเจ้าของ (${inTab.length - held})
       </label>`;
     extra.appendChild(filters);
@@ -8267,13 +8607,13 @@ function renderMoney() {
      * list. Turning one on turns the other off, so the reachable states are held-only, unheld-only,
      * or everything. */
     filters.querySelector("#hide-held").onchange = (e) => {
-      setUiPref("hideHeldCo", e.target.checked);
-      if (e.target.checked) setUiPref("hideUnheldCo", false);
+      setUiPref(keyHeld, e.target.checked);
+      if (e.target.checked) setUiPref(keyUnheld, false);
       openCompany = null; renderMoney();
     };
     filters.querySelector("#hide-unheld").onchange = (e) => {
-      setUiPref("hideUnheldCo", e.target.checked);
-      if (e.target.checked) setUiPref("hideHeldCo", false);
+      setUiPref(keyUnheld, e.target.checked);
+      if (e.target.checked) setUiPref(keyHeld, false);
       openCompany = null; renderMoney();
     };
   }
@@ -8282,6 +8622,7 @@ function renderMoney() {
   grid.innerHTML = "";
   if (moneyTab === "bank") renderBankTab(grid);
   else if (moneyTab === "ledger") renderLedgerTab(grid);
+  else if (moneyTab === "coin") renderCryptoTab(grid);
   else renderMarketTab(grid, moneyTab);
   highlightAction = null;
 }
@@ -8361,6 +8702,101 @@ function renderBankTab(grid) {
     if (b.dataset.quick === "dep-half") bankDeposit(Math.floor(P.gold / 2));
     else if (b.dataset.quick === "dep-all") bankDeposit(P.gold);
     else bankWithdraw(Math.floor(bankBalance()));
+  });
+}
+
+/* 🎯 [owner 2026-08-23] The crypto tab. Deliberately NOT a copy of the share card: there is no
+ * dividend line, no ownership badge and no yield, because none of them exist here. What it shows
+ * instead is the two things a speculator acts on — where the price is against what it usually is,
+ * and where it is against what YOU paid. */
+/* 🎯 [owner 2026-08-23] "ยุบรวมให้เหลือเมนูเดียว แล้วปรับแต่งให้สวยงามเหมือนในรูป" — the share
+ * card's layout, which is the one already proven on this page: name on the left, price with a
+ * coloured move on the right, and one compact row of figures underneath.
+ *
+ * The row says different things, because a coin is a different instrument: there is no yield and no
+ * pay-out interval, so what fills that space is how violently it moves, where it sits against its
+ * own usual level, and — once you hold some — what your position is actually worth.
+ *
+ * Sorted cheapest first so the list itself does the work the price bands were doing. */
+function renderCryptoTab(grid) {
+  const head = document.createElement("div");
+  head.className = "area-head";
+  head.textContent = "🪙 คริปโต — ไม่มีปันผล กำไรอยู่ที่ส่วนต่างราคาอย่างเดียว";
+  grid.appendChild(head);
+
+  const anyHeld = CRYPTOS.filter((c) => coinHeld(c.id) > 0);
+  if (anyHeld.length) {
+    const worth = Math.round(cryptoValue());
+    const paid = Math.round(anyHeld.reduce((t, c) => t + coinCost(c.id) * coinHeld(c.id), 0));
+    const net = worth - paid;
+    const sum = document.createElement("div");
+    sum.className = "money-summary";
+    sum.innerHTML = `
+      <div class="money-stat"><span>${T("เหรียญที่ถือ")}</span><b>${anyHeld.length}</b></div>
+      <div class="money-stat"><span>${T("ทุนที่จมอยู่")}</span><b>${fmtNum(paid)}</b></div>
+      <div class="money-stat"><span>${T("มูลค่าตอนนี้")}</span><b>${fmtNum(worth)}</b></div>
+      <div class="money-stat"><span>${T("กำไร/ขาดทุนถ้าขายตอนนี้")}</span><b class="${net < 0 ? "bad" : "good"}">${
+        net < 0 ? "-" : "+"}${fmtNum(Math.abs(net))}</b> ${pctTag(paid ? worth / paid : 1)}</div>`;
+    grid.appendChild(sum);
+  }
+
+  /* Same two filters the share tabs use, on their own keys — see the block in renderMoney. */
+  const all = [...CRYPTOS].sort((a, b) => a.base - b.base);
+  const shown = all.filter((c) => {
+    const has = coinHeld(c.id) > 0;
+    return !((has && uiPref("hideHeldCoin")) || (!has && uiPref("hideUnheldCoin")));
+  });
+  if (!shown.length) {
+    const none = document.createElement("div");
+    none.className = "area-head";
+    none.textContent = "ตัวกรองซ่อนไว้ทั้งหมด — เอาเครื่องหมายถูกออกสักอันเพื่อดูรายการ";
+    grid.appendChild(none);
+    return;
+  }
+  if (shown.length < all.length) head.textContent += `  ·  แสดง ${shown.length}/${all.length}`;
+
+  for (const c of shown) {
+    const px = coinPrice(c.id);
+    const units = coinHeld(c.id);
+    const drift = (px - c.base) / c.base;
+    const swing = c.vol >= 0.3 ? T("เหวี่ยงแรงมาก") : c.vol >= 0.15 ? T("เหวี่ยงแรง") : T("ค่อยๆ ขยับ");
+    const mine = units > 0 ? Math.round(px * units - coinCost(c.id) * units) : 0;
+    const card = document.createElement("div");
+    card.className = "action-card company-card" + (units ? " running" : "");
+    card.innerHTML = `
+      <div class="head">
+        <div class="name">${c.icon} ${escapeHtml(c.name)}</div>
+        <div class="req ${drift > 0.04 ? "px-up" : drift < -0.04 ? "px-down" : ""}">
+          ${money(px)} <span class="px-drift">${drift >= 0 ? "▲" : "▼"} ${Math.abs(drift * 100).toFixed(0)}%</span>
+        </div>
+      </div>
+      <div class="detail company-line">
+        <span>${swing}</span>
+        <span>${T("ปกติ ")}<b>${money(c.base)}</b></span>
+        ${units
+          ? `<span>${T("ถือ ")}<b>${units.toLocaleString()}</b></span>
+             <span>${T("ทุน ")}<b>${money(coinCost(c.id))}</b></span>
+             <span class="${mine < 0 ? "bad" : "good"}">${mine < 0 ? "-" : "+"}${fmtNum(Math.abs(mine))}</span>`
+          : `<span class="dim">${T("มูลค่าต่อหน่วย")} ${money(px)}</span>`}
+      </div>
+      <div class="cd-actions">
+        <button class="btn ghost small" data-buycoin="${c.id}" data-n="1">${T("ซื้อ")} 1</button>
+        <button class="btn ghost small" data-buycoin="${c.id}" data-n="10">${T("ซื้อ")} 10</button>
+        <button class="btn ghost small" data-buycoin="${c.id}" data-n="max">${T("ซื้อเท่าที่ไหว")}</button>
+        ${units ? `<button class="btn ghost small" data-sellcoin="${c.id}" data-n="${Math.ceil(units / 2)}">${T("ขายครึ่ง")}</button>
+          <button class="btn ghost small" data-sellcoin="${c.id}" data-n="all">${T("ขายหมด")}</button>` : ""}
+      </div>`;
+    grid.appendChild(card);
+  }
+
+  grid.querySelectorAll("[data-buycoin]").forEach((b) => b.onclick = () => {
+    const id = b.dataset.buycoin;
+    const n = b.dataset.n === "max" ? Math.floor(P.gold / Math.max(0.01, coinPrice(id))) : Number(b.dataset.n);
+    buyCoin(id, n);
+  });
+  grid.querySelectorAll("[data-sellcoin]").forEach((b) => b.onclick = () => {
+    const id = b.dataset.sellcoin;
+    sellCoin(id, b.dataset.n === "all" ? coinHeld(id) : Number(b.dataset.n));
   });
 }
 
@@ -8478,9 +8914,6 @@ function wireCompanyDetail(card, c) {
 const LEDGER_SHOWN = 15;
 
 function renderLedgerTab(grid) {
-  const d = today();
-  const profit = Math.round(P.tax?.yearProfit || 0);
-
   const all = P.ledger || [];
   const shown = all.slice(0, LEDGER_SHOWN);
   const logHead = document.createElement("div");

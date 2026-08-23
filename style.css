@@ -1885,3 +1885,17 @@ body::after {
    companion in the household is listed together now, so whose it is has to read at a glance. */
 .pet-owner { color: var(--text-dim); font-weight: 400; font-size: 12px; }
 .fam-card.is-pet.is-active { border-color: var(--gold); }
+
+/* 🎯 [owner 2026-08-23] "ให้มันสั้นๆ ... ไอเทม 87 ชิ้น เงินรวม 512 ประมาณนี้พอ" — the two numbers get
+   the size; everything else on the card is a dim aside beneath them. */
+.offline-total { font-size: 16px; line-height: 1.9; }
+
+/* 🎯 [owner 2026-08-23] "มีสัญลักษณ์ เขียว แดง ด้วย" — the percentage badge used across the crypto
+   shelves. Tabular figures so a column of them lines up instead of jittering. */
+.pct {
+  display: inline-block; font-variant-numeric: tabular-nums; font-weight: 700; font-size: 12px;
+  padding: 1px 6px; border-radius: 6px; background: rgba(255, 255, 255, .06);
+}
+.pct.good { color: var(--good); }
+.pct.bad { color: var(--danger); }
+.pct.dim { color: var(--text-dim); }

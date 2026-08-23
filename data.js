@@ -6,7 +6,7 @@
  * v5 combat-stat split shipped with this left at 4: freshProfile stamped v4, migrate pushed
  * it to v5, and the `p.v === GAME_VERSION` guard then rejected every profile — the game
  * silently refused to create or load anything. balance_check.mjs now fails if the two drift. */
-const GAME_VERSION = 60;
+const GAME_VERSION = 63;
 /* 🎯 [owner 2026-08-22] "avatar คน เพดานน่าจะไม่กำหนด เพราะวางไว้ว่าให้โตได้เรื่อยๆ ... จริงๆ อยากให้ถึง 999"
  *
  * 99 was reachable in about four hours of the best XP route, which is the whole reason it felt like
@@ -2496,6 +2496,18 @@ const FURNITURE = [
   { id: "mirror", name: "กระจกอัญมณี",      icon: "🪞", rent: 0.10 },
   { id: "garden", name: "สวนหน้าบ้าน",      icon: "🪴", rent: 0.08 },
   { id: "pantry", name: "ครัวพร้อมเสบียง",  icon: "🍷", rent: 0.09 },
+  /* 🐛 [owner 2026-08-23: "บ้านที่เช่ามีเฟอร์นิเจอร์ไม่ครบ ทำให้บ้านมี slot เยอะ แต่ซื้อไม่ได้"] There
+     were six kinds and houses have up to TEN slots — installFurniture allows one of each, so twenty
+     of the twenty-eight properties could never be filled and sat at 6/10 for good. Four more, so
+     the largest house can be finished; the rest of the ladder was already reachable.
+
+     Priced by the same rule as the others (furniturePrice: each piece pays for itself in
+     FURNITURE_PAYBACK_YEARS of the rent it adds), so adding kinds cannot unbalance the return —
+     a fuller house costs proportionally more to fill. */
+  { id: "hearth", name: "เตาผิงหินอ่อน",    icon: "🔥", rent: 0.09 },
+  { id: "study",  name: "ห้องอ่านหนังสือ",   icon: "📚", rent: 0.08 },
+  { id: "bath",   name: "ห้องอาบน้ำแร่",     icon: "🛁", rent: 0.10 },
+  { id: "aviary", name: "กรงนกเรือนกระจก",  icon: "🐦", rent: 0.08 },
 ];
 /* The one place a furniture price is computed. The sale refund reads what was actually PAID from
  * the estate instead of recomputing it here, so retuning this never silently rewrites the value of
@@ -2543,46 +2555,121 @@ const TAX_FATAL_DAYS = 90;
  * Each kind is assessed on a different thing, has its own allowance and its own ladder, and every
  * ladder is MARGINAL — crossing a threshold never costs more than it earns. Money and property are
  * taxed on what you HOLD, once a year; business income on what you MADE. */
+/* 🎯 [owner 2026-08-23] "ลองประเมินแล้ว ภาษีอสังหามันเยอะ ไม่คุ้มกับรายได้ ... ให้มีตัวนับรายได้ต่อปี
+ * ในหน้าบัญชี แล้วใช้เงื่อนไขภาษีเงินได้อสังหาแทน · ยกเลิกภาษีทรัพย์สิน ให้เงินในมือและธนาคารปลอดภัย"
+ *
+ * Two kinds, and both are now taxes on INCOME rather than on holdings. That is the whole change.
+ *
+ * The property tax used to charge the VALUE of what you owned, every year, forever — so a house
+ * that had already repaid itself kept being billed for existing, and at 300m of property the yearly
+ * charge outran the rent. It charges the rent it actually collected instead.
+ *
+ * The hoarding tax is gone entirely: gold in the pocket and gold in the bank are safe. It was the
+ * one line that punished having played well rather than any particular decision, and removing it is
+ * what makes saving for a house or a company worth doing.
+ *
+ * `business` keeps its id so existing saves keep their paid-to-date and their outstanding bills. */
+/* 🎯 [owner 2026-08-23] "เพิ่มอีกหมวดหมู่ คล้ายหุ้นคือ bitcoin ที่มี 50 รายการ ให้ซื้อขายได้ อัตรา
+ * ความผันผวนสูง มีการปรับค่าทุกวัน บางตัวขึ้นลงแรง บางตัวขึ้นลงทีละนิด ไม่มีปันผล เลยต้องให้เน้นการเก็ง
+ * กำไรการลงทุน หมวดนี้จะนับเป็นยอดขายของการลงทุน"
+ *
+ * The shares market is deliberately dull: it reverts hard toward `base`, pays a dividend, and the
+ * profitable move is holding. This is the opposite instrument — no dividend at all, so the only way
+ * it earns is being sold for more than it cost.
+ *
+ * Two dials per coin rather than one, which is what makes fifty of them different from fifty copies
+ * of the same coin. `vol` is how far a day can move it; `rev` is how strongly it is dragged back
+ * toward `base`. A high-vol, low-rev coin genuinely wanders and can sit far from where it started;
+ * a low-vol, high-rev one barely leaves home. Both exist on purpose.
+ *
+ * Prices are NOT reset by a rebirth, for the same reason shares are not: the market is the world's,
+ * not the run's. */
+const CRYPTO_FLOOR = 0.08;        // a coin may fall to 8% of base — near-total loss is possible
+const CRYPTO_CEIL = 12;           // and 12x is reachable, which is what pays for the risk
+const CRYPTO_MAX_UNITS = 100000;  // per coin, so one holding cannot become the whole economy
+const CRYPTOS = [
+  { id: "moonbit", name: "มูนบิต", icon: "🌙", base: 8.89, vol: 0.194, rev: 0.04 },
+  { id: "starcoin", name: "สตาร์คอยน์", icon: "⭐", base: 63.6, vol: 0.124, rev: 0.029 },
+  { id: "emberx", name: "เอมเบอร์เอ็กซ์", icon: "🔥", base: 244, vol: 0.077, rev: 0.035 },
+  { id: "glacia", name: "กลาเซีย", icon: "❄️", base: 2610, vol: 0.273, rev: 0.034 },
+  { id: "verdant", name: "เวอร์แดนท์", icon: "🌿", base: 4.97, vol: 0.236, rev: 0.027 },
+  { id: "obsidia", name: "ออบซิเดีย", icon: "⬛", base: 45.6, vol: 0.08, rev: 0.024 },
+  { id: "aureus", name: "ออเรียส", icon: "🟡", base: 411, vol: 0.275, rev: 0.044 },
+  { id: "pyrite", name: "ไพไรต์", icon: "🟠", base: 2322, vol: 0.23, rev: 0.008 },
+  { id: "nimbus", name: "นิมบัส", icon: "☁️", base: 6.72, vol: 0.044, rev: 0.011 },
+  { id: "thorne", name: "ธอร์น", icon: "🌵", base: 38.0, vol: 0.114, rev: 0.022 },
+  { id: "mirefall", name: "ไมร์ฟอลล์", icon: "🕸️", base: 278, vol: 0.277, rev: 0.028 },
+  { id: "lumen", name: "ลูเมน", icon: "💡", base: 1296, vol: 0.379, rev: 0.033 },
+  { id: "cinder", name: "ซินเดอร์", icon: "🪵", base: 10.22, vol: 0.191, rev: 0.022 },
+  { id: "quartzia", name: "ควอตเซีย", icon: "🔷", base: 52.4, vol: 0.197, rev: 0.023 },
+  { id: "driftwood", name: "ดริฟต์วูด", icon: "🪸", base: 216, vol: 0.043, rev: 0.03 },
+  { id: "hollowsky", name: "ฮอลโลว์สกาย", icon: "🌌", base: 2844, vol: 0.128, rev: 0.024 },
+  { id: "saltvein", name: "ซอลต์เวน", icon: "🧂", base: 6.44, vol: 0.31, rev: 0.041 },
+  { id: "brimstone", name: "บริมสโตน", icon: "🌋", base: 59.2, vol: 0.13, rev: 0.013 },
+  { id: "frostbite", name: "ฟรอสต์ไบต์", icon: "🥶", base: 278, vol: 0.091, rev: 0.015 },
+  { id: "gildenrat", name: "กิลเดนแรต", icon: "🐀", base: 2196, vol: 0.411, rev: 0.005 },
+  { id: "tidewalker", name: "ไทด์วอล์คเกอร์", icon: "🌊", base: 7.7, vol: 0.157, rev: 0.022 },
+  { id: "ashenmark", name: "แอชเชนมาร์ก", icon: "🪶", base: 33.2, vol: 0.354, rev: 0.044 },
+  { id: "copperfang", name: "คอปเปอร์แฟง", icon: "🦷", base: 221, vol: 0.164, rev: 0.026 },
+  { id: "sablecoin", name: "เซเบิลคอยน์", icon: "🖤", base: 1566, vol: 0.085, rev: 0.037 },
+  { id: "wispcoin", name: "วิสป์คอยน์", icon: "👻", base: 6.93, vol: 0.229, rev: 0.02 },
+  { id: "runestone", name: "รูนสโตน", icon: "🪨", base: 46.0, vol: 0.368, rev: 0.018 },
+  { id: "halcyon", name: "ฮัลไซออน", icon: "🕊️", base: 400, vol: 0.11, rev: 0.036 },
+  { id: "voidmark", name: "วอยด์มาร์ก", icon: "🕳️", base: 2142, vol: 0.182, rev: 0.028 },
+  { id: "sunderite", name: "ซันเดอไรต์", icon: "⚡", base: 8.54, vol: 0.472, rev: 0.034 },
+  { id: "mossbank", name: "มอสส์แบงก์", icon: "🍀", base: 61.6, vol: 0.35, rev: 0.034 },
+  { id: "hearthx", name: "เฮิร์ธเอ็กซ์", icon: "🏮", base: 218, vol: 0.26, rev: 0.041 },
+  { id: "nettlecoin", name: "เนตเทิลคอยน์", icon: "🌾", base: 2610, vol: 0.29, rev: 0.012 },
+  { id: "prismic", name: "พริสมิก", icon: "🔺", base: 5.95, vol: 0.051, rev: 0.018 },
+  { id: "bogiron", name: "บ็อกไอรอน", icon: "⛓️", base: 40.4, vol: 0.173, rev: 0.013 },
+  { id: "skyshard", name: "สกายชาร์ด", icon: "🔹", base: 346, vol: 0.161, rev: 0.026 },
+  { id: "dusklight", name: "ดัสก์ไลต์", icon: "🌆", base: 2430, vol: 0.288, rev: 0.007 },
+  { id: "ferrox", name: "เฟอร์ร็อกซ์", icon: "⚙️", base: 6.72, vol: 0.237, rev: 0.022 },
+  { id: "wyrmgold", name: "เวิร์มโกลด์", icon: "🐉", base: 30.8, vol: 0.165, rev: 0.016 },
+  { id: "silt", name: "ซิลต์", icon: "🏜️", base: 369, vol: 0.195, rev: 0.024 },
+  { id: "kelpcoin", name: "เคลป์คอยน์", icon: "🌱", base: 1638, vol: 0.05, rev: 0.016 },
+  { id: "gravelmark", name: "กราเวลมาร์ก", icon: "🪧", base: 9.17, vol: 0.509, rev: 0.019 },
+  { id: "aetherx", name: "เอเธอร์เอ็กซ์", icon: "💠", base: 55.6, vol: 0.09, rev: 0.007 },
+  { id: "thistle", name: "ทิสเซิล", icon: "🌸", base: 408, vol: 0.174, rev: 0.029 },
+  { id: "beacon", name: "บีคอน", icon: "🔦", base: 1404, vol: 0.13, rev: 0.024 },
+  { id: "stonewake", name: "สโตนเวก", icon: "🗿", base: 6.86, vol: 0.266, rev: 0.033 },
+  { id: "emberlace", name: "เอมเบอร์เลซ", icon: "🎀", base: 42.0, vol: 0.253, rev: 0.009 },
+  { id: "nightfen", name: "ไนต์เฟน", icon: "🦇", base: 406, vol: 0.043, rev: 0.021 },
+  { id: "gloamcoin", name: "กลูมคอยน์", icon: "🌒", base: 2718, vol: 0.4, rev: 0.009 },
+  { id: "razorfin", name: "เรเซอร์ฟิน", icon: "🦈", base: 10.99, vol: 0.083, rev: 0.04 },
+  { id: "terracoin", name: "เทอร์ราคอยน์", icon: "🌍", base: 30.4, vol: 0.29, rev: 0.047 },
+];
+
 const TAX_KINDS = [
-  /* 🎯 [owner 2026-08-17] "พอได้เงินมา มันจะไปกองที่กระเป๋าเรา แล้วโดนภาษี ลองปรับจากกระเป๋านั้นแทน"
-   * This is the load-bearing one, and deliberately so: shop takings and rent are NOT income-taxed,
-   * they land in the pocket, and this is what finds them there. Which makes it a tax on HOARDING
-   * rather than on earning — money put back into shops, property or the market leaves the base,
-   * and only the pile that sits still pays.
-   *
-   * 🎯 [owner 2026-08-23] The rates USED to be set so ten years of hoarded endgame income cost about
-   * what the income ladder would have taken. That calibration is gone on purpose: children now
-   * outlive a rebirth, so household upkeep has no ceiling — four births a life, none ever cleared —
-   * and the hoarding tax was cut to a quarter to leave room for it. Hoarding is still not free, just
-   * no longer the largest line on the page. */
-  { id: "wealth", name: "ภาษีทรัพย์สิน", icon: "💰",
-    what: "ทองในมือ + เงินฝากธนาคาร รวมกัน",
-    /* 🎯 [owner 2026-08-22→23] Cut from 2/4/6 to 0.5/1/2 in the same breath as children being made
-       to outlive a rebirth. That change removed the ceiling on household upkeep — four births per
-       life, none of them ever cleared — so the hoarding tax had to come down to leave room for it. */
-    free: 100000000,
+  { id: "estate", name: "ภาษีเงินได้ค่าเช่า", icon: "🏠",
+    what: "ค่าเช่าที่เก็บได้จริงตลอดปีนี้",
+    free: 1000000,
     brackets: [
-      { upTo:  500000000, rate: 0.005 },
-      { upTo: 1000000000, rate: 0.010 },
-      { upTo:   Infinity, rate: 0.020 },
+      { upTo:  10000000, rate: 0.07 },
+      { upTo:  50000000, rate: 0.08 },
+      { upTo: 100000000, rate: 0.09 },
+      { upTo: 150000000, rate: 0.10 },
+      { upTo: 200000000, rate: 0.11 },
+      { upTo: 300000000, rate: 0.12 },
+      { upTo:   Infinity, rate: 0.13 },
     ] },
-  { id: "business", name: "ภาษีเงินได้", icon: "🏪",
-    what: "กำไรลงทุนทั้งปี — ปันผล กำไรจากการขาย ดอกเบี้ยธนาคาร",
-    free: TAX_FREE_ALLOWANCE,
-    brackets: TAX_BRACKETS },
-  { id: "estate", name: "ภาษีอสังหา", icon: "🏠",
-    what: "ราคาบ้านรวมกับเฟอร์นิเจอร์ที่ลงไป",
-    free: 50000000,
+  /* Same ladder, higher floor and a flatter top — the owner's own numbers: "ภาษีของปันผลและขาย ก็ใช้
+     กฎเดียวกัน แต่เพดานจะสูงกว่า". Speculation is where the risk is, so the exemption is larger and
+     the last rung does not climb. */
+  { id: "business", name: "ภาษีเงินได้การลงทุน", icon: "📈",
+    what: "ปันผล กำไรจากการขายหุ้นและคริปโต และดอกเบี้ยธนาคาร ตลอดปีนี้",
+    free: 5000000,
     brackets: [
-      { upTo: 300000000, rate: 0.005 },
-      { upTo: 600000000, rate: 0.010 },
-      /* 🎯 [owner 2026-08-22] His table read "600m–900m 2.0%" and then "800m+ 3.0%". Taken as 900m,
-         since the ladder's own upper edge is the only number both rows agree on and an overlapping
-         bracket would charge two rates on the same slice. */
-      { upTo: 900000000, rate: 0.020 },
-      { upTo:  Infinity, rate: 0.030 },
+      { upTo:  10000000, rate: 0.07 },
+      { upTo:  50000000, rate: 0.08 },
+      { upTo: 100000000, rate: 0.09 },
+      { upTo: 150000000, rate: 0.10 },
+      { upTo: 200000000, rate: 0.11 },
+      { upTo: 300000000, rate: 0.12 },
+      { upTo:   Infinity, rate: 0.12 },
     ] },
 ];
+
 /* Unpaid this long and the businesses that earned it are seized: income falls to zero until the
  * bill is settled. Three game months, the same countdown the game already uses elsewhere. */
 /* 🎯 [owner 2026-08-22] "หลังปีใหม่ มีเวลาชำระใน 30 วัน เหลือเดือนแรก หลังจากนั้นดอกเบี้ยเดินเรื่อยๆ
