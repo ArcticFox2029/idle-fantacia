@@ -710,6 +710,19 @@ function migrate(p) {
      * absent notification preference already reads as ON. The version steps because ?v= in
      * index.html is the published site's only cache-buster. */
   }
+  if (p.v === 55) {
+    p.v = 56;
+    /* Children gain `bornLife`, which the family page splits its two lists on. Nothing recorded it
+     * before — bornThisLife is a COUNT — so it is reconstructed: children are appended in birth
+     * order, so the LAST `bornThisLife` of them are the ones born in the life now running. Anyone
+     * earlier belongs to a previous life, which is exactly what the second list is for. */
+    const kids = p.kids || [];
+    const born = Math.min(kids.length, p.family?.bornThisLife ?? kids.length);
+    kids.forEach((k, i) => {
+      if (k.bornLife == null) k.bornLife = i >= kids.length - born ? (p.rebirths || 0)
+                                                                  : Math.max(0, (p.rebirths || 0) - 1);
+    });
+  }
   return p.v === GAME_VERSION ? p : null;
 }
 
@@ -1292,7 +1305,24 @@ function relRebirth() {
  * P.gameDays back to 0, so any age computed from the calendar would jump backwards the first time
  * the player rebirths, and would do it silently.
  */
-const CHILD_NAMES = ["อาริน", "นารา", "เคนจิ", "ลิลลี่", "ทาโร่", "มินะ", "โซอี้", "ยูกิ"];
+/* 🎯 [owner 2026-08-23] "เพื่อรองรับลูกจำนวนมาก ให้สร้างรูปและชื่อมาอีกเยอะๆ เพื่อรองรับลูกอีก
+ * ราวๆ 100 คน เพื่อไว้ก่อน" — children outlive rebirths now, so a long save accumulates them across
+ * every cycle and eight names ran out fast. A hundred, in birth order.
+ *
+ * ORDER-LOCKED against CHILD_FACES: childFaceId indexes one into the other, so inserting a name in
+ * the middle silently repaints every child after it. Append only. */
+const CHILD_NAMES = [
+  "อาริน", "นารา", "เคนจิ", "ลิลลี่", "ทาโร่", "มินะ", "โซอี้", "ยูกิ", "ไอโกะ", "ฮารุ", "เรน",
+  "ซากุระ", "ไคโตะ", "โนอา", "เอมิ", "ริกุ", "ฮานะ", "โซระ", "ยูโตะ", "มายา", "เคย์", "อายะ",
+  "ทาคุมิ", "นานา", "ชิน", "มิโอะ", "ฮิคารุ", "รินะ", "ไดกิ", "ยูนะ", "โคจิ", "ซากิ", "เท็ตสึ",
+  "อากิ", "ริว", "โมโมะ", "เคนตะ", "ชิโฮะ", "ฮิโระ", "นาโอะ", "จุน", "เอริ", "โซตะ", "มิกิ",
+  "เรียวตะ", "ฮิยาริ", "คาซึ", "อิจิ", "เมย์", "ทาเครุ", "ซึบากิ", "โยชิ", "คานะ", "เอเดน",
+  "ไอวี่", "ฟินน์", "โรซ่า", "มิโล", "เอลล่า", "ธีโอ", "ไอริส", "ลูคัส", "โนรา", "เฟลิกซ์",
+  "คลาร่า", "ออสการ์", "เฮเซล", "จูเลียน", "มาริน", "ซิลาส", "เวก้า", "โอริออน", "ลูน่า",
+  "แคสเปียน", "เอลารา", "ไคโร", "เซเลน", "อาร์เธอร์", "ไลร่า", "เอซรา", "ทาเลีย", "โรวัน",
+  "เอสเม", "ไบรอน", "เนวา", "คีแลน", "ซาช่า", "ดามิร์", "อันย่า", "ไมโล", "เวร่า", "นิโค",
+  "ตาเลีย", "อีวาน", "มิร่า", "โอเว่น", "ลาร่า", "ยาน", "นีน่า", "เดเมียน",
+];
 
 /* 🐛 [owner 2026-08-22: "มีลูกถึง 4 คนไปแล้ว มันเยอะผิดปกติ ... มันควรเพิ่งแต่งงาน มีลูกแค่คนเดียว"]
  * At 3% a day with no spacing rule, a save filled all four slots inside two game-years — the owner's
@@ -1382,7 +1412,42 @@ function childStat(k, id) {
 function childPower(k) {
   const atk = childStat(k, "atk"), def = childStat(k, "defs"), vit = childStat(k, "vit");
   const taught = childTrackLevel(k, "hunt") * CHILD_HUNT_TRACK_POWER;
-  return (atk / 6 + def / 10 + vit / 12) * (1 + taught);
+  /* 🎯 [owner 2026-08-23] "pet ก็จะคอยติดตามออกสู้ได้" — the companion is why giving a good breed
+     to a child is worth doing rather than merely tidy. Read through the same guildTargetPower maths
+     the child itself is, so a stronger pet moves the con-colours the same way a level does. */
+  return (atk / 6 + def / 10 + vit / 12) * (1 + taught) + childPetPower(k);
+}
+
+/* A child's companion, or null. Same shape as one of P.pets, so petStats and every pet helper in
+   the game reads it without knowing whose it is. */
+function childPet(k) { return k && k.pet ? k.pet : null; }
+function childPetPower(k) {
+  const pet = childPet(k);
+  if (!pet) return 0;
+  const st = petStats(pet);
+  return (st.atk / 6 + st.def / 10 + st.maxHp / 12) * CHILD_PET_POWER;
+}
+
+/* Hand a companion from the player's stable to a grown child. Auto-assigned, per the owner: the
+ * button says "ให้ลูก", not "ให้ใครดี". First adult without one — a child already looking after a
+ * companion should not be handed a second, and a minor cannot take one at all. */
+function childPetHeir() {
+  return childrenOf().filter(childIsAdult).find((k) => !childPet(k)) || null;
+}
+function givePetToChild(idx) {
+  const pet = P.pets[idx];
+  if (!pet) return null;
+  const heir = childPetHeir();
+  if (!heir) return null;
+  heir.pet = pet;
+  P.pets.splice(idx, 1);
+  /* The active slot is an INDEX into a list that just got shorter. Left alone it silently points at
+     a different companion, or past the end. Same shift petFuse already has to do. */
+  if (P.activePet != null) {
+    if (P.activePet === idx) P.activePet = P.pets.length ? 0 : null;
+    else if (P.activePet > idx) P.activePet -= 1;
+  }
+  return heir;
 }
 
 /* Where a child is allowed to hunt: stages the PLAYER has opened, bosses excluded. A child should
@@ -1544,22 +1609,7 @@ function childErrandRun(k) {
   k.chores = k.chores || {};
   k.chores[e.id] = (k.chores[e.id] || 0) + Math.ceil(action.xp * CHILD_ERRAND_XP);
 
-  P.kidChoreMonth = P.kidChoreMonth || { gold: 0, items: 0, runs: 0 };
-  P.kidChoreMonth.gold += gold;
-  P.kidChoreMonth.items += items;
-  P.kidChoreMonth.runs++;
-
   return { gold, items };
-}
-
-/* One ledger line a month for everything the children brought back from errands, beside the one
-   kidHuntPost writes for the hunt. Kept separate because they answer different questions: the hunt
-   line is whether they are strong enough, this one is whether they are useful anyway. */
-function kidChorePost() {
-  const m = P.kidChoreMonth;
-  P.kidChoreMonth = { gold: 0, items: 0, runs: 0 };
-  if (!m || (!m.gold && !m.items)) return;
-  ledger("🧺", `ลูกๆ หาของ ${m.runs} ครั้ง (ของ ${m.items} ชิ้น)`, Math.round(m.gold));
 }
 
 function childNextHuntGap() {
@@ -1606,7 +1656,8 @@ function childrenHuntDay() {
        can die. A household that can be wiped out by background rolls is not something to leave
        running while you do something else. */
     k.nextHunt = today + childNextHuntGap() + (won ? 0 : CHILD_HURT_REST_DAYS);
-    k.log = [(won ? "✅" : "🩹") + ` ${ground.st.name}`].concat(k.log || []).slice(0, 3);
+    /* 🎯 [owner 2026-08-23] "ตอนนี้มันแสดงตำแหน่งการล่าสามแห่งล่าสุด ปรับให้เหลือแห่งเดียว" */
+    k.log = [(won ? "✅" : "🩹") + ` ${ground.st.name}`].slice(0, 1);
     if (!won) { hurt++; continue; }
 
     wins++;
@@ -1623,43 +1674,51 @@ function childrenHuntDay() {
       P.inv[id] = (P.inv[id] || 0) + n;
       hItems += n;
     }
-    k.xp = (k.xp || 0) + Math.max(1, Math.round(tp * 40));
+    const kxp = Math.max(1, Math.round(tp * 40));
+    k.xp = (k.xp || 0) + kxp;
+    /* 🎯 [owner 2026-08-23] "มี lv เพิ่มได้" — the companion levels off the same outing, at half
+       share. Capped by petLevel's own ceiling, so nothing here needs to know about PET_MAX_LEVEL. */
+    const pet = childPet(k);
+    if (pet) pet.xp = (pet.xp || 0) + Math.max(1, Math.round(kxp * CHILD_PET_XP));
   }
 
-  /* 🎯 [owner 2026-08-23] "ปรับ notis ลูกๆ มันไม่สื่อ ทำเหมือนปันผล คือ ลูก 1 ออกล่า / ลูก 10 คน
-   * ออกล่า / ลูก 3 คน หาของ"
+  /* 🎯 [owner 2026-08-23] "notis ในตั้งค่ามันแยกเป็นสองหัวข้อ ... ปรับให้เหลือหัวข้อเดียว มันต้อง
+   * รวมค่าทั้งสองแล้วแสดงเป็นค่ารายวัน"
    *
-   * Two lines a day at most, one per activity, counted by head — the shape the dividend notice
-   * uses. Naming each child was tried first and read as noise: with the household working twice a
-   * day it is the totals you act on, and the family page is where an individual child is looked up.
-   * Injuries ride on the hunting line rather than taking a third. */
-  if (wins || hurt) {
+   * One line a day for the whole household. Hunting and gathering were split when they were two
+   * separate switches; they are one switch now, so two lines would just be the same number twice.
+   * Counted by head the way the dividend notice is — the totals are what you act on, and the family
+   * page is where an individual child is looked up. */
+  if (wins || hurt || chores) {
+    const gold = hGold + cGold, items = hItems + cItems;
     const parts = [];
-    if (hGold) parts.push(`ได้ ${hGold.toLocaleString()} 💰`);
-    if (hItems) parts.push(`ของ ${hItems} ชิ้น`);
-    if (hurt) parts.push(`บาดเจ็บ ${hurt} คน`);
-    toast(`🗡️ ${T("ลูก")} ${wins + hurt} ${T("คน ออกล่า")}${parts.length ? " — " + parts.join(" · ") : ""}`,
-      hurt && !wins ? "warn" : "", "kidhunt");
-  }
-  if (chores) {
-    const parts = [];
-    if (cGold) parts.push(`ได้ ${cGold.toLocaleString()} 💰`);
-    if (cItems) parts.push(`ของ ${cItems} ชิ้น`);
-    toast(`🧺 ${T("ลูก")} ${chores} ${T("คน หาของ")}${parts.length ? " — " + parts.join(" · ") : ""}`,
-      "", "kidchore");
+    if (wins) parts.push(`${T("ล่า")} ${wins}`);
+    if (chores) parts.push(`${T("หาของ")} ${chores}`);
+    if (gold) parts.push(`${T("ได้")} ${gold.toLocaleString()} 💰`);
+    if (items) parts.push(`${T("ของ")} ${items} ${T("ชิ้น")}`);
+    if (hurt) parts.push(`${T("บาดเจ็บ")} ${hurt} ${T("คน")}`);
+    toast(`🗡️ ${T("ลูก")} ${kids.length} ${T("คน ออกทำงาน")} — ${parts.join(" · ")}`,
+      hurt && !wins ? "warn" : "", "kidwork");
   }
   /* 🎯 [owner 2026-08-23] "หน้ารวมบัญชี ให้สรุปลูกออกล่า ว่ายอดรวมต่อเดือนได้เท่าไหร่" — same call
      rent got, and now more necessary: children work every day and there can be forty of them, so a
      line a day would be the whole page. Banked here, posted once by onNewMonth. */
-  if (wins) {
-    P.kidHuntMonth = P.kidHuntMonth || { gold: 0, items: 0, hunts: 0 };
-    P.kidHuntMonth.gold += hGold;
-    P.kidHuntMonth.items += hItems;
+  if (wins || chores) {
+    P.kidHuntMonth = P.kidHuntMonth || { gold: 0, items: 0, hunts: 0, chores: 0 };
+    P.kidHuntMonth.gold += hGold + cGold;
+    P.kidHuntMonth.items += hItems + cItems;
     P.kidHuntMonth.hunts += wins;
+    P.kidHuntMonth.chores = (P.kidHuntMonth.chores || 0) + chores;
   }
 }
 
 function childIsAdult(k) { return (k.age || 0) >= CHILD_ADULT_DAY; }
+
+/* 🎯 [owner 2026-08-23] Which rebirth cycle a child belongs to. Children outlive a rebirth
+   now, so "mine" and "carried over" are different lists on the family page — and `bornThisLife` is
+   a count, which cannot answer this for a particular child. A save older than the field reads as
+   the current life, which is what a household that has never rebirthed actually is. */
+function childIsThisLife(k) { return (k.bornLife ?? 0) >= (P.rebirths || 0); }
 
 /* Half of what we were the day they were born. A snapshot rather than a live fraction: a child
  * should record who their parent was at the time, and a live halving would drag them down with us
@@ -1681,7 +1740,21 @@ function newChildStats() {
  * that way, and markArtMissing remembers the miss, so an unnamed child costs one 404 and never
  * asks again. Naming CHILD_FACES separately from CHILD_NAMES is what keeps that promise — a
  * ninth name can be added without an art file and the game stays correct. */
-const CHILD_FACES = ["arin", "nara", "kenji", "lily", "taro", "mina", "zoe", "yuki"];
+/* One portrait id per name in CHILD_NAMES, same index. A face with no picture on disk falls back to
+   its emoji through iconArt — the owner's own rule for outrunning the art we have: "ถ้ามีลูกเยอะจนใช้
+   รูปหมดแล้ว คนใหม่ๆ ค่อยให้ใช้ emoji". Append only; see CHILD_NAMES. */
+const CHILD_FACES = [
+  "arin", "nara", "kenji", "lily", "taro", "mina", "zoe", "yuki", "aiko", "haru", "ren",
+  "sakura", "kaito", "noa", "emi", "riku", "hana", "sora", "yuto", "maya", "kei", "aya",
+  "takumi", "nana", "shin", "mio", "hikaru", "rina", "daiki", "yuna", "koji", "saki", "tetsu",
+  "aki", "ryu", "momo", "kenta", "shiho", "hiro", "nao", "jun", "eri", "sota", "miki", "ryota",
+  "hiyori", "kazu", "ichi", "mei", "takeru", "tsubaki", "yoshi", "kana", "aden", "ivy", "finn",
+  "rosa", "milo", "ella", "theo", "iris", "lucas", "nora", "felix", "clara", "oscar", "hazel",
+  "julian", "marin", "silas", "vega", "orion", "luna", "caspian", "elara", "cairo", "selene",
+  "arthur", "lyra", "ezra", "thalia", "rowan", "esme", "byron", "neva", "kieran", "sasha",
+  "damir", "anya", "mylo", "vera", "nico", "talia", "ivan", "mira", "owen", "lara", "yan",
+  "nina", "damien",
+];
 function childFaceId(k, adult) {
   const i = CHILD_NAMES.indexOf(k.name);
   const face = i >= 0 && i < CHILD_FACES.length ? CHILD_FACES[i] : "none";
@@ -1728,36 +1801,74 @@ function toggleWifeControl(id) {
  * P.gold < 0 whatever put it there. So there is no second game-over path to keep in step with the
  * first. */
 function familyUpkeepDay() {
-  if (P.dead || !spouseIds().length) return;
-  const due = familyUpkeep().total;
-  if (due <= 0) return;
+  if (P.dead) return;
   P.family = P.family || {};
-  const took = takeGoldThenBank(due);
-  const short = due - took;
-  if (short > 0) P.gold -= short;              // the debt is real, and the clock starts today
-  P.family.arrears = short > 0 ? (P.family.arrears || 0) + short : 0;
-  /* 🎯 [owner 2026-08-22: "หน้าธนาคาร บัญชี ข้อความมันถี่มาก ... ให้รวมค่าครอบครัวรายวัน แล้วแสดงผลเป็น
-   * ยอดสิ้นเดือนในบัญชีแทน"] The money still leaves every day — that part is the rule. What was wrong
-   * was the LEDGER: one line a day, interleaved with dividends, turned the account page into a wall
-   * where nothing could be read. A household bill is a monthly figure everywhere outside this game
-   * too, so it is banked here and posted once by onNewMonth. */
-  P.family.monthPaid = (P.family.monthPaid || 0) + took;
+  /* Kept as it was: a household with no spouse is charged nothing. An existing DEBT is still
+     collected below, so divorcing is not a way to walk away from what is already owed. */
+  const due = spouseIds().length ? familyUpkeep().total : 0;
+  const owed = Math.round((P.family.arrears || 0) + due);
+  if (owed <= 0) { P.family.arrearsDays = 0; return; }
 
-  /* 🎯 [owner 2026-08-22: "หักค่าใช้จ่าย ต้องมี Notis แจ้งด้วย"] Under its own notification kind, so
-   * a player who does not want a money toast every 100 seconds can silence this one without losing
-   * the birth announcement. The shortfall toast is deliberately NOT rate-limited: it is the only
-   * warning before the run ends. */
-  if (short > 0) {
-    toast(`⚠️ จ่ายค่าเลี้ยงดูไม่ครบ ขาด ${Math.round(short).toLocaleString()} 💰`
-          + ` — โบนัสจากภรรยาและลูกหยุดจนกว่าจะเคลียร์หนี้ · ติดลบครบ ${TAX_GRACE_DAYS} วันคือจบเกม`,
-          "warn");   // no category on purpose: toast() filters on category alone, and the settings
-                     // panel promises warnings cannot be switched off. This is the only notice
-                     // between a missed payment and the run ending.
-  } else if (!P.family.noteDay || Math.floor(P.gameDays) - P.family.noteDay >= 1) {
-    P.family.noteDay = Math.floor(P.gameDays);
-    toast(`👨‍👩‍👧 ค่าเลี้ยงดูครอบครัววันนี้ ${due.toLocaleString()} 💰`, "", "family");
+  /* 🎯 [owner 2026-08-23] "ครอบครัวจะไม่หักธนาคาร" — cash only, every ordinary day. Savings are
+     out of reach until the ninety days below have run out, which is the whole point of the change:
+     what the wallet cannot cover WAITS rather than quietly eating a deposit slip. */
+  const paid = Math.min(Math.max(0, Math.floor(P.gold)), owed);
+  P.gold -= paid;
+  let short = owed - paid;
+  P.family.arrears = short;
+  /* 🎯 [owner 2026-08-22] "ให้รวมค่าครอบครัวรายวัน แล้วแสดงผลเป็นยอดสิ้นเดือนในบัญชีแทน" — the
+     money still leaves every day; only the ledger line is monthly. Banked here, posted by
+     onNewMonth. */
+  P.family.monthPaid = (P.family.monthPaid || 0) + paid;
+
+  if (short <= 0) {
+    /* Cash came back and cleared it. The counter starts again from zero, not from where it was. */
+    const wasBehind = P.family.arrearsDays || 0;
+    P.family.arrearsDays = 0;
+    if (wasBehind) {
+      toast(`👏 เคลียร์ค่าเลี้ยงดูที่ค้าง ${wasBehind} วันได้แล้ว — โบนัสครอบครัวกลับมา`, "levelup", "family");
+    } else if (!P.family.noteDay || Math.floor(P.gameDays) - P.family.noteDay >= 1) {
+      P.family.noteDay = Math.floor(P.gameDays);
+      toast(`👨‍👩‍👧 ค่าเลี้ยงดูครอบครัววันนี้ ${due.toLocaleString()} 💰`, "", "family");
+    }
+    return;
   }
 
+  const days = (P.family.arrearsDays || 0) + 1;
+  P.family.arrearsDays = days;
+
+  /* 🎯 [owner 2026-08-23] "ครบ 90 วันก็ค่อยหัก แบบมี notis ถ้าหักจากกระเป๋าและธนาคารไม่ได้ เกม
+     โอเวอร์" — the one day the savings are fair game, announced when it happens rather than
+     discovered later in a shrunken deposit slip. */
+  if (days >= FAMILY_ARREARS_FATAL_DAYS) {
+    const took = takeGoldThenBank(short);
+    short -= took;
+    P.family.arrears = short;
+    P.family.monthPaid = (P.family.monthPaid || 0) + took;
+    if (took > 0) ledger("🚨", `หักค่าเลี้ยงดูที่ค้าง ${days} วัน`, -took);
+    if (short > 0) {
+      endRun(`ค้างค่าเลี้ยงดู ${Math.round(owed).toLocaleString()} 💰 ครบ ${FAMILY_ARREARS_FATAL_DAYS}`
+             + ` วันในเกม และเงินในกระเป๋ากับธนาคารรวมกันยังไม่พอ`);
+      return;
+    }
+    P.family.arrearsDays = 0;
+    toast(`🚨 ค้างค่าเลี้ยงดูครบ ${FAMILY_ARREARS_FATAL_DAYS} วัน — หักจากกระเป๋าและเงินฝาก`
+          + ` ${took.toLocaleString()} 💰 เคลียร์หนี้แล้ว`, "warn");
+    return;
+  }
+
+  /* 🎯 [owner 2026-08-22: "หักค่าใช้จ่าย ต้องมี Notis แจ้งด้วย"] Deliberately uncategorised: toast()
+   * filters on category alone and the settings panel promises warnings cannot be switched off. This
+   * is the only notice between a missed payment and the run ending, so it must not be mutable.
+   *
+   * Rate-limited though, which the old one was not: ninety consecutive identical warnings is the
+   * flood the owner has objected to twice. First day, every tenth after, and daily in the last week. */
+  const left = FAMILY_ARREARS_FATAL_DAYS - days;
+  if (days === 1 || days % FAMILY_ARREARS_WARN_EVERY === 0 || left <= FAMILY_ARREARS_WARN_FINAL) {
+    toast(`⚠️ ค่าเลี้ยงดูค้าง ${Math.round(short).toLocaleString()} 💰 · ติดค้างมา ${days} วัน`
+          + ` — โบนัสจากภรรยาและลูกหยุดจนกว่าจะเคลียร์ · อีก ${left} วันจะถูกหักจากเงินฝาก`
+          + ` ถ้าไม่พอคือจบเกม`, "warn");
+  }
 }
 
 function childBirthRoll() {
@@ -1793,7 +1904,10 @@ function childBirthRoll() {
     const used = new Set(kids.map((k) => k.name));
     const name = CHILD_NAMES.find((n) => !used.has(n)) || `ลูกคนที่ ${kids.length + 1}`;
     const mother = VILLAGERS.find((v) => v.id === id);
-    kids.push({ id: `k${today}_${kids.length}`, name, bornDay: today, age: 0,
+    /* 🎯 [owner 2026-08-23] "ลูกที่จุติในรอบนี้ ... bullet ลูกที่จุติรอบก่อนๆ" — the family page
+       splits on this, and there was no per-child record of it: bornThisLife is a COUNT, which
+       cannot say which child it refers to once they outlive the life they were born in. */
+    kids.push({ id: `k${today}_${kids.length}`, name, bornDay: today, age: 0, bornLife: P.rebirths || 0,
                 parent: id, stats: newChildStats(), edu: {} });
     P.family.lastBirthByWife[id] = today;
     P.family.lastBirthDay = today;
@@ -1923,6 +2037,14 @@ function childrenRebirth() {
     const floorXp = petXpToReach(Math.max(1, k.lvFloor));
     if ((k.xp || 0) < floorXp) k.xp = floorXp;
     k.nextHunt = null;          // a new life, a new schedule
+    /* 🎯 [owner 2026-08-23] "เมื่อจุติ pet ของลูกๆ ก็จะยังไม่หาย แต่ค่าจะเหมือน pet เราที่โดนหารครึ่ง
+       ซึ่งมันตรงกับลูกเรา ที่เมื่อเราจุติ ค่าก็โดนหารครึ่ง" — the same three lines doRebirth runs on the
+       keeper, so the child's companion and the player's are halved by one rule, not two that drift. */
+    const pet = childPet(k);
+    if (pet) {
+      pet.xp = petXpAtExact(petLevelExact(pet) / 2);
+      pet.hp = petStats(pet).maxHp;      // read AFTER the xp change, or it heals to the old cap
+    }
   }
 
   const repaired = P.family?.kidsRepaired;
@@ -2537,7 +2659,11 @@ function offlineCashflow(seconds) {
       P.gold += div;
       bookInvestmentProfit(div);      // taxable exactly as it is online
       bump("divPaid", div);
-      ledger("📈", `ปันผลระหว่างออฟไลน์ ${Math.round(days)} วัน`, Math.round(div));
+      /* Offline catch-up joins the same monthly pool. Three separate "ปันผลระหว่างออฟไลน์" lines in
+         one morning was the shape the owner saw on the account page. */
+      P.divMonth = P.divMonth || { gold: 0, days: 0, payers: 0 };
+      P.divMonth.gold += Math.round(div);
+      P.divMonth.days += Math.max(1, Math.round(days));
     }
   }
 
@@ -3213,7 +3339,10 @@ function petEat() {
   const id = P.food[idx];
   P.inv[id] -= 1;
   pet.hp = Math.min(st.maxHp, pet.hp + ITEMS[id].heal);
-  toast(`${st.icon} ${st.name} กิน ${ITEMS[id].icon} ${ITEMS[id].name} (+${ITEMS[id].heal} HP)`);
+  /* 🎯 [owner 2026-08-23] "ถ้าปิด มันควรปิดค่า pet และคนกินอาหารด้วย มันระบบต่อสู้เดียวกัน" —
+     eating only ever happens because something is hitting you, so it belongs to the switch that
+     silences the fight rather than being unmutable on its own. */
+  toast(`${st.icon} ${st.name} กิน ${ITEMS[id].icon} ${ITEMS[id].name} (+${ITEMS[id].heal} HP)`, "", "kill");
   if ((P.inv[id] || 0) === 0) P.food = P.food.map((f) => (f === id ? null : f));
   return true;
 }
@@ -3323,21 +3452,47 @@ function onNewDay(date) {
 function onNewMonth(date) {
   familyUpkeepPost();
   estateRentPost();
+  dividendPost();
   kidHuntPost();
-  kidChorePost();
 }
 
 /* One ledger line a month for what the children brought home, the counterpart of estateRentPost.
    Posts nothing in a month where nobody hunted, rather than a zero. */
 function kidHuntPost() {
-  const m = P.kidHuntMonth;
-  P.kidHuntMonth = { gold: 0, items: 0, hunts: 0 };
-  if (!m || (!m.gold && !m.items)) return;
-  ledger("🗡️", `ลูกๆ ออกล่า ${m.hunts} ครั้ง (ของ ${m.items} ชิ้น)`, Math.round(m.gold));
+  const m = P.kidHuntMonth || { gold: 0, items: 0, hunts: 0, chores: 0 };
+  /* A save written while the two totals were still separate carries a part-month in the old field.
+     Fold it in rather than drop it, then retire the field. */
+  const legacy = P.kidChoreMonth;
+  if (legacy) {
+    m.gold += legacy.gold || 0;
+    m.items += legacy.items || 0;
+    m.chores = (m.chores || 0) + (legacy.runs || 0);
+    delete P.kidChoreMonth;
+  }
+  P.kidHuntMonth = { gold: 0, items: 0, hunts: 0, chores: 0 };
+  if (!m.gold && !m.items) return;
+  /* 🎯 [owner 2026-08-23] "รวมถึงค่ารายเดือนที่แสดงในบัญชี มันไม่ต้องแยกเป็นสองค่า" — one line
+     for everything the children brought home, hunting and errands together, matching the single
+     daily notice. Both counts still appear, because how they earned it is the part worth reading;
+     what must not be split is the MONEY. */
+  const how = [m.hunts ? `ล่า ${m.hunts}` : "", m.chores ? `หาของ ${m.chores}` : ""]
+    .filter(Boolean).join(" · ");
+  ledger("🗡️", `ลูกๆ ออกทำงาน (${how}) — ของ ${m.items} ชิ้น`, Math.round(m.gold));
 }
 
 /* One ledger line a month for rent, the counterpart of familyUpkeepPost. Posts what actually
  * arrived, and posts nothing at all in a month without property rather than a zero. */
+/* 🎯 [owner 2026-08-23] "ให้รวบรวมการปันผลให้ครบ แล้วแสดงเป็นรายเดือน เหมือนค่าเช่า" — the
+   counterpart of estateRentPost, and named for the same reason: a month with no holdings posts
+   nothing rather than a zero. */
+function dividendPost() {
+  const m = P.divMonth;
+  P.divMonth = { gold: 0, days: 0, payers: 0 };
+  if (!m || m.gold <= 0) return;
+  ledger("📈", `${T("ปันผล")} (${T("ทั้งเดือน")}) — ${m.payers || 1} ${T("กิจการ")}`,
+    Math.round(m.gold));
+}
+
 function estateRentPost() {
   const earned = Math.round(P.estateMonth || 0);
   P.estateMonth = 0;
@@ -3364,8 +3519,8 @@ function familyUpkeepPost() {
 function onNewYear(date) {
   familyUpkeepPost();   // day 1 of month 1 comes here instead of onNewMonth, so the month still closes
   estateRentPost();
+  dividendPost();
   kidHuntPost();
-  kidChorePost();
   bankTidySlips();
   toast(`🎆 ขึ้นปีใหม่ — ปีที่ ${date.year} ของมิธวูด`, "levelup");
   settleTaxYear(date);
@@ -4335,14 +4490,22 @@ function payDividends(date) {
   P.gold += total;
   bookInvestmentProfit(total);
   bump("divPaid", total);
-  ledger("📈", `${T("ปันผล")} ${payers} ${T("กิจการ")}`, total);
+  /* 🎯 [owner 2026-08-23] "ในหน้าบัญชี จะมีปันผลรายวันเข้ามา ให้รวบรวมการปันผลให้ครบ แล้วแสดงเป็น
+     รายเดือน เหมือนค่าเช่า" — the same call rent, upkeep and the children's work already got. A
+     payer running daily wrote a line a day, and with several of them the account page was nothing
+     but dividends. Banked here, posted once by onNewMonth. The TOAST still fires daily, so the
+     money is visible as it lands; it is the permanent record that is monthly. */
+  P.divMonth = P.divMonth || { gold: 0, days: 0, payers: 0 };
+  P.divMonth.gold += total;
+  P.divMonth.days += 1;
+  P.divMonth.payers = Math.max(P.divMonth.payers, payers);
   /* 🎯 [owner 2026-08-22] "เคยเจอมันขึ้นเป็นสิบไอคอนเลย" — this printed one icon and amount per
    * paying company, so a diversified portfolio produced a toast nobody could read on a phone. What
    * the message is for is the total and where it came from; the per-company breakdown is already
    * written to the bank ledger, where it can be read at leisure instead of for four seconds while
    * something else is happening. */
   toast(`📈 ${T("รับปันผล")} ${total.toLocaleString()} 💰 ${T("จาก")} ${payers} ${T("การลงทุน")}`,
-        "", "money");
+        "", "income");
   updateTopbar();
 }
 
@@ -5152,7 +5315,9 @@ function skillTick(now, slotIdx) {
     const chance = (rare.base + rare.perLevel * mAfter) * (1 + luckTotal());
     if (Math.random() < chance) {
       P.inv[rare.item] = (P.inv[rare.item] || 0) + 1;
-      toast(`🌟 ของหายาก! ${ITEMS[rare.item].icon} ${ITEMS[rare.item].name}`, "levelup");
+      /* 🎯 [owner 2026-08-23] "ถ้าปิด พวกของหายากก็ควรโดนปิดด้วย มันระบบเดียวกัน" — a rare drop
+         IS the job's loot, just the good roll of it. Same switch. */
+      toast(`🌟 ของหายาก! ${ITEMS[rare.item].icon} ${ITEMS[rare.item].name}`, "levelup", "gain");
     }
   }
 
@@ -5247,8 +5412,9 @@ function tryEat(auto) {
   P.hp = Math.min(max, P.hp + Math.round(ITEMS[foodId].heal * (1 + perkTotal("healBonus"))));
   const left = P.inv[foodId] || 0;
   toast(`${auto ? "🤖 กินอัตโนมัติ" : "🍴 กิน"} ${ITEMS[foodId].icon} ${ITEMS[foodId].name} `
-    + `+${Math.round(ITEMS[foodId].heal * (1 + perkTotal("healBonus")))} HP (ช่อง ${idx + 1}, เหลือ ${left})`);
-  if (!left && nextFoodSlot() >= 0) toast(`🍱 ช่อง ${idx + 1} หมด — สลับไปช่อง ${nextFoodSlot() + 1} อัตโนมัติ`);
+    + `+${Math.round(ITEMS[foodId].heal * (1 + perkTotal("healBonus")))} HP (ช่อง ${idx + 1}, เหลือ ${left})`,
+    "", "kill");
+  if (!left && nextFoodSlot() >= 0) toast(`🍱 ช่อง ${idx + 1} หมด — สลับไปช่อง ${nextFoodSlot() + 1} อัตโนมัติ`, "", "kill");
   renderInventory();
   updateCombatPanel();
   updateTopbar();
@@ -6330,7 +6496,7 @@ function renderFamily() {
         <small>${T("จับสัตว์เลี้ยงได้จากการล่ามอนสเตอร์")}</small></div>
     </div>`;
 
-  const kidCards = kids.map((k) => {
+  const kidCard = (k) => {
     const adult = childIsAdult(k);
     const pct = Math.min(100, (k.age || 0) / CHILD_ADULT_DAY * 100);
     const tracks = CHILD_TRACKS.map((tr) => {
@@ -6380,13 +6546,24 @@ function renderFamily() {
                 .filter((e) => childErrandLevel(k, e.id) > 1)
                 .map((e) => `<span title="${escapeHtml(T(e.name))}">${e.icon} ${childErrandLevel(k, e.id)}</span>`)
                 .join("")}</div>` : ""}
+          <!-- 🎯 [owner 2026-08-23] "pet ก็จะคอยติดตามออกสู้ได้ มี lv เพิ่มได้" — shown on the
+               child rather than in the stable, because that is where it lives now and where its
+               level climbing is the thing you want to see. -->
+          ${(() => {
+            const kp = childPet(k);
+            if (!kp) return "";
+            const ps = petStats(kp);
+            return `<div class="kid-pet">${iconArt("pet", kp.species, ps.icon, ps.name)}
+              <span>${escapeHtml(ps.name)} · ${T("ขั้น")} ${ps.lv}</span>
+              <span class="detail">🗡️ ${ps.atk} · 🛡️ ${ps.def}</span></div>`;
+          })()}
           <div class="edu-list">${tracks}</div>
           <div class="kid-acts">
             <button class="btn ghost tiny" data-disown="${k.id}">💔 ${T("ไล่ออกจากตระกูล")}</button>
           </div>
         </div>
       </div>`;
-  }).join("");
+  };
 
   /* 🎯 [owner 2026-08-22: "หลังแต่งงาน ไม่เห็นค่าใช้จ่ายรายวัน ของภรรยา"] Broken out per head rather
    * than shown as one total, because the player decides how many children to have and how far to
@@ -6405,8 +6582,58 @@ function renderFamily() {
       ${bonusLine ? `<span class="m-chip">${T("โบนัสจากลูก")} ${bonusLine}</span>` : ""}
       ${up.total ? `<span class="m-chip${familyInArrears() ? " missing" : ""}">🍚 ${T("ค่าเลี้ยงดู")} ${up.total.toLocaleString()}/${T("วัน")}</span>` : ""}
     </div>`;
+  /* 🎯 [owner 2026-08-23] "ทำช่องภรรยาเป็น bullet ย่อและแสดงรายละเอียด ... ลูกที่จุติในรอบนี้ มันจะทำ
+   * ให้โฟกัสได้ถูกต้อง ... bullet ลูกที่จุติรอบก่อนๆ จะมีรายละเอียดลูกที่โดนย้ายมาหลังจุติทั้งหมด เพราะตาม
+   * ปกติหลังจุติแทบไม่ได้มายุ่งกับลูกที่โตแล้ว"
+   *
+   * The page used to be one flat grid, which is fine at one wife and one child and unreadable at
+   * five and forty. Four <details> — the same idiom the difficulty picker uses, so open/close needs
+   * no state machine and keyboard and screen readers come for free.
+   *
+   * The split that matters is by LIFE, not by age: after a rebirth you are working with the new
+   * cycle's children, and the grown ones from before are a list you consult rather than tend. */
+  const openState = P.ui?.famOpen || {};
+  /* Persisted, because this page repaints on every day boundary — a section that closed itself
+     while you were reading it would be worse than not folding at all. */
+  const fold = (id, icon, title, chips, body, count) => `
+    <details class="fam-fold" data-fold="${id}"${openState[id] ? " open" : ""}>
+      <summary class="fam-summary">
+        <span class="ff-bullet">◆</span>
+        <span class="ff-title">${icon} ${escapeHtml(title)}</span>
+        <span class="ff-count">${count}</span>
+        <span class="ff-chips">${chips}</span>
+        <span class="ff-caret">▾</span>
+      </summary>
+      <div class="fam-grid">${body}</div>
+    </details>`;
+
+  const thisLife = kids.filter(childIsThisLife);
+  const pastLife = kids.filter((k) => !childIsThisLife(k));
+  /* Closed, a section still has to say something true about what is inside it. For the wives that
+     is their faces — the owner asked for exactly this — and for the children a count is enough. */
+  const faces = (list, kind, idOf, iconOf, nameOf) => list.slice(0, 8).map((x) =>
+    `<span class="ff-face">${iconArt(kind, idOf(x), iconOf(x), nameOf(x))}</span>`).join("")
+    + (list.length > 8 ? `<span class="ff-more">+${list.length - 8}</span>` : "");
+
   $("#action-grid").innerHTML =
-    `<div class="fam-grid">${meCard}${spouseCard}${petCard}${kidCards}</div>`
+    `<div class="fam-grid">${meCard}</div>`
+    + fold("wives", "\u{1f48d}", T("ภรรยา"), faces(wives, "char", (w) => w.id, (w) => w.icon, (w) => w.name),
+           spouseCard, wives.length ? `${wives.length} ${T("คน")}` : T("ยังไม่มี"))
+    + fold("kidsNow", "\u{1f476}", T("ลูกที่จุติรอบนี้"),
+           faces(thisLife, "child", (k) => childFaceId(k, childIsAdult(k)),
+                 (k) => (childIsAdult(k) ? "\u{1f9d1}" : "\u{1f476}"), (k) => k.name),
+           thisLife.length ? thisLife.map(kidCard).join("") : `
+             <div class="fam-card is-empty"><div class="fam-face">\u{1f476}</div>
+               <div class="fam-body"><b>${T("รอบนี้ยังไม่มีลูก")}</b></div></div>`,
+           `${thisLife.length}/${CHILD_MAX}`)
+    /* 🎯 [owner 2026-08-23] "bullet ลูกที่จุติรอบก่อนๆ จะไม่มีรูปในตอนย่อ มีแค่จำนวนว่ามีกี่คน เพราะ
+       มันอาจมีจำนวนเยอะมากจากการจุติหลายรอบ" — no portraits here on purpose. The wives are a handful
+       and their faces are the useful summary; this list grows without limit, and a row of faces
+       would wrap into a wall in exactly the case the fold exists to tidy. */
+    + (pastLife.length ? fold("kidsPast", "\u{1f9d1}", T("ลูกจากรอบก่อนๆ"), "",
+           pastLife.map(kidCard).join(""), `${pastLife.length} ${T("คน")}`) : "")
+    + fold("pets", "\u{1f43e}", T("สัตว์เลี้ยง"), "", petCard,
+           pet ? `${T("ตัวโปรด")} 1` : T("ยังไม่มี"))
     + (up.total ? `<div class="fam-hint${familyInArrears() ? " is-debt" : ""}">
           🍚 ค่าเลี้ยงดูวันละ <b>${up.total.toLocaleString()}</b> 💰 — ภรรยา ${up.spouse.toLocaleString()}${up.kids ? ` · ลูก ${up.kids} คน ${up.heads.toLocaleString()}` : ""}${up.edu ? ` · ค่าเรียน ${up.edu.toLocaleString()}` : ""}
           ${familyInArrears() ? `<br><b>ค้างจ่าย ${Math.round(P.family.arrears).toLocaleString()} 💰 — โบนัสจากภรรยาและลูกหยุดอยู่</b> จ่ายครบแล้วกลับมาเหมือนเดิม · เงินติดลบครบ ${TAX_GRACE_DAYS} วันคือจบเกม` : ""}
@@ -6425,6 +6652,14 @@ function renderFamily() {
 
   /* Confirmed, and the dialog names what is lost: this is permanent and refunds nothing spent on
      their schooling, which is not something to find out afterwards. */
+  $("#action-grid").querySelectorAll("[data-fold]").forEach((d) => {
+    d.addEventListener("toggle", () => {
+      P.ui = P.ui || {};
+      P.ui.famOpen = P.ui.famOpen || {};
+      P.ui.famOpen[d.dataset.fold] = d.open;
+    });
+  });
+
   $("#action-grid").querySelectorAll("[data-control]").forEach((b) => {
     b.onclick = () => { toggleWifeControl(b.dataset.control); renderView(); };
   });
@@ -7049,7 +7284,7 @@ function runEstatesDay() {
    * money is still visible as it lands; it is the permanent record that is monthly. */
   if (Math.round(total) >= 1) {
     P.estateMonth = (P.estateMonth || 0) + Math.round(total);
-    toast(`🏘️ ค่าเช่า ${Math.round(total).toLocaleString()} 💰`, "", "money");
+    toast(`🏘️ ค่าเช่า ${Math.round(total).toLocaleString()} 💰`, "", "income");
   }
 }
 
@@ -7073,7 +7308,7 @@ function renderEstates(grid, extra) {
     sum.className = "money-summary";
     sum.innerHTML = `
       <div class="money-stat"><span>${T("บ้านที่ถือ")}</span><b>${owned.length} หลัง</b></div>
-      <div class="money-stat"><span>${T("ทุนที่จมอยู่ (ขายคืนได้เต็ม)")}</span><b>${fmtNum(capital)}</b></div>
+      <div class="money-stat"><span>${T("ทุนที่จมอยู่")}</span><b>${fmtNum(capital)}</b></div>
       <div class="money-stat"><span>${T("ค่าเช่า/วันในเกม")}</span><b class="good">${Math.round(rentDay).toLocaleString()}</b></div>
       <div class="money-stat"><span>${T("ผลตอบแทนต่อทุน")}</span><b>${capital > 0 ? (rentDay * DAYS_PER_YEAR / capital * 100).toFixed(1) : "0.0"}%/ปี</b></div>
       <div class="money-stat"><span>${T("ค่าเช่าสะสม")}</span><b>${fmtNum(Math.round(P.stats.rentEarned || 0))}</b></div>`;
@@ -8628,6 +8863,7 @@ function renderPetPanel(extra) {
             : `<button class="btn small" data-pet="${i}">${i === P.activePet ? "กำลังพาไป" : "พาตัวนี้ไป"}</button>
                ${i === P.activePet ? `<button class="btn ghost small" data-rest="${i}">😴 ให้พัก</button>` : ""}
                ${pet.hp < st.maxHp ? `<button class="btn ghost small" data-feed="${i}">🍴 ให้อาหาร</button>` : ""}
+               ${childPetHeir() ? `<button class="btn ghost small" data-givekid="${i}">🎁 ${T("ให้ลูก")}</button>` : ""}
                <button class="btn ghost small" data-release="${i}">🕊️ ปล่อย</button>`}
         </div>`;
       }).join("")}
@@ -8711,6 +8947,24 @@ function renderPetPanel(extra) {
     renderView();
   });
   panel.querySelectorAll("[data-release]").forEach((b) => b.onclick = () => releasePet(Number(b.dataset.release)));
+  /* 🎯 [owner 2026-08-23] "ให้เพิ่มเหนือเมนูปล่อย คือ ให้ลูก ระบบมันจะส่งไปให้ลูกที่โตเต็มวัยอัตโนมัติ" —
+     confirmed like a release is, because it leaves your stable for good: a child's companion is not
+     something you can take back, and the dialog says so rather than letting it be discovered. */
+  panel.querySelectorAll("[data-givekid]").forEach((b) => b.onclick = () => {
+    const i = Number(b.dataset.givekid);
+    const pet = P.pets[i];
+    const heir = childPetHeir();
+    if (!pet || !heir) return;
+    const st = petStats(pet);
+    if (!confirm(`ให้ ${st.name} (ขั้น ${st.lv} · คุณภาพ ${st.grade.name}) กับ ${heir.name}?\n\n`
+        + `· ${heir.name} จะพามันออกล่าทุกวัน และมันจะขึ้นขั้นไปด้วย\n`
+        + `· ออกจากคอกของคุณถาวร เอากลับมาไม่ได้\n`
+        + `· จุติแล้วมันไม่หาย แต่ค่าจะโดนหารครึ่งเหมือนลูก`)) return;
+    givePetToChild(i);
+    toast(`🎁 ${st.icon} ${st.name} ไปอยู่กับ ${heir.name} แล้ว — ออกล่าด้วยกันตั้งแต่พรุ่งนี้`, "levelup", "family");
+    save("ให้สัตว์เลี้ยงกับลูก");
+    renderView();
+  });
   panel.querySelectorAll("[data-feed]").forEach((b) => b.onclick = () => {
     const keep = P.activePet;
     P.activePet = Number(b.dataset.feed);
@@ -9998,19 +10252,23 @@ function doSell(id, n) {
  * that is direct feedback to something the player just clicked, plus every warning, defeat and
  * failure — muting those would hide the game breaking. */
 const NOTIF_KINDS = [
-  { id: "kill",   icon: "⚔️", name: "ล้มมอนสเตอร์และของที่ดรอป", note: "ทุกตัวที่ล้มได้ — ตัวที่ขึ้นถี่ที่สุด (บอสยังขึ้นเสมอ)" },
-  { id: "gain",   icon: "🎁", name: "ของและ XP จากงาน",   note: "ตัดไม้ ขุด ตกปลา ปลูกผัก คราฟต์ และย่องเก็บของ" },
+  { id: "kill",   icon: "⚔️", name: "ล้มมอนสเตอร์และของที่ดรอป", note: "ทุกตัวที่ล้มได้ รวมถึงตอนคุณและสัตว์เลี้ยงกินอาหาร (บอสยังขึ้นเสมอ)" },
+  { id: "gain",   icon: "🎁", name: "ของและ XP จากงาน",   note: "ตัดไม้ ขุด ตกปลา ปลูกผัก คราฟต์ ย่องเก็บของ และของหายาก" },
   { id: "level",  icon: "🎉", name: "เลเวลอัพ / ขั้นชำนาญ", note: "เลเวลสายอาชีพ สเตตัสการล่า และขั้นชำนาญ" },
-  { id: "money",  icon: "📈", name: "ปันผลและการซื้อขาย",   note: "ปันผลรายวัน ดอกเบี้ย ซื้อ-ขายหุ้นและของ" },
-  { id: "combat", icon: "⚔️", name: "รายละเอียดการต่อสู้",  note: "กินอัตโนมัติ เกราะแตก โหมดคลั่ง สัตว์เลี้ยงหมดแรง" },
+  /* 🎯 [owner 2026-08-23] "เพิ่มหัวข้อ ปิดรายได้ ค่าเช่าและปันผล ทำเป็นหัวข้อเดียวกัน" — money
+     bundled the income that arrives on its own with the feedback from a button you just pressed, so
+     silencing the daily drip also silenced the confirmation that a sale went through. Split: the
+     passive stream is its own switch, money keeps what you did on purpose. */
+  { id: "income", icon: "💰", name: "รายได้ที่เข้าเอง",     note: "ค่าเช่าอสังหาและปันผลรายวัน — เข้าทุกวันในเกมโดยไม่ต้องกด" },
+  { id: "money",  icon: "📈", name: "การซื้อขายและภาษี",    note: "ซื้อ-ขายหุ้น อสังหา ร้านค้า และการหักภาษี" },
+  { id: "combat", icon: "⚔️", name: "รายละเอียดการต่อสู้",  note: "เกราะแตก โหมดคลั่ง สัตว์เลี้ยงหมดแรง" },
   { id: "trader", icon: "🧙", name: "พ่อค้าเร่",            note: "ตอนมาตั้งแผง ตอนเก็บแผง และตอนซื้อของจากแผง" },
   { id: "guild",  icon: "🏹", name: "สถาบันฮันเตอร์",      note: "ทีมกลับถึงสถาบัน รับของอัตโนมัติ บาดเจ็บ และรับเด็กเข้าสังกัด" },
   { id: "family", icon: "👨‍👩‍👧", name: "ครอบครัว",           note: "ลูกเกิด ลูกโตพอออกผจญภัย การเรียน และค่าเลี้ยงดูรายวัน" },
-  /* 🎯 [owner 2026-08-23] "เพิ่มปุ่มปิด notis ในตั้งค่า — ปิด notis การล่าของลูก / ปิด notis การหาของ
-     จาก event ของลูก" — split off ครอบครัว, which is the one-off news (a birth, a coming of age).
-     These two fire every single day and are the pair worth muting on their own. */
-  { id: "kidhunt",  icon: "🗡️", name: "ลูกออกล่า",   note: "สรุปรายวันว่าลูกกี่คนออกล่า ได้เงินและของเท่าไหร่" },
-  { id: "kidchore", icon: "🧺", name: "ลูกหาของ",    note: "สรุปรายวันของ event สุ่ม — ตัดไม้ ตกปลา ขุดแร่ ล้วงกระเป๋า" },
+  /* 🎯 [owner 2026-08-23] "notis ในตั้งค่ามันแยกเป็นสองหัวข้อ ... ปรับให้เหลือหัวข้อเดียว" — was
+     two switches for one daily line. Still split off ครอบครัว, which is the one-off news: a birth
+     and a coming of age should survive muting the daily traffic. */
+  { id: "kidwork",  icon: "🗡️", name: "ลูกออกทำงาน", note: "สรุปรายวัน — ออกล่าและ event หาของ ได้เงินและของเท่าไหร่" },
   { id: "quest",  icon: "📜", name: "งานจากลานหมู่บ้าน",   note: "ตอนส่งงานสำเร็จและได้ค่าจ้าง" },
   { id: "save",   icon: "💾", name: "แจ้งว่าเซฟแล้ว",       note: "เซฟอัตโนมัติทุก 10 นาที (เซฟไม่สำเร็จจะเตือนเสมอ)" },
 ];

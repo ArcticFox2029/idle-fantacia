@@ -6,7 +6,7 @@
  * v5 combat-stat split shipped with this left at 4: freshProfile stamped v4, migrate pushed
  * it to v5, and the `p.v === GAME_VERSION` guard then rejected every profile — the game
  * silently refused to create or load anything. balance_check.mjs now fails if the two drift. */
-const GAME_VERSION = 55;
+const GAME_VERSION = 56;
 /* 🎯 [owner 2026-08-22] "avatar คน เพดานน่าจะไม่กำหนด เพราะวางไว้ว่าให้โตได้เรื่อยๆ ... จริงๆ อยากให้ถึง 999"
  *
  * 99 was reachable in about four hours of the best XP route, which is the whole reason it felt like
@@ -1416,6 +1416,21 @@ const FAMILY_UPKEEP_SPOUSE = 500;   // per game-day
 const FAMILY_UPKEEP_CHILD = 500;    // per game-day, each — flat, whatever they have been taught
 const FAMILY_UPKEEP_PER_EDU = 0;    // kept at zero rather than deleted: it is the owner's dial
 
+
+/* 🎯 [owner 2026-08-23] "ต้องแก้ให้ค่าติดลบค้าง รอเงินสดมาคืน ครอบครัวจะไม่หักธนาคาร แค่มี counter
+ * นับว่าค่าเลี้ยงดูยังติดลบ ไม่ได้ชำระมากี่วัน ครบ 90 วันก็ค่อยหัก แบบมี notis ถ้าหักจากกระเป๋าและธนาคารไม่ได้
+ * เกมโอเวอร์"
+ *
+ * Upkeep used to reach straight into the bank the moment the wallet came up short, which meant
+ * savings drained silently — the owner found 144 gold missing from a deposit slip by noticing it
+ * himself, because nothing anywhere recorded it. Now an unpaid day is a DEBT that waits for cash,
+ * and the savings are off limits until this many consecutive days of it have passed. */
+const FAMILY_ARREARS_FATAL_DAYS = 90;
+/* How often the shortfall warning repeats while the debt stands. Every day for ninety days is the
+   toast flood the owner has already objected to twice; silence for ninety days is worse. So: the
+   first day, every tenth day after it, and every day of the last week before the run ends. */
+const FAMILY_ARREARS_WARN_EVERY = 10;
+const FAMILY_ARREARS_WARN_FINAL = 7;
 const CHILD_MAX = 4;                  // a ceiling, so a long marriage does not become a bonus farm
 const CHILD_ADULT_DAY = 120;          // game-days from birth to setting out on their own
 
@@ -1498,6 +1513,16 @@ const CHILD_ERRAND_PER_LEVELS = 12;  // +1 copy of the haul per this many levels
 /* 🎯 [owner 2026-08-23] "เกี่ยว เพราะว่ายิ่งเรียนรู้ยิ่งเอาโบนัสนั้นมาใช้ได้" — the hunting track a
  * child studies now also makes THEM stronger, not only their parent. */
 const CHILD_HUNT_TRACK_POWER = 0.08;   // per level of the hunt track, on their own power
+
+/* 🎯 [owner 2026-08-23] "เพิ่มระบบสัตว์เลี้ยงให้ลูก ... pet ก็จะคอยติดตามออกสู้ได้ มี lv เพิ่มได้ ·
+ * เมื่อจุติ pet ของลูกๆ ก็จะยังไม่หาย แต่ค่าจะเหมือน pet เราที่โดนหารครึ่ง"
+ *
+ * A child's companion is the same object a player's is — same species table, same IV roll, same
+ * petStats — so everything already written about pets applies to it without a second system. What
+ * differs is only how much of the fight it accounts for and how fast it learns, because a child is
+ * off doing this unattended and must not become the best place to park a legendary. */
+const CHILD_PET_POWER = 0.5;    // share of the pet's own power added to the child's
+const CHILD_PET_XP = 0.5;       // share of the child's hunt XP the companion earns alongside it
 
 const CHILD_TRACK_MAX = 5;
 /* Cost of taking a track from `lv` to `lv + 1`. Cubic on purpose: level 1 is pocket change and

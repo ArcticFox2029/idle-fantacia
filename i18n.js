@@ -616,11 +616,11 @@ const I18N = (() => {
        nothing here matched it, so the panel stayed Thai in English mode. */
     "ล้มมอนสเตอร์และของที่ดรอป":
       "Kills and drops",
-    "ทุกตัวที่ล้มได้ — ตัวที่ขึ้นถี่ที่สุด (บอสยังขึ้นเสมอ)":
+    "ทุกตัวที่ล้มได้ รวมถึงตอนคุณและสัตว์เลี้ยงกินอาหาร (บอสยังขึ้นเสมอ)":
       "Every monster you fell — the noisiest of these (bosses always show)",
     "ของและ XP จากงาน":
       "Job yields and XP",
-    "ตัดไม้ ขุด ตกปลา ปลูกผัก คราฟต์ และย่องเก็บของ":
+    "ตัดไม้ ขุด ตกปลา ปลูกผัก คราฟต์ ย่องเก็บของ และของหายาก":
       "Woodcutting, mining, fishing, farming, crafting and thieving",
     "เลเวลอัพ / ขั้นชำนาญ":
       "Levels and mastery",
@@ -632,7 +632,7 @@ const I18N = (() => {
       "Daily dividends, interest, buying and selling",
     "รายละเอียดการต่อสู้":
       "Combat detail",
-    "กินอัตโนมัติ เกราะแตก โหมดคลั่ง สัตว์เลี้ยงหมดแรง":
+    "เกราะแตก โหมดคลั่ง สัตว์เลี้ยงหมดแรง":
       "Auto-eating, broken armour, frenzy, a companion going down",
     "พ่อค้าเร่":
       "The pedlar",
@@ -725,8 +725,24 @@ const I18N = (() => {
     "🚫 คุมกำเนิดอยู่": "🚫 No children", "👶 มีลูกได้": "👶 Children allowed",
     "ขั้น": "Level", "ล่าอีก": "Hunts in", "ออกล่าวันนี้": "Hunting today",
     "กำลังจะออกล่า": "Setting out",
-    "ลูก": "children", "คน ออกล่า": "went hunting", "คน หาของ": "went gathering",
+    "ทั้งเดือน": "whole month",
+    "ภรรยา": "Wives", "ลูกที่จุติรอบนี้": "Children of this life",
+    "ลูกจากรอบก่อนๆ": "Children from earlier lives",
+    "รอบนี้ยังไม่มีลูก": "No children yet this life",
+    "ยังไม่มี": "none", "ตัวโปรด": "favourite",
+    "ให้ลูก": "Give to a child",
+    "ลูก": "children", "คน ออกทำงาน": "went to work",
+    "ล่า": "hunted", "หาของ": "gathered", "ชิ้น": "items", "บาดเจ็บ": "hurt",
     "ล้วงกระเป๋า": "Pickpocketing",
+    "ลูกออกทำงาน": "Children at work",
+    "สรุปรายวัน — ออกล่าและ event หาของ ได้เงินและของเท่าไหร่":
+      "The daily line: hunts and errands, and what came home from them",
+    "รายได้ที่เข้าเอง": "Income that arrives on its own",
+    "ค่าเช่าอสังหาและปันผลรายวัน — เข้าทุกวันในเกมโดยไม่ต้องกด":
+      "Property rent and daily dividends — they land every game-day without you pressing anything",
+    "การซื้อขายและภาษี": "Trades and tax",
+    "ซื้อ-ขายหุ้น อสังหา ร้านค้า และการหักภาษี":
+      "Buying and selling shares, property and shops, and tax being collected",
     "⚙️ ตั้งค่า": "⚙️ Settings",
     "ภาษา / Language": "Language / ภาษา",
     "🇹🇭 ไทย": "🇹🇭 Thai",
@@ -795,7 +811,7 @@ const I18N = (() => {
     "ไม่กินช่องงาน": "Does not use a job slot",
 
     "ค่าเช่า/วันในเกม": "Rent per in-game day", "ค่าเช่าสะสม": "Rent collected",
-    "ทุนที่จมอยู่ (ขายคืนได้เต็ม)": "Capital tied up (fully refundable)",
+    "ทุนที่จมอยู่": "Capital tied up",
     "บ้านที่ถือ": "Properties held", "ที่อยู่อื่น": "Other properties", "เฟอร์นิเจอร์": "Furniture",
     "ค่าจ้างรวม/วัน": "Total wages per day", "ลูกค้าประจำ": "Regulars", "พนักงาน": "Staff",
     "วัตถุดิบ / สินค้า": "Materials / goods", "หักจากส่วนของคุณ": "Taken from your share",
