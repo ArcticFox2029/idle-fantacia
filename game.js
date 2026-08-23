@@ -735,6 +735,12 @@ function migrate(p) {
       k.face = i >= 0 && i < CHILD_ART_PATTERNS ? i : null;
     }
   }
+  if (p.v === 57) {
+    p.v = 58;
+    /* Nothing to move — the family page lost three buttons and no save field changed. The version
+     * still steps because ?v= in index.html is the published site's only cache-buster: without it a
+     * returning player keeps the game.js their browser already has. */
+  }
   return p.v === GAME_VERSION ? p : null;
 }
 
@@ -6577,21 +6583,20 @@ function renderFamily() {
      สนาม กับของลูกพอ" — listing the whole stable turned the household page into a second pet screen,
      which is what the pet screen is for. What belongs here is the household: the one you field, and
      the ones living with your children. */
+  /* 🎯 [owner 2026-08-23] "ในหน้าครอบครัว สัตว์เลี้ยง เอาปุ่มปล่อยออก · เหลือเพียง pet ของลูก ที่
+     เอากลับ" — releasing is permanent and belongs where you go to manage companions, not on the page
+     you open to look at your household; a destructive button beside a portrait is easy to hit by
+     accident. Both ปล่อย and ให้ลูก are on the pet screen, so nothing is stranded by removing them
+     here. What stays is the one action that only makes sense from here. */
   const active = P.activePet != null ? P.pets[P.activePet] : null;
-  const mine = active ? petEntry(
-    active,
-    `(${T("ของเรา")})`,
-    (childPetHeir() ? `<button class="btn ghost tiny" data-famgive="${P.activePet}">🎁 ${T("ให้ลูก")}</button>` : "")
-    + `<button class="btn ghost tiny" data-famrelease="${P.activePet}">🕊️ ${T("ปล่อย")}</button>`,
-    " is-active") : "";
+  const mine = active ? petEntry(active, `(${T("ของเรา")})`, "", " is-active") : "";
 
   /* A child's companion is not yours to field, so it gets no "พาตัวนี้ไป" — only the two things
      that are genuinely yours to decide: take it back into the stable, or let it go. */
   const theirs = kids.filter(childPet).map((k) => petEntry(
     childPet(k),
     `(${T("ของ")}${k.name})`,
-    `<button class="btn ghost tiny" data-famtake="${k.id}">↩️ ${T("เอากลับ")}</button>`
-    + `<button class="btn ghost tiny" data-famkidfree="${k.id}">🕊️ ${T("ปล่อย")}</button>`)).join("");
+    `<button class="btn ghost tiny" data-famtake="${k.id}">↩️ ${T("เอากลับ")}</button>`)).join("");
 
   const petCard = (mine + theirs) || `
     <div class="fam-card is-empty">
@@ -6782,36 +6787,10 @@ function renderFamily() {
     });
   });
 
-  /* 🎯 [owner 2026-08-23] The pet fold is not a display any more — releasing and swapping have
-     to work from here, which means wiring them where the family page renders rather than assuming
-     the stable's own panel is on screen. releasePet is reused rather than restated so the
-     confirmation and the activePet index-shift stay in one place. */
-  $("#action-grid").querySelectorAll("[data-fampet]").forEach((b) => {
-    b.onclick = () => {
-      P.activePet = Number(b.dataset.fampet);
-      const st = petStats(P.pets[P.activePet]);
-      toast(`${st.icon} ${T("พา")} ${st.name} ${T("ออกล่าด้วย")}`, "", "family");
-      renderView();
-    };
-  });
-  $("#action-grid").querySelectorAll("[data-famrelease]").forEach((b) => {
-    b.onclick = () => releasePet(Number(b.dataset.famrelease));
-  });
-  $("#action-grid").querySelectorAll("[data-famgive]").forEach((b) => {
-    b.onclick = () => {
-      const i = Number(b.dataset.famgive);
-      const pet = P.pets[i], heir = childPetHeir();
-      if (!pet || !heir) return;
-      const st = petStats(pet);
-      if (!confirm(`ให้ ${st.name} (ขั้น ${st.lv} · คุณภาพ ${st.grade.name}) กับ ${heir.name}?\n\n`
-          + `· ${heir.name} จะพามันออกล่าทุกวัน และมันจะขึ้นขั้นไปด้วย\n`
-          + `· จุติแล้วมันไม่หาย แต่ค่าจะโดนหารครึ่งเหมือนลูก`)) return;
-      givePetToChild(i);
-      toast(`🎁 ${st.icon} ${st.name} ไปอยู่กับ ${heir.name} แล้ว`, "levelup", "family");
-      save("ให้สัตว์เลี้ยงกับลูก");
-      renderView();
-    };
-  });
+  /* 🎯 [owner 2026-08-23] Take-back is the one companion action this page keeps: it is about
+     the household rather than about managing a stable, and it is not destructive. Fielding,
+     releasing and giving all live on the pet screen — their handlers were removed with their
+     buttons rather than left behind waiting for markup that no longer exists. */
   $("#action-grid").querySelectorAll("[data-famtake]").forEach((b) => {
     b.onclick = () => {
       const k = childrenOf().find((x) => x.id === b.dataset.famtake);
@@ -6828,21 +6807,6 @@ function renderFamily() {
       renderView();
     };
   });
-  $("#action-grid").querySelectorAll("[data-famkidfree]").forEach((b) => {
-    b.onclick = () => {
-      const k = childrenOf().find((x) => x.id === b.dataset.famkidfree);
-      const pet = childPet(k);
-      if (!pet) return;
-      const st = petStats(pet);
-      if (!confirm(`ปล่อย ${st.name} ของ ${k.name} (ขั้น ${st.lv} · คุณภาพ ${st.grade.name})`
-          + ` กลับสู่ธรรมชาติ?\nทำแล้วย้อนกลับไม่ได้`)) return;
-      delete k.pet;
-      toast(`${st.icon} ปล่อย ${st.name} กลับสู่ธรรมชาติแล้ว`, "warn", "family");
-      save("ปล่อยสัตว์เลี้ยงของลูก");
-      renderView();
-    };
-  });
-
   $("#action-grid").querySelectorAll("[data-control]").forEach((b) => {
     b.onclick = () => { toggleWifeControl(b.dataset.control); renderView(); };
   });
