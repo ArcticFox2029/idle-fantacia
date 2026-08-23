@@ -1873,3 +1873,8 @@ body::after {
   background: var(--bg-deep); border: 1px solid var(--line); border-radius: 10px; font-size: 13px;
 }
 .kid-pet .icon-art { width: 24px; height: 24px; font-size: 15px; }
+
+/* 🎯 [owner 2026-08-23] "pet ของเราก็จะ (ของเรา) · pet ของลูกก็จะ (ของอาริน) ชื่อลูก" — every
+   companion in the household is listed together now, so whose it is has to read at a glance. */
+.pet-owner { color: var(--text-dim); font-weight: 400; font-size: 12px; }
+.fam-card.is-pet.is-active { border-color: var(--gold); }

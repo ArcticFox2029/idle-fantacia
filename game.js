@@ -723,6 +723,18 @@ function migrate(p) {
                                                                   : Math.max(0, (p.rebirths || 0) - 1);
     });
   }
+  if (p.v === 56) {
+    p.v = 57;
+    /* Portraits stop being keyed to the name and become a pattern the child carries. Existing
+     * children keep the face they have been wearing — it was CHILD_NAMES.indexOf(name), so that is
+     * what is written down. A name past the art set records null, which is emoji, which is already
+     * what it was showing. */
+    for (const k of p.kids || []) {
+      if (k.face !== undefined) continue;
+      const i = CHILD_NAMES.indexOf(k.name);
+      k.face = i >= 0 && i < CHILD_ART_PATTERNS ? i : null;
+    }
+  }
   return p.v === GAME_VERSION ? p : null;
 }
 
@@ -1740,7 +1752,16 @@ function newChildStats() {
  * that way, and markArtMissing remembers the miss, so an unnamed child costs one 404 and never
  * asks again. Naming CHILD_FACES separately from CHILD_NAMES is what keeps that promise — a
  * ninth name can be added without an art file and the game stays correct. */
-/* One portrait id per name in CHILD_NAMES, same index. A face with no picture on disk falls back to
+/* 🎯 [owner 2026-08-23] How many portrait PATTERNS actually have pictures on disk. The art set
+ * is a prefix of CHILD_FACES and is deliberately partial ("ไม่ต้องสร้างรูปหมด"), so this is the pool
+ * a newborn draws from; past it, a child wears an emoji.
+ *
+ * Kept as a number rather than probed at runtime because a name is chosen at BIRTH and art loads
+ * asynchronously at render — the game cannot know what exists at the moment it has to decide.
+ * test "จำนวน pattern รูปตรงกับไฟล์ที่มีจริง" holds it to the files. */
+const CHILD_ART_PATTERNS = 29;
+
+/* One portrait id per pattern index. NOT keyed to CHILD_NAMES any more — see childFaceId. A face with no picture on disk falls back to
    its emoji through iconArt — the owner's own rule for outrunning the art we have: "ถ้ามีลูกเยอะจนใช้
    รูปหมดแล้ว คนใหม่ๆ ค่อยให้ใช้ emoji". Append only; see CHILD_NAMES. */
 const CHILD_FACES = [
@@ -1755,10 +1776,44 @@ const CHILD_FACES = [
   "damir", "anya", "mylo", "vera", "nico", "talia", "ivan", "mira", "owen", "lara", "yan",
   "nina", "damien",
 ];
+/* 🎯 [owner 2026-08-23] "ต้องมองว่าให้รูปเป็น pattern มันไม่ล็อกกับชื่อตรงๆ แต่จะล็อกกับ slot
+ * ล่าสุด · พอจุติ pattern 26 pattern 31 จะว่าง แต่ยังไม่โดนหยิบมาใช้ทันที ไม่งั้นจุติรอบใหม่อาจได้รูปลูก
+ * คนเดิม ต้องล็อกไว้ก่อน แล้วค่อยคลายจุติหน้า"
+ *
+ * A portrait used to be whatever CHILD_NAMES.indexOf(name) landed on, which welded the two together
+ * — the same name always wore the same face, so a freed name brought its face back with it. They
+ * are separate resources now: a child holds a PATTERN, recorded on itself, and the name is drawn
+ * independently.
+ *
+ * `k.face == null` means emoji, which is a legitimate state rather than a failure: art is
+ * deliberately partial, and a child from an earlier life uses emoji regardless (see the fam-face
+ * branch in renderFamily). */
 function childFaceId(k, adult) {
-  const i = CHILD_NAMES.indexOf(k.name);
-  const face = i >= 0 && i < CHILD_FACES.length ? CHILD_FACES[i] : "none";
+  const i = k.face;
+  const face = i != null && i >= 0 && i < CHILD_FACES.length ? CHILD_FACES[i] : "none";
   return adult ? `${face}_adult` : face;
+}
+
+/* Which patterns are spoken for right now.
+ *
+ * Two claims, and they are different in kind. A LIVING child of this life is wearing its pattern.
+ * A COOLING pattern belongs to the cycle that just ended — those children have moved to emoji, so
+ * the pattern is technically free, but handing it straight back would put last life's faces on this
+ * life's children, which is the thing the owner asked to prevent. It is released one rebirth later.
+ */
+function childFaceTaken() {
+  const taken = new Set(P.family?.faceCool || []);
+  for (const k of childrenOf()) if (childIsThisLife(k) && k.face != null) taken.add(k.face);
+  return taken;
+}
+
+/* A pattern for a newborn, or null when every one is spoken for — in which case they wear an emoji,
+   which is a look, not a bug. */
+function childPickFace() {
+  const taken = childFaceTaken();
+  const free = [];
+  for (let i = 0; i < CHILD_ART_PATTERNS; i++) if (!taken.has(i)) free.push(i);
+  return free.length ? free[Math.floor(Math.random() * free.length)] : null;
 }
 
 /* 🎯 [owner 2026-08-22] What a household costs per game-day, itemised so the family screen can show
@@ -1901,14 +1956,22 @@ function childBirthRoll() {
     if (last != null && today - last < DAYS_PER_YEAR) continue;
     if (Math.random() >= CHILD_BIRTH_CHANCE) continue;
 
-    const used = new Set(kids.map((k) => k.name));
-    const name = CHILD_NAMES.find((n) => !used.has(n)) || `ลูกคนที่ ${kids.length + 1}`;
+    /* 🎯 [owner 2026-08-23] "เพิ่มระบบแรนด้อมชื่อด้วยดีกว่าไหม ไม่งั้น จุติ 3 ไล่ นารา → เคนจิ ·
+       จุติ 4 มีลูก นารา → เคนจิ มาอีกรอบ" — taking the FIRST free name made the order deterministic,
+       so a household that keeps disowning walks the same list in the same sequence every cycle.
+       Drawn at random from what is free instead.
+
+       🎯 [owner 2026-08-23] "การไล่ลูกออกไปแล้ว ไม่นับเป็นลูก ดังนั้นอนาคตยังสามารถใช้ชื่อนั้นๆ ได้" —
+       free means no LIVING child holds it. A disowned name really is released. */
+    const free = CHILD_NAMES.filter((n) => !kids.some((k) => k.name === n));
+    const name = free.length ? free[Math.floor(Math.random() * free.length)]
+                             : `ลูกคนที่ ${kids.length + 1}`;
     const mother = VILLAGERS.find((v) => v.id === id);
     /* 🎯 [owner 2026-08-23] "ลูกที่จุติในรอบนี้ ... bullet ลูกที่จุติรอบก่อนๆ" — the family page
        splits on this, and there was no per-child record of it: bornThisLife is a COUNT, which
        cannot say which child it refers to once they outlive the life they were born in. */
     kids.push({ id: `k${today}_${kids.length}`, name, bornDay: today, age: 0, bornLife: P.rebirths || 0,
-                parent: id, stats: newChildStats(), edu: {} });
+                face: childPickFace(), parent: id, stats: newChildStats(), edu: {} });
     P.family.lastBirthByWife[id] = today;
     P.family.lastBirthDay = today;
     P.family.bornThisLife = (P.family.bornThisLife || 0) + 1;
@@ -2049,8 +2112,20 @@ function childrenRebirth() {
 
   const repaired = P.family?.kidsRepaired;
   const noKids = P.family?.noKids || {};
+  /* 🎯 [owner 2026-08-23] "พอจุติ pattern 26 pattern 31 จะว่าง แต่ยังไม่โดนหยิบมาใช้ทันที ไม่งั้น
+     จุติรอบใหม่อาจได้รูปลูกคนเดิม ต้องล็อกไว้ก่อน แล้วค่อยคลายจุติหน้า"
+
+     The children of the life just ending move to emoji, so their patterns really are free — and
+     handing them straight to the next four would put last life's faces on this life's children,
+     which is the whole thing this prevents. Held for one cycle.
+
+     Assigning REPLACES the previous cool list, which is what releases it: a pattern sits out
+     exactly one rebirth, not forever. Read before P.rebirths increments, so childIsThisLife still
+     means the cycle that is ending. */
+  const faceCool = (P.kids || []).filter((k) => childIsThisLife(k) && k.face != null)
+    .map((k) => k.face);
   P.family = { arrears: 0, noteDay: null, lastBirthDay: null, lastBirthByWife: {},
-               bornThisLife: 0, monthPaid: 0, kidsRepaired: repaired, noKids };
+               bornThisLife: 0, monthPaid: 0, kidsRepaired: repaired, noKids, faceCool };
 }
 
 /* ---------- 📜 เควส ----------
@@ -6428,7 +6503,6 @@ function renderFamily() {
   const wives = spouseIds().map((id) => VILLAGERS.find((v) => v.id === id)).filter(Boolean);
   const spouse = wives[0] || null;
   const kids = childrenOf();
-  const pet = P.activePet != null ? P.pets[P.activePet] : null;
 
   const meCard = `
     <div class="fam-card is-me">
@@ -6477,19 +6551,49 @@ function renderFamily() {
         <small>${T("ไปสนิทกับใครสักคนที่ลานหมู่บ้านก่อน")}</small></div>
     </div>`;
 
-  const petCard = pet ? (() => {
+  /* 🎯 [owner 2026-08-23] "pet ต้องโชว์ในการ์ดสัตว์เลี้ยงในของครอบครัว เพื่อให้ใช้ปล่อยหรือเปลี่ยน
+   * ตัวได้ · pet ของเราก็จะ (ของเรา) · pet ของลูกก็จะ (ของอาริน) ชื่อลูก"
+   *
+   * This showed the ONE active companion and nothing else, which stopped making sense the moment
+   * companions could be given away: a pet living with a child appeared nowhere on the page that is
+   * about the household. Every companion now, the player's and the children's, each saying whose it
+   * is — and the two things you would come here to do work from here. */
+  const petEntry = (pet, ownerLabel, acts, extraClass) => {
     const ps = petStats(pet);
     return `
-    <div class="fam-card is-pet">
+    <div class="fam-card is-pet${extraClass || ""}">
       <div class="fam-face">${iconArt("pet", pet.species, ps.icon, ps.name, "big")}</div>
       <div class="fam-body">
-        <b>${escapeHtml(ps.name)}</b>
-        <small>ตัวโปรด · ขั้น ${petLevel(pet)} · คุณภาพ ${escapeHtml(ps.grade?.name || "-")}</small>
+        <b>${escapeHtml(ps.name)} <span class="pet-owner">${escapeHtml(ownerLabel)}</span></b>
+        <small>${T("ขั้น")} ${ps.lv} · ${T("คุณภาพ")} ${escapeHtml(ps.grade?.name || "-")}</small>
         <div class="fam-row"><span>❤️ ${Math.max(0, Math.round(pet.hp))}/${ps.maxHp}</span>
           <span>🗡️ ${ps.atk}</span><span>🛡️ ${ps.def}</span></div>
+        <div class="kid-acts">${acts}</div>
       </div>
     </div>`;
-  })() : `
+  };
+
+  /* 🎯 [owner 2026-08-23] "ในการ์ดครอบครัว สัตว์เลี้ยงไม่ต้องโชว์ทุกตัว โชว์แค่ของเราตัวหลักที่ลง
+     สนาม กับของลูกพอ" — listing the whole stable turned the household page into a second pet screen,
+     which is what the pet screen is for. What belongs here is the household: the one you field, and
+     the ones living with your children. */
+  const active = P.activePet != null ? P.pets[P.activePet] : null;
+  const mine = active ? petEntry(
+    active,
+    `(${T("ของเรา")})`,
+    (childPetHeir() ? `<button class="btn ghost tiny" data-famgive="${P.activePet}">🎁 ${T("ให้ลูก")}</button>` : "")
+    + `<button class="btn ghost tiny" data-famrelease="${P.activePet}">🕊️ ${T("ปล่อย")}</button>`,
+    " is-active") : "";
+
+  /* A child's companion is not yours to field, so it gets no "พาตัวนี้ไป" — only the two things
+     that are genuinely yours to decide: take it back into the stable, or let it go. */
+  const theirs = kids.filter(childPet).map((k) => petEntry(
+    childPet(k),
+    `(${T("ของ")}${k.name})`,
+    `<button class="btn ghost tiny" data-famtake="${k.id}">↩️ ${T("เอากลับ")}</button>`
+    + `<button class="btn ghost tiny" data-famkidfree="${k.id}">🕊️ ${T("ปล่อย")}</button>`)).join("");
+
+  const petCard = (mine + theirs) || `
     <div class="fam-card is-empty">
       <div class="fam-face">🐾</div>
       <div class="fam-body"><b>${T("ยังไม่มีเพื่อนร่วมทาง")}</b>
@@ -6513,7 +6617,16 @@ function renderFamily() {
     }).join("");
     return `
       <div class="fam-card is-kid">
-        <div class="fam-face">${iconArt("child", childFaceId(k, adult), adult ? "🧑" : "👶", k.name, "big")}</div>
+        <!-- 🎯 [owner 2026-08-23] "ลูกหลังจุติ มันไม่จำเป็นต้องใช้รูป แต่ให้เป็น emoji แทนก็ได้นะ"
+             — and it settles something bigger than a look. Art is deliberately partial now ("ไม่ต้อง
+             สร้างรูปหมด"): 29 of the 100 names have a portrait. artKindDead blacklists a whole KIND
+             after three failures with no success, which exists to stop hammering a deployment that
+             ships no art at all — but a household deep enough to be showing artless children could
+             trip it and take the portraits that DO exist down with it, for the rest of the session.
+             Children from earlier lives ask for no art at all, so the race cannot start. -->
+        <div class="fam-face">${childIsThisLife(k)
+          ? iconArt("child", childFaceId(k, adult), adult ? "🧑" : "👶", k.name, "big")
+          : `<span class="icon-art"><span class="icon-glyph">${adult ? "🧑" : "👶"}</span></span>`}</div>
         <div class="fam-body">
           <b>${escapeHtml(k.name)}</b>
           <small>${adult
@@ -6578,7 +6691,8 @@ function renderFamily() {
   $("#view-extra").innerHTML = `
     <div class="mastery-summary">
       <span class="m-chip">👨‍👩‍👧 ${1 + (spouse ? 1 : 0) + kids.length} ${T("คน")}</span>
-      <span class="m-chip">🐾 ${T("สัตว์เลี้ยง")} ${P.pets.length}</span>
+      <!-- Counts the ones out with the children too: they are still the household's. -->
+      <span class="m-chip">🐾 ${T("สัตว์เลี้ยง")} ${P.pets.length + kids.filter(childPet).length}</span>
       ${bonusLine ? `<span class="m-chip">${T("โบนัสจากลูก")} ${bonusLine}</span>` : ""}
       ${up.total ? `<span class="m-chip${familyInArrears() ? " missing" : ""}">🍚 ${T("ค่าเลี้ยงดู")} ${up.total.toLocaleString()}/${T("วัน")}</span>` : ""}
     </div>`;
@@ -6632,8 +6746,16 @@ function renderFamily() {
        would wrap into a wall in exactly the case the fold exists to tidy. */
     + (pastLife.length ? fold("kidsPast", "\u{1f9d1}", T("ลูกจากรอบก่อนๆ"), "",
            pastLife.map(kidCard).join(""), `${pastLife.length} ${T("คน")}`) : "")
+    /* The count says both, because "how many companions does this household have" is now two
+       numbers and the interesting one is how many are out with the children. */
+    /* Counts what the section actually shows, not what the stable holds — a header that says three
+       above a list of two is worse than no header. */
     + fold("pets", "\u{1f43e}", T("สัตว์เลี้ยง"), "", petCard,
-           pet ? `${T("ตัวโปรด")} 1` : T("ยังไม่มี"))
+           (P.activePet != null && P.pets[P.activePet] ? 1 : 0) + kids.filter(childPet).length
+             ? [P.activePet != null && P.pets[P.activePet] ? T("ตัวที่ลงสนาม") : "",
+                kids.filter(childPet).length ? `${kids.filter(childPet).length} ${T("อยู่กับลูก")}` : ""]
+               .filter(Boolean).join(" · ")
+             : T("ยังไม่มี"))
     + (up.total ? `<div class="fam-hint${familyInArrears() ? " is-debt" : ""}">
           🍚 ค่าเลี้ยงดูวันละ <b>${up.total.toLocaleString()}</b> 💰 — ภรรยา ${up.spouse.toLocaleString()}${up.kids ? ` · ลูก ${up.kids} คน ${up.heads.toLocaleString()}` : ""}${up.edu ? ` · ค่าเรียน ${up.edu.toLocaleString()}` : ""}
           ${familyInArrears() ? `<br><b>ค้างจ่าย ${Math.round(P.family.arrears).toLocaleString()} 💰 — โบนัสจากภรรยาและลูกหยุดอยู่</b> จ่ายครบแล้วกลับมาเหมือนเดิม · เงินติดลบครบ ${TAX_GRACE_DAYS} วันคือจบเกม` : ""}
@@ -6658,6 +6780,67 @@ function renderFamily() {
       P.ui.famOpen = P.ui.famOpen || {};
       P.ui.famOpen[d.dataset.fold] = d.open;
     });
+  });
+
+  /* 🎯 [owner 2026-08-23] The pet fold is not a display any more — releasing and swapping have
+     to work from here, which means wiring them where the family page renders rather than assuming
+     the stable's own panel is on screen. releasePet is reused rather than restated so the
+     confirmation and the activePet index-shift stay in one place. */
+  $("#action-grid").querySelectorAll("[data-fampet]").forEach((b) => {
+    b.onclick = () => {
+      P.activePet = Number(b.dataset.fampet);
+      const st = petStats(P.pets[P.activePet]);
+      toast(`${st.icon} ${T("พา")} ${st.name} ${T("ออกล่าด้วย")}`, "", "family");
+      renderView();
+    };
+  });
+  $("#action-grid").querySelectorAll("[data-famrelease]").forEach((b) => {
+    b.onclick = () => releasePet(Number(b.dataset.famrelease));
+  });
+  $("#action-grid").querySelectorAll("[data-famgive]").forEach((b) => {
+    b.onclick = () => {
+      const i = Number(b.dataset.famgive);
+      const pet = P.pets[i], heir = childPetHeir();
+      if (!pet || !heir) return;
+      const st = petStats(pet);
+      if (!confirm(`ให้ ${st.name} (ขั้น ${st.lv} · คุณภาพ ${st.grade.name}) กับ ${heir.name}?\n\n`
+          + `· ${heir.name} จะพามันออกล่าทุกวัน และมันจะขึ้นขั้นไปด้วย\n`
+          + `· จุติแล้วมันไม่หาย แต่ค่าจะโดนหารครึ่งเหมือนลูก`)) return;
+      givePetToChild(i);
+      toast(`🎁 ${st.icon} ${st.name} ไปอยู่กับ ${heir.name} แล้ว`, "levelup", "family");
+      save("ให้สัตว์เลี้ยงกับลูก");
+      renderView();
+    };
+  });
+  $("#action-grid").querySelectorAll("[data-famtake]").forEach((b) => {
+    b.onclick = () => {
+      const k = childrenOf().find((x) => x.id === b.dataset.famtake);
+      const pet = childPet(k);
+      if (!pet) return;
+      const st = petStats(pet);
+      if (!confirm(`เอา ${st.name} กลับมาจาก ${k.name}?\n\n· ${k.name} จะออกล่าคนเดียว อ่อนลง\n`
+          + `· ตัวมันเองไม่เสียขั้นที่สะสมไว้`)) return;
+      delete k.pet;
+      P.pets.push(pet);
+      if (P.activePet == null) P.activePet = P.pets.length - 1;
+      toast(`↩️ ${st.icon} ${st.name} กลับมาอยู่กับเราแล้ว`, "", "family");
+      save("เอาสัตว์เลี้ยงกลับ");
+      renderView();
+    };
+  });
+  $("#action-grid").querySelectorAll("[data-famkidfree]").forEach((b) => {
+    b.onclick = () => {
+      const k = childrenOf().find((x) => x.id === b.dataset.famkidfree);
+      const pet = childPet(k);
+      if (!pet) return;
+      const st = petStats(pet);
+      if (!confirm(`ปล่อย ${st.name} ของ ${k.name} (ขั้น ${st.lv} · คุณภาพ ${st.grade.name})`
+          + ` กลับสู่ธรรมชาติ?\nทำแล้วย้อนกลับไม่ได้`)) return;
+      delete k.pet;
+      toast(`${st.icon} ปล่อย ${st.name} กลับสู่ธรรมชาติแล้ว`, "warn", "family");
+      save("ปล่อยสัตว์เลี้ยงของลูก");
+      renderView();
+    };
   });
 
   $("#action-grid").querySelectorAll("[data-control]").forEach((b) => {
