@@ -26,6 +26,146 @@ const I18N = (() => {
   /* Thai → English. Everything not listed here stays Thai, on purpose — see decision 1 above.
    * Grouped by where the strings come from so a gap is easy to spot and fill. */
   const EN = {
+    /* ---- final pass: data values and small labels ---- */
+    "ธุรกิจถูกยึด": "businesses seized",
+    "วันสุดท้าย": "last day",
+    "มี": "Have",
+    "ทองไม่พอสร้างสถาบัน": "Not enough gold to build the institute",
+    "ค่าเรียน": "schooling",
+    "เหมันต์": "Winter",
+    "ผลิบาน": "Blossom",
+    "วสันต์": "Rains",
+    "สารท": "Autumn",
+    "ยาสมุนไพร": "Herbal Remedy",
+    "เนื้อรมควัน": "Smoked Meat",
+    "ดาบมาตรฐาน": "Standard Sword",
+    "มาตรฐาน": "Standard",
+    "รางวัล": "Reward",
+    "สร้าง": "Build",
+    "กฎ": "Rules",
+    "บัญชี": "Ledger",
+    "ธนาคาร": "Bank",
+    "คริปโต": "Crypto",
+    "ฤดู": "Season",
+    "ยังไม่มีค่าใช้จ่าย": "No costs yet",
+    "ยังไม่มีรายการ — ลองฝากเงินหรือซื้อหุ้นสักกิจการดู": "Nothing here yet — try a deposit, or buy shares in a company",
+    "พื้นการจุติจะไม่มีวันต่ำลง — จุติเร็วเกินไปจนได้น้อยกว่าครั้งก่อน ระบบจะคงค่าเดิมไว้ให้": "Your rebirth floor never drops — rebirth too soon and the game keeps the higher figure instead",
+
+    /* ---- achievements, village and quests ---- */
+    "ยังไม่มีโบนัสถาวร — ปลดอันแรกแล้วจะเริ่มสะสม": "No permanent bonuses yet — unlock your first and they start adding up",
+    "ถือครบทุกฉายาแล้ว": "Every title earned",
+    "กระเป๋าว่าง — ไปหาของก่อน": "Bag empty — go and find something",
+    "ส่งงาน": "Hand in",
+    "ไปหาของ": "Go find it",
+
+    /* ---- combat screen ---- */
+    "ยังไม่มีสัตว์เลี้ยง — ล่ามอนสเตอร์เพื่อลุ้นจับ": "No pets yet — hunt monsters for a chance to catch one",
+    "ย่อ": "collapse",
+    "กดเพื่อจัดการสัตว์เลี้ยง": "tap to manage pets",
+    "กดเพื่อปรับอุปกรณ์": "tap to change equipment",
+    "ค่าพื้นฐาน ไม่มีตัวคูณ": "Baseline, no multipliers",
+    "เลเวลล่า": "Combat lv",
+    "ด่าน": "stages",
+
+    /* ---- tax, rebirth and shops, second pass ---- */
+    "ยังไม่ถึงเกณฑ์ของประเภทไหนเลย — ไม่มีอะไรสะสมอยู่ตอนนี้": "Nothing has reached a threshold yet — no tax is accruing",
+    "ขึ้นไป": "and up",
+    "ถึงขั้นนี้แล้ว": "you are in this band",
+    "ทอง": "Gold",
+    "จุติได้เลย": "ready to rebirth",
+
+    /* ---- guild and businesses ---- */
+    "เจ็บ": "injured",
+    "ทีมและภารกิจ": "Squads & missions",
+    "รับเลี้ยง": "Take in",
+    "ของที่ทีมส่งกลับมา": "What the squads brought back",
+    "รับอัตโนมัติ": "Collect automatically",
+    "อสังหา": "Property",
+    "จ้างคน จัดอัตราส่วน ตั้งราคา — รายได้เข้าทุกวันในเกม แต่ค่าจ้างก็ออกทุกวันเหมือนกัน": "Hire, balance the mix, set the price — takings come in every game-day, and so do the wages",
+    "เปิดร้านใหม่": "Open a new shop",
+    "หน้าร้าน": "Shop floor",
+    "รับสมัคร": "Hiring",
+
+    /* ---- stats screen ---- */
+    "การทำงาน": "Work",
+    "ทำงานสำเร็จ": "Actions completed",
+    "ปรุงอาหาร": "Dishes cooked",
+    "ตีของ/เย็บของ": "Items forged / sewn",
+    "ขโมยสำเร็จ": "Successful thefts",
+    "ช่องงานที่มี": "Job slots",
+    "ปราบมอนสเตอร์": "Monsters defeated",
+    "โค่นบอส": "Bosses felled",
+    "ชนิดที่เคยเจอ": "Species encountered",
+    "ระดับความยาก": "Difficulty",
+    "เลเวลล่ารวม": "Combat level",
+    "ทองที่หามาทั้งหมด": "Gold earned, all time",
+    "ทองในมือตอนนี้": "Gold on hand",
+    "ขยะที่ขายไป": "Junk sold",
+    "ของในกระเป๋า": "Items in bag",
+    "ของที่ซื้อจากร้าน": "Shop purchases",
+    "กิจการที่ถือ": "Companies held",
+    "แยกตามขนาด": "By size",
+    "เงินที่ลงไป (ทุน)": "Capital invested",
+    "กำไรที่ยังไม่ขาย": "Unrealised profit",
+    "ปันผลที่ได้รับสะสม": "Dividends received, total",
+    "กำไรจากการซื้อขายสะสม": "Trading profit, total",
+    "ดอกเบี้ยธนาคารสะสม": "Bank interest, total",
+    "ฝากธนาคารตอนนี้": "In the bank now",
+    "ภาษีที่จ่ายไปแล้ว": "Tax paid",
+    "ความชำนาญ": "Mastery",
+    "ขั้นชำนาญรวม": "Total mastery levels",
+    "สายที่เก่งสุด": "Strongest profession",
+    "สายพันธุ์ปลาที่เจอ": "Fish species caught",
+    "เก็บเกี่ยวไปแล้ว": "Harvests",
+    "พืชที่เคยปลูก": "Crops grown",
+    "จับได้แล้ว": "Caught",
+    "สายพันธุ์ที่มีตอนนี้": "Species owned now",
+    "สายพันธุ์ที่เคยเจอ (ไม่หายตอนจุติ)": "Species ever met (survives rebirth)",
+    "ตัวที่พาไปด้วย": "Pet with you",
+    "ขั้นสูงสุดที่เลี้ยงได้": "Highest pet level raised",
+    "งานจากหมู่บ้าน": "Village jobs",
+    "ส่งงานสำเร็จ": "Jobs delivered",
+    "ค่าจ้างที่ได้": "Wages earned",
+    "งานบนกระดานตอนนี้": "Jobs on the board",
+    "ส่งได้เลยตอนนี้": "Ready to hand in",
+    "ของขวัญที่ให้ไป": "Gifts given",
+    "คู่ชีวิต": "Partner",
+    "ลูกที่โตแล้ว": "Children grown up",
+    "ขั้นการเรียนรวม": "Total study levels",
+    "ลงทุนกับการเรียนไป": "Spent on schooling",
+    "ค่าเลี้ยงดูต่อวัน": "Upkeep per day",
+    "จ่ายไปเดือนนี้": "Paid this month",
+    "ค้างจ่าย": "In arrears",
+    "เลเวลทุกสาย": "Levels, every profession",
+
+    /* ---- rebirth screen ---- */
+    "การจุติ": "Rebirth",
+    "เริ่มรอบใหม่โดยไม่ทิ้งสิ่งที่สะสมมา — ความสำเร็จอยู่ครบ ของในกระเป๋าอยู่ครบ":
+      "Start a new run without throwing away what you built — every achievement and every item stays",
+    "บุญเก่า — XP ทุกสาย": "Karma so far — XP, all professions",
+    "บุญเก่า — ทองที่หาได้": "Karma so far — gold earned",
+    "สัตว์เลี้ยงที่จะไปด้วย": "Pet coming with you",
+    "สัตว์เลี้ยงที่จะเสียไป": "Pets you will lose",
+    "เงินฝาก (รอด)": "In the bank (survives)",
+    "ทองในมือ (จะหาย)": "Gold on hand (lost)",
+    "หุ้นที่ถือ (รอด)": "Shares held (survive)",
+    "ค่าที่จะเปลี่ยนเมื่อจุติ": "What a rebirth changes",
+    "จุติตอนนี้ หรือไต่ต่อ — บุญที่จะได้": "Rebirth now, or climb further — the karma you would gain",
+    "ประวัติการจุติ": "Rebirth history",
+    "จุติเลย": "Rebirth now",
+    "ขั้น": "lv", "เลเวลรวม": "Combat level", "ตอนนี้": "now", "ปี": "Year",
+
+    /* ---- shop screen ---- */
+    "ร้านค้านักผจญภัย": "Adventurer's Shop",
+    "เครื่องมือเร่งงาน · คัมภีร์เพิ่ม XP · เครื่องรางติดตัว — ทุกชิ้นถาวร":
+      "Tools that speed up work · tomes that add XP · charms you carry — all permanent",
+    "เครื่องมือ (ทำงานเร็วขึ้น ซื้อไล่ขั้น)": "Tools (work faster, bought in tiers)",
+    "คัมภีร์ (XP เพิ่มถาวรทั้งสาย)": "Tomes (permanent XP for a whole profession)",
+    "เครื่องราง (ผลติดตัวทุกโหมด)": "Charms (carried, in every mode)",
+    "กระถางปลูก (เปิดแปลงเพิ่มให้สวน)": "Planters (open more garden plots)",
+    "ทำหลายอย่างพร้อมกัน (ของแพงที่สุดในเกม)": "Do several things at once (the priciest thing in the game)",
+    "ซื้อแล้ว": "Bought", "มีแล้ว": "Owned", "ทองไม่พอ": "Not enough gold",
+
     "ปลดแล้ว": "Unlocked",
 
     /* ---- achievements: the 18 profile-wide ones ----
@@ -1024,7 +1164,12 @@ const I18N = (() => {
 
   /* Which fields carry text a player reads. Anything else in the tables is a number, an id or an
    * icon, and must not be touched — translating an id would break every lookup that uses it. */
-  const TEXT_FIELDS = ["name", "desc", "text", "note", "flavor", "job", "label", "bonus"];
+  /* 🐛 [2026-08-24] goodName and what were missing, and the symptom was confusing: the strings
+   * were IN the dictionary and still rendered in Thai, because the walk only rewrites fields it is
+   * told about. A missing field name looks exactly like a missing translation. If a value is in
+   * the dictionary and still shows in Thai, check this list before adding the entry again. */
+  const TEXT_FIELDS = ["name", "desc", "text", "note", "flavor", "job", "label", "bonus",
+                       "goodName", "what"];
 
   let lang = "th";
   const originals = new WeakMap();   // object -> { field: thai } for exact restoration

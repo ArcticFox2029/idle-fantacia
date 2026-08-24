@@ -845,10 +845,18 @@ function migrate(p) {
     p.v = 67;
     /* 🎯 [owner 2026-08-23] "ปรับพลังหลังจุติ ... ให้เป็น 90%" — nothing stored changes. The
      * rule applies from the next rebirth onward; a level already reduced by an earlier halving is
-     * not retroactively topped up, because there is no record of what it was before and inventing
-     * one would hand out levels nobody earned. Existing lvFloor/rebirthFloor values were computed
-     * at 50% and are therefore LOWER than the new rule would produce, so they are harmless: both
-     * floors are applied with Math.max and simply stop binding. */
+     * not retroactively topped up here. Existing lvFloor/rebirthFloor values were computed at 50%
+     * and are therefore LOWER than the new rule would produce, so they are harmless: both floors
+     * are applied with Math.max and simply stop binding.
+     *
+     * ⚠️ The reason first written here — "there is no record of what it was before, and inventing
+     * one would hand out levels nobody earned" — was WRONG, and it is why no migration exists.
+     * rebirthLog DOES store the pre-rebirth level of every stat, so the gap between the 50% a past
+     * rebirth took and the 10% this rule takes is computable exactly, per rebirth, from the save
+     * itself: before * (0.5 - (1 - REBIRTH_KEEP)). Leaving it uncomputed is a POLICY choice — a
+     * retroactive top-up is a balance decision, not a bug fix — not a data limitation. If one is
+     * ever wanted, read rebirthLog[].before; do not re-derive the claim that it cannot be done.
+     * The owner's own save was repaid by hand on 2026-08-24 on exactly that basis. */
   }
   if (p.v === 67) {
     p.v = 68;
@@ -870,6 +878,14 @@ function migrate(p) {
      * cache-buster, and it has to: an old game.js still draws the slayer cards with the Thai
      * sentence baked into the template, so an English player on a cached script would see the
      * screen this release exists to fix. */
+  }
+  if (p.v === 70) {
+    p.v = 71;
+    /* Nothing stored changes — this is the second half of the English pass (shop, rebirth, stats,
+     * tax, guild). The version step is not optional though, and the reason is a mistake worth not
+     * repeating: those screens were translated AFTER v70 shipped, so for a while the site served
+     * v70 with the old text while this repo held v70 with the new. Same number, different game.
+     * A cache-buster that does not move cannot bust anything. */
   }
   return p.v === GAME_VERSION ? p : null;
 }
@@ -4186,15 +4202,15 @@ function guildCollect(quiet = false) {
 function guildBuild() {
   const tier = GUILD_TIERS[0];
   if (guildOn()) return false;
-  if (Math.floor(P.gold) < tier.cost) { toast("ทองไม่พอสร้างสถาบัน", "warn"); return false; }
+  if (Math.floor(P.gold) < tier.cost) { toast(T("ทองไม่พอสร้างสถาบัน"), "warn"); return false; }
   P.gold -= tier.cost;
   P.guild = {
     tier: 1, roster: [], squads: [], applicants: [], applicantDay: -999,
     upkeep: { food: 1, gear: 1, med: 0, train: 1 },
     pending: { gold: 0, items: {}, rounds: 0 }, autoCollect: false,
   };
-  ledger("🏹", `สร้าง${tier.name}`, -tier.cost);
-  toast(`🏹 สร้าง${tier.name}แล้ว — รับเด็กเข้ามาได้ ${tier.beds} คน`, "levelup");
+  ledger("🏹", currentLang() === "en" ? `Build ${tier.name}` : `สร้าง${tier.name}`, -tier.cost);
+  toast(currentLang() === "en" ? `🏹 ${tier.name} built — room for ${tier.beds}` : `🏹 สร้าง${tier.name}แล้ว — รับเด็กเข้ามาได้ ${tier.beds} คน`, "levelup");
   guildRefreshApplicants(true);
   return true;
 }
@@ -4960,7 +4976,7 @@ function buyCoin(id, units) {
   if (units <= 0) { toast(`ถือ ${c.name} เต็มเพดานแล้ว`, "warn"); return; }
   const px = coinPrice(id);
   const cost = Math.ceil(px * units);
-  if (P.gold < cost) { toast("ทองไม่พอ", "warn"); return; }
+  if (P.gold < cost) { toast(T("ทองไม่พอ"), "warn"); return; }
   P.gold -= cost;
   P.coins = P.coins || {};
   const held = coinHeld(id), paid = coinCost(id) * held;
@@ -6575,7 +6591,7 @@ function vitalsModel() {
             + `📖 ความสำเร็จ ${pr.ach}/${pr.achTotal}`
             + ` · 🗡️ รอยล่า ${pr.marksDone}/${pr.marksTotal}`
             + ` · ☠️ สายพันธุ์ที่ล่าจนสุด ${pr.bane}/${pr.baneTotal}`
-            + (nx ? `\nอีก ${nx.need} เป็น ${nx.icon} ${nx.name}` : "\nถือครบทุกฉายาแล้ว");
+            + (nx ? (currentLang() === "en" ? `\n${nx.need} more for ${nx.icon} ${nx.name}` : `\nอีก ${nx.need} เป็น ${nx.icon} ${nx.name}`) : `\n${T("ถือครบทุกฉายาแล้ว")}`);
         })(),
       },
     hp: { now: Math.max(0, P.hp), max, pct: hpPct,
@@ -6667,7 +6683,8 @@ function refreshSidebar() {
     // looking at another skill when it happens.
     const waiting = !!skill.farming && farmIdleFull();
     tab.querySelector("[data-lvl]").textContent =
-      waiting ? `เลเวล ${lvl} · (รอเก็บเกี่ยว)` : `เลเวล ${lvl}`;
+      (currentLang() === "en" ? (waiting ? `Level ${lvl} · (ready to harvest)` : `Level ${lvl}`)
+              : (waiting ? `เลเวล ${lvl} · (รอเก็บเกี่ยว)` : `เลเวล ${lvl}`));
     tab.classList.toggle("farm-waiting", waiting);
     tab.querySelector("[data-xpfill]").style.width = `${Math.round(frac * 100)}%`;
     tab.classList.toggle("active", view.kind === "skill" && skill.id === view.skillId);
@@ -6679,7 +6696,7 @@ function refreshSidebar() {
     const fLvl = statLevel(focus.id);
     const base = xpToReach(fLvl), next = xpToReach(fLvl + 1);
     const frac = fLvl >= MAX_LEVEL ? 1 : (fXp - base) / (next - base);
-    ct.querySelector("[data-lvl]").textContent = `เลเวล ${combatLevel()} · ฝึก${focus.icon}${statLevel(focus.id)}`;
+    ct.querySelector("[data-lvl]").textContent = (currentLang() === "en" ? `Level ${combatLevel()} · training ${focus.icon}${statLevel(focus.id)}` : `เลเวล ${combatLevel()} · ฝึก${focus.icon}${statLevel(focus.id)}`);
     ct.querySelector("[data-xpfill]").style.width = `${Math.round(frac * 100)}%`;
     ct.classList.toggle("active", view.kind === "combat");
   }
@@ -6708,7 +6725,7 @@ function refreshSidebar() {
     const g = P.guild;
     const out = guildOn() ? guildSquads().filter((x) => (x.roundsLeft || 0) > 0).length : 0;
     gt.querySelector("[data-guild-note]").textContent = !guildOn()
-      ? "ยังไม่ได้สร้าง"
+      ? T("ยังไม่ได้สร้าง")
       : `${g.roster.length} คน · ออกล่า ${out} ทีม`;
     // Money waiting to be collected should pull the eye from the sidebar, like the trader does.
     gt.classList.toggle("trader-on", guildOn() && Math.floor(guildPending().gold) > 0);
@@ -6846,13 +6863,13 @@ function renderVillage() {
         </div>
         <div class="q-want">
           <span class="q-item">${it.icon} ${escapeHtml(it.name)} ×${q.qty}</span>
-          <span class="q-have${ready ? " ok" : ""}">มี ${fmtNum(have)}/${q.qty}</span>
+          <span class="q-have${ready ? " ok" : ""}">${T("มี")} ${fmtNum(have)}/${q.qty}</span>
         </div>
         <div class="q-pay">💰 ${fmtNum(q.gold)} · ⚔️ ${fmtNum(q.xp)} XP</div>
         <div class="q-foot">
-          <span class="q-left">${days(q) <= 1 ? "⏳ วันสุดท้าย" : `เหลือ ${days(q)} วัน`}</span>
+          <span class="q-left">${days(q) <= 1 ? `⏳ ${T("วันสุดท้าย")}` : (currentLang() === "en" ? `${days(q)} days left` : `เหลือ ${days(q)} วัน`)}</span>
           <button class="btn ${ready ? "primary" : ""}" data-quest="${q.id}">
-            ${ready ? "ส่งงาน" : `ไปหาของ${allSources(q.item).length > 1 ? ` (${allSources(q.item).length} ทาง)` : ""}`}
+            ${ready ? T("ส่งงาน") : `${T("ไปหาของ")}${allSources(q.item).length > 1 ? ` (${allSources(q.item).length}${currentLang() === "en" ? "" : " ทาง"})` : ""}`}
           </button>
         </div>
       </div>`;
@@ -6882,7 +6899,7 @@ function renderVillage() {
           <span class="v-stage${wed ? " is-wed" : ""}">${wed ? T("แต่งงานแล้ว") : escapeHtml(st.name)}</span>
         </div>
         <div class="v-track"><div style="width:${Math.max(0, Math.min(100, pct))}%"></div></div>
-        <div class="v-note">${next ? `อีก ${next.at - r.aff} เป็น${escapeHtml(next.name)}`
+        <div class="v-note">${next ? (currentLang() === "en" ? `${next.at - r.aff} more to reach ${escapeHtml(next.name)}` : `อีก ${next.at - r.aff} เป็น${escapeHtml(next.name)}`)
             : wed ? T("คู่ชีวิตของคุณ")
             : canPropose(v.id) ? T("สนิทที่สุดแล้ว — ขอแต่งงานได้") : T("สนิทที่สุดแล้ว")}
           <!-- 🐛 [owner 2026-08-22] A "พื้นจากชาติก่อน" line used to sit here. The floor was
@@ -6913,9 +6930,9 @@ function renderVillage() {
   const tabs = `
     <div class="area-tabs">
       <button class="area-tab${villagePanel === "quests" ? " active" : ""}" data-vpanel="quests">
-        📜 ภารกิจเควส${readyN ? ` (${readyN})` : ""}</button>
+        📜 ${T("ภารกิจเควส")}${readyN ? ` (${readyN})` : ""}</button>
       <button class="area-tab${villagePanel === "people" ? " active" : ""}" data-vpanel="people">
-        💗 ความสัมพันธ์</button>
+        💗 ${T("ความสัมพันธ์")}</button>
     </div>`;
   $("#view-extra").innerHTML = tabs + (villagePanel === "quests"
     ? boardSummary
@@ -6959,7 +6976,7 @@ function openGiftDialog(villagerId) {
             <span class="g-n">×${fmtNum(sellableCount(id))}</span>
             <span class="g-d">${d > 0 ? "+" : ""}${d}</span>
           </button>`;
-        }).join("") || `<div class="empty-note">กระเป๋าว่าง — ไปหาของก่อน</div>`}
+        }).join("") || `<div class="empty-note">${T("กระเป๋าว่าง — ไปหาของก่อน")}</div>`}
       </div>
       <div class="modal-acts"><button class="btn ghost" data-close>${T("ปิด")}</button></div>
     </div>`;
@@ -7255,10 +7272,16 @@ function renderFamily() {
          told it had already had four children. Three states, because there are three. */
       const born = P.family?.bornThisLife ?? 0;
       const left = CHILD_MAX - born;
-      const rule = `กฎ: จุติหนึ่งรอบมีลูกได้ ${CHILD_MAX} คน — ลูกที่ติดตัวมาจากชาติก่อนไม่นับ`;
+      const rule = currentLang() === "en"
+        ? `Rules: ${CHILD_MAX} children per rebirth — children carried over from a past life do not count`
+        : `กฎ: จุติหนึ่งรอบมีลูกได้ ${CHILD_MAX} คน — ลูกที่ติดตัวมาจากชาติก่อนไม่นับ`;
       if (left <= 0) return `<div class="fam-hint">${rule}<br>รอบจุตินี้มีลูกครบแล้ว — จุติใหม่ถึงจะเริ่มนับใหม่</div>`;
-      if (!spouseIds().length) return `<div class="fam-hint">${rule}<br>รอบจุตินี้ยังมีลูกได้อีก ${left} คน — ต้องมีคู่ชีวิตก่อน</div>`;
-      return `<div class="fam-hint">${rule}<br>ภรรยาแต่ละคนมีลูกได้ปีละคน · แต่ละวันมีโอกาส ${Math.round(CHILD_BIRTH_CHANCE * 100)}% · รอบจุตินี้ยังมีลูกได้อีก ${left} คน · กดปุ่มบนการ์ดภรรยาเพื่อคุมกำเนิดได้</div>`;
+      if (!spouseIds().length) return `<div class="fam-hint">${rule}<br>${currentLang() === "en"
+        ? `${left} more children possible this rebirth — you need a partner first`
+        : `รอบจุตินี้ยังมีลูกได้อีก ${left} คน — ต้องมีคู่ชีวิตก่อน`}</div>`;
+      return `<div class="fam-hint">${rule}<br>${currentLang() === "en"
+      ? `One child per partner per year · ${Math.round(CHILD_BIRTH_CHANCE * 100)}% chance each day · ${left} more possible this rebirth · the button on a partner card pauses it`
+      : `ภรรยาแต่ละคนมีลูกได้ปีละคน · แต่ละวันมีโอกาส ${Math.round(CHILD_BIRTH_CHANCE * 100)}% · รอบจุตินี้ยังมีลูกได้อีก ${left} คน · กดปุ่มบนการ์ดภรรยาเพื่อคุมกำเนิดได้`}</div>`;
     })();
 
   /* Confirmed, and the dialog names what is lost: this is permanent and refunds nothing spent on
@@ -8178,8 +8201,8 @@ function renderGuild() {
   extra.innerHTML = "";
   const grid = $("#action-grid");
   grid.innerHTML = "";
-  $("#skill-title").textContent = "🏹 สถาบันฮันเตอร์";
-  $("#skill-flavor").textContent = "เลี้ยงเด็กเอง ฝึกเอง ส่งออกล่าเอง — ขาดทุนช่วงแรก คืนทุนในระยะยาว";
+  $("#skill-title").textContent = `🏹 ${T("สถาบันฮันเตอร์")}`;
+  $("#skill-flavor").textContent = T("เลี้ยงเด็กเอง ฝึกเอง ส่งออกล่าเอง — ขาดทุนช่วงแรก คืนทุนในระยะยาว");
 
   if (!guildOn()) { renderGuildOpening(grid, extra); return; }
   guildRefreshApplicants();
@@ -8193,7 +8216,7 @@ function renderGuild() {
   summary.className = "money-summary";
   summary.innerHTML = `
     <div class="money-stat"><span>${T("สถาบัน")}</span><b>${t.name}</b></div>
-    <div class="money-stat"><span>${T("คนในสังกัด")}</span><b>${g.roster.length}/${t.beds}${hurt ? ` · เจ็บ ${hurt}` : ""}</b></div>
+    <div class="money-stat"><span>${T("คนในสังกัด")}</span><b>${g.roster.length}/${t.beds}${hurt ? ` · ${T("เจ็บ")} ${hurt}` : ""}</b></div>
     <div class="money-stat"><span>${T("ค่าเลี้ยง/วันในเกม")}</span><b class="bad">${guildUpkeepPerDay().toLocaleString()}</b></div>
     <div class="money-stat"><span>${T("รอรับ")}</span><b class="${pending.gold > 0 ? "good" : ""}">${Math.floor(pending.gold).toLocaleString()}${nItems ? ` · ของ ${nItems}` : ""}</b></div>`;
   extra.appendChild(summary);
@@ -8201,10 +8224,10 @@ function renderGuild() {
   const tabs = document.createElement("div");
   tabs.className = "area-tabs";
   tabs.innerHTML = [
-    ["squads", "🗡️ ทีมและภารกิจ", `${guildSquads().filter((x) => x.roundsLeft > 0).length}/${t.squads}`],
-    ["roster", "🧑‍🎓 คนในสังกัด", `${g.roster.length}`],
-    ["intake", "📜 รับเลี้ยง", `${(g.applicants || []).length}`],
-    ["upkeep", "🍲 ค่าเลี้ยงดู", ""],
+    ["squads", `🗡️ ${T("ทีมและภารกิจ")}`, `${guildSquads().filter((x) => x.roundsLeft > 0).length}/${t.squads}`],
+    ["roster", `🧑‍🎓 ${T("คนในสังกัด")}`, `${g.roster.length}`],
+    ["intake", `📜 ${T("รับเลี้ยง")}`, `${(g.applicants || []).length}`],
+    ["upkeep", `🍲 ${T("ค่าเลี้ยงดู")}`, ""],
   ].map(([id, label, n]) => `<button class="area-tab${guildTab === id ? " active" : ""}" data-gtab="${id}">
       <span style="color:#7cc47f">◆</span> ${label}${n ? `<span class="area-count">${n}</span>` : ""}</button>`).join("");
   extra.appendChild(tabs);
@@ -8214,13 +8237,13 @@ function renderGuild() {
   const take = document.createElement("div");
   take.className = "action-card full-card" + (pending.gold > 0 ? " running" : "");
   take.innerHTML = `
-    <div class="head"><div class="name">📦 ของที่ทีมส่งกลับมา</div>
-      <div class="req">${Math.floor(pending.gold).toLocaleString()} 💰${nItems ? ` · ${nItems} ชิ้น` : ""}</div></div>
-    <div class="detail">ล่าไปแล้ว ${pending.rounds || 0} รอบตั้งแต่รับครั้งก่อน
+    <div class="head"><div class="name">📦 ${T("ของที่ทีมส่งกลับมา")}</div>
+      <div class="req">${Math.floor(pending.gold).toLocaleString()} 💰${nItems ? ` · ${nItems}${unitWord("ชิ้น")}` : ""}</div></div>
+    <div class="detail">${currentLang() === "en" ? `${pending.rounds || 0} hunts since you last collected` : `ล่าไปแล้ว ${pending.rounds || 0} รอบตั้งแต่รับครั้งก่อน`}
       ${nItems ? `<br>${Object.entries(pending.items).map(([id, n]) => `${ITEMS[id]?.icon || "📦"} ${ITEMS[id]?.name || id} ×${n}`).join(" · ")}` : ""}</div>
     <div class="cd-actions">
       <button class="farm-btn harvest" data-gcollect>${T("รับของและเงิน")}</button>
-      <label class="chk"><input type="checkbox" data-gauto ${g.autoCollect ? "checked" : ""}> รับอัตโนมัติ</label>
+      <label class="chk"><input type="checkbox" data-gauto ${g.autoCollect ? "checked" : ""}> ${T("รับอัตโนมัติ")}</label>
     </div>`;
   grid.appendChild(take);
   take.querySelector("[data-gcollect]").onclick = () => { guildCollect(); renderGuild(); };
@@ -8238,21 +8261,31 @@ function renderGuildOpening(grid, extra) {
   note.className = "shop-intro";
   note.innerHTML = `
     <b>${T("สถาบันฮันเตอร์คืออะไร")}</b><br>
+    ${currentLang() === "en" ? `
+    Buy the school, take children in, train them until they pass their grading, then send them out
+    as squads to hunt in your place.<br>
+    Squads hunt on their own every game-day and bring back both bounty and materials —
+    <b>${T("แต่ช่วงแรกขาดทุนแน่นอน")}</b>, because grade F children do not yet earn their keep. Expect
+    around seven game-years to break even.<br>
+    Keeping too many on the books loses money, and sending a squad somewhere beyond it gets people
+    killed — the ones who die are the ones you spent years training.
+    <br><b>${T("ไม่กินช่องงาน")}</b> — it runs in the background while you do something else` : `
     ซื้อโรงเรียน รับเด็กเข้ามาเลี้ยง ฝึกจนสอบเลื่อนขั้นได้ แล้วส่งเป็นทีมออกล่ามอนสเตอร์แทนเรา<br>
     ทีมจะล่าเองทุกวันในเกม ได้ทั้งค่าหัวและวัตถุดิบ — <b>${T("แต่ช่วงแรกขาดทุนแน่นอน")}</b>
     เพราะเด็กขั้น F ยังหาเงินไม่คุ้มค่าข้าว กว่าจะคืนทุนใช้เวลาราวเจ็ดปีในเกม<br>
     เลี้ยงคนไว้เยอะเกินก็ขาดทุน ส่งไปเป้าที่เกินตัวก็มีคนตาย และคนที่ตายคือคนที่เราลงทุนฝึกมาหลายปี
-    <br><b>${T("ไม่กินช่องงาน")}</b> — ทำงานอยู่เบื้องหลังพร้อมกับที่เราทำอย่างอื่น`;
+    <br><b>${T("ไม่กินช่องงาน")}</b> — ทำงานอยู่เบื้องหลังพร้อมกับที่เราทำอย่างอื่น`}`;
   extra.appendChild(note);
 
   const card = document.createElement("div");
   card.className = "action-card full-card";
   const can = Math.floor(P.gold) >= t.cost;
   card.innerHTML = `
-    <div class="head"><div class="name">🏹 สร้าง${t.name}</div>
+    <div class="head"><div class="name">🏹 ${currentLang() === "en" ? `Build ${t.name}` : `สร้าง${t.name}`}</div>
       <div class="req ${can ? "good" : "bad"}">${t.cost.toLocaleString()} 💰</div></div>
-    <div class="detail">เตียง ${t.beds} คน · ส่งได้ ${t.squads} ทีม · รับสัญญาได้ ${t.zones} โซนแรก
-      <br>ค่าดูแลสถาบันคงที่ ${t.fixed.toLocaleString()} 💰/วันในเกม บวกค่าเลี้ยงรายหัว</div>
+    <div class="detail">${currentLang() === "en"
+        ? `${t.beds} beds · ${t.squads} squad(s) · contracts in the first ${t.zones} zones<br>Fixed institute upkeep ${t.fixed.toLocaleString()} 💰 per game-day, plus per-head upkeep`
+        : `เตียง ${t.beds} คน · ส่งได้ ${t.squads} ทีม · รับสัญญาได้ ${t.zones} โซนแรก<br>ค่าดูแลสถาบันคงที่ ${t.fixed.toLocaleString()} 💰/วันในเกม บวกค่าเลี้ยงรายหัว`}</div>
     <div class="cd-actions"><button class="farm-btn harvest" data-gbuild ${can ? "" : "disabled"}>${T("สร้างสถาบัน")}</button></div>`;
   grid.appendChild(card);
   card.querySelector("[data-gbuild]").onclick = () => { if (guildBuild()) renderGuild(); };
@@ -8266,8 +8299,9 @@ function renderGuildOpening(grid, extra) {
     c.className = "action-card";
     c.innerHTML = `<div class="head"><div class="name">${x.name}</div>
         <div class="req">${x.cost.toLocaleString()} 💰</div></div>
-      <div class="detail">เตียง ${x.beds} · ทีม ${x.squads} · โซน ${x.zones}
-        · ค่าเลี้ยงต่อหัว ×${x.upkeepMult.toFixed(2)} · ค่าสถาบัน ${x.fixed.toLocaleString()}/วัน</div>`;
+      <div class="detail">${currentLang() === "en"
+        ? `${x.beds} beds · ${x.squads} squads · ${x.zones} zones · per-head upkeep ×${x.upkeepMult.toFixed(2)} · institute ${x.fixed.toLocaleString()}/day`
+        : `เตียง ${x.beds} · ทีม ${x.squads} · โซน ${x.zones} · ค่าเลี้ยงต่อหัว ×${x.upkeepMult.toFixed(2)} · ค่าสถาบัน ${x.fixed.toLocaleString()}/วัน`}</div>`;
     grid.appendChild(c);
   }
 }
@@ -8453,8 +8487,8 @@ function renderShops() {
   const kinds = document.createElement("div");
   kinds.className = "area-tabs";
   kinds.innerHTML = [
-    ["shop", `🏪 ร้านค้า`, P.shops?.length ? `${P.shops.length}` : ""],
-    ["estate", `🏘️ อสังหา`, P.estates?.length ? `${P.estates.length}` : ""],
+    ["shop", `🏪 ${T("ร้านค้า")}`, P.shops?.length ? `${P.shops.length}` : ""],
+    ["estate", `🏘️ ${T("อสังหา")}`, P.estates?.length ? `${P.estates.length}` : ""],
   ].map(([id, label, n]) => `<button class="area-tab${bizTab === id ? " active" : ""}" data-biz="${id}">
       <span style="color:#7cc47f">◆</span> ${label}${n ? `<span class="area-count">${n}</span>` : ""}</button>`).join("");
   extra.appendChild(kinds);
@@ -8462,8 +8496,8 @@ function renderShops() {
 
   if (bizTab === "estate") { renderEstates(grid, extra); return; }
 
-  $("#skill-title").textContent = "🏪 ธุรกิจของเรา";
-  $("#skill-flavor").textContent = "จ้างคน จัดอัตราส่วน ตั้งราคา — รายได้เข้าทุกวันในเกม แต่ค่าจ้างก็ออกทุกวันเหมือนกัน";
+  $("#skill-title").textContent = `🏪 ${T("ธุรกิจของเรา")}`;
+  $("#skill-flavor").textContent = T("จ้างคน จัดอัตราส่วน ตั้งราคา — รายได้เข้าทุกวันในเกม แต่ค่าจ้างก็ออกทุกวันเหมือนกัน");
 
   if (!P.shops?.length) { renderShopOpening(grid, extra); return; }
   if (shopTab >= P.shops.length) shopTab = 0;
@@ -8492,7 +8526,7 @@ function renderShops() {
       return `<button class="area-tab${i === shopTab ? " active" : ""}" data-shoptab="${i}">
         <span style="color:#7cc47f">◆</span> ${xt.icon} ${xt.name}
         <span class="area-count">${SHOP_TIERS[x.tier].name}</span></button>`;
-    }).join("") + `<button class="area-tab" data-newshop>＋ เปิดร้านใหม่</button>`;
+    }).join("") + `<button class="area-tab" data-newshop>＋ ${T("เปิดร้านใหม่")}</button>`;
     extra.appendChild(bar);
     bar.querySelectorAll("[data-shoptab]").forEach((b) => b.onclick = () => {
       shopTab = Number(b.dataset.shoptab); renderShops();
@@ -8503,7 +8537,7 @@ function renderShops() {
 
   const panels = document.createElement("div");
   panels.className = "area-tabs";
-  panels.innerHTML = [["floor", "🏪 หน้าร้าน"], ["staff", `👥 พนักงาน (${sh.staff.length})`], ["hire", "📋 รับสมัคร"]]
+  panels.innerHTML = [["floor", `🏪 ${T("หน้าร้าน")}`], ["staff", `👥 ${T("พนักงาน")} (${sh.staff.length})`], ["hire", `📋 ${T("รับสมัคร")}`]]
     .map(([id, label]) => `<button class="area-tab${shopPanel === id ? " active" : ""}" data-panel="${id}">${label}</button>`).join("");
   extra.appendChild(panels);
   panels.querySelectorAll("[data-panel]").forEach((b) => b.onclick = () => { shopPanel = b.dataset.panel; renderShops(); });
@@ -8521,10 +8555,18 @@ function renderShopOpening(grid, extra) {
   const note = document.createElement("div");
   note.className = "action-card full-card";
   note.innerHTML = `<div class="detail">
+    ${currentLang() === "en" ? `
+    A shop runs itself every game-day and <b>${T("ไม่กินช่องงาน")}</b> — but wages go out every day
+    whether anything sold or not, which is the one reason this business can
+    <b class="bad">${T("ขาดทุนได้จริง")}</b><br>
+    The line is 🏹 hunters gather materials → 🔨 crafters process them → 💁 sellers sell ·
+    you can also feed materials in from your own bag` : `
     ร้านทำงานเองทุกวันในเกม <b>${T("ไม่กินช่องงาน")}</b> — แต่ค่าจ้างพนักงานออกทุกวันไม่ว่าจะขายได้หรือไม่
     ซึ่งเป็นเหตุผลเดียวที่ธุรกิจนี้ <b class="bad">${T("ขาดทุนได้จริง")}</b><br>
-    สายพานคือ 🏹 นักล่าหาวัตถุดิบ → 🔨 ช่างแปรรูป → 💁 พ่อค้าขาย · คุณส่งวัตถุดิบจากกระเป๋าเข้าไปเองก็ได้
-    ${P.brand > 0.05 ? `<br><b class="good">⭐ ชื่อเสียงที่สะสมไว้จะพาลูกค้าประจำ ${(SHOP_BRAND_CARRY * P.brand).toFixed(1)} คนมาให้ร้านใหม่ตั้งแต่วันแรก</b>` : ""}
+    สายพานคือ 🏹 นักล่าหาวัตถุดิบ → 🔨 ช่างแปรรูป → 💁 พ่อค้าขาย · คุณส่งวัตถุดิบจากกระเป๋าเข้าไปเองก็ได้`}
+    ${P.brand > 0.05 ? `<br><b class="good">⭐ ${currentLang() === "en"
+        ? `Your standing brings ${(SHOP_BRAND_CARRY * P.brand).toFixed(1)} regulars to a new shop from day one`
+        : `ชื่อเสียงที่สะสมไว้จะพาลูกค้าประจำ ${(SHOP_BRAND_CARRY * P.brand).toFixed(1)} คนมาให้ร้านใหม่ตั้งแต่วันแรก`}</b>` : ""}
   </div>`;
   grid.appendChild(note);
 
@@ -8536,8 +8578,8 @@ function renderShopOpening(grid, extra) {
       <div class="head"><div class="name">${t.icon} ${t.name}</div>
         <div class="req">${SHOP_TIERS[0].cost.toLocaleString()} 💰</div></div>
       <div class="detail">${t.note}<br>
-        ขาย <b>${t.goodName}</b> ชิ้นละ ${t.goodValue} 💰 · ใช้วัตถุดิบ ${t.rawPerGood} หน่วย/ชิ้น<br>
-        ฤดู: ${SEASONS.map((sn, i) => `${sn} ×${t.season[i].toFixed(2)}`).join(" · ")}</div>`;
+        ${currentLang() === "en" ? `Sells <b>${t.goodName}</b> at ${t.goodValue} 💰 each · uses ${t.rawPerGood} material per unit` : `ขาย <b>${t.goodName}</b> ชิ้นละ ${t.goodValue} 💰 · ใช้วัตถุดิบ ${t.rawPerGood} หน่วย/ชิ้น`}<br>
+        ${T("ฤดู")}: ${SEASONS.map((sn, i) => `${T(sn.replace(/^\S+\s*/, ""))} ×${t.season[i].toFixed(2)}`).join(" · ")}</div>`;
     if (afford) card.onclick = () => { openShop(t.id); shopTab = P.shops.length - 1; renderShops(); };
     grid.appendChild(card);
   }
@@ -8738,7 +8780,7 @@ function renderMoney() {
          the tabs saying much of what this one already said. Rent belongs beside the profit it is
          taxed alongside, in the box that is always on screen. */ ""}
     <div class="money-stat"><span>${T("ค่าเช่าปีที่")} ${d.year}</span><b>${rent.toLocaleString()}</b></div>
-    <div class="money-stat"><span>กำไรลงทุนปีที่ ${d.year}</span><b>${profit.toLocaleString()}</b></div>
+    <div class="money-stat"><span>${currentLang() === "en" ? `Investment profit, year ${d.year}` : `กำไรลงทุนปีที่ ${d.year}`}</span><b>${profit.toLocaleString()}</b></div>
     <div class="money-stat"><span>${T("ภาษีที่ต้องจ่ายถ้าจบปีนี้")}</span>
       <b class="${est > 0 ? "bad" : "good"}">${est.toLocaleString()}</b></div>`;
   extra.appendChild(summary);
@@ -8759,12 +8801,12 @@ function renderMoney() {
    * is only the ledger now: the tax ladder moved to its own page when tax became something you pay
    * by hand, and a tab still called บัญชีและภาษี would send people here looking for it. */
   const tabs = [
-    { id: "ledger", label: "🧾 บัญชี", count: "" },
-    { id: "bank", label: "🏦 ธนาคาร", count: "" },
+    { id: "ledger", label: `🧾 ${T("บัญชี")}`, count: "" },
+    { id: "bank", label: `🏦 ${T("ธนาคาร")}`, count: "" },
     /* 🎯 [owner 2026-08-23] "ยุบรวมให้เหลือเมนูเดียว" — I had split these into three shelves by
        price band. One tab: the coins are already sorted by price inside it, so the bands were a
        navigation step that bought nothing. */
-    { id: "coin", label: "🪙 คริปโต",
+    { id: "coin", label: `🪙 ${T("คริปโต")}`,
       count: `${CRYPTOS.filter((c) => coinHeld(c.id) > 0).length}/${CRYPTOS.length}` },
     ...COMPANY_SIZES.map((sz) => ({
       id: sz.id, label: `${sz.icon} ${sz.name}`,
@@ -9136,7 +9178,7 @@ function renderLedgerTab(grid) {
         <span class="lr-text">${e.icon} ${escapeHtml(e.text)}</span>
         <span class="lr-amt ${e.amount >= 0 ? "good" : "bad"}">${e.amount >= 0 ? "+" : ""}${e.amount.toLocaleString()}</span>
       </div>`).join("")}</div>`
-    : `<div class="detail">ยังไม่มีรายการ — ลองฝากเงินหรือซื้อหุ้นสักกิจการดู</div>`;
+    : `<div class="detail">${T("ยังไม่มีรายการ — ลองฝากเงินหรือซื้อหุ้นสักกิจการดู")}</div>`;
   grid.appendChild(log);
 
 }
@@ -9147,6 +9189,42 @@ function renderLedgerTab(grid) {
  *
  * Its own page, under the bank in the sidebar. Three ladders you can read before they apply to you,
  * a live reading of what each one is currently assessed on, and the bills with a button. */
+
+/* The tax rules panel. One block per language: it is a rule explanation where the sentences depend
+ * on each other, and the day thresholds are interpolated in positions the two languages order
+ * differently. */
+function taxRulesText() {
+  const daily = Math.round(TAX_LATE_DAILY * 1000) / 10;
+  const example = fmtNum(Math.round(1000000 * Math.pow(1 + TAX_LATE_DAILY, TAX_FATAL_DAYS - TAX_SEIZE_DAYS)));
+  if (currentLang() === "en") {
+    return `
+        <b>Tax accrues every day</b> — charged on what you actually hold that day, and kept.
+        Moving money out later does not erase what has already accrued, but every day after that is
+        charged on the smaller pile.
+        <br><b>Pay as much as you like, whenever you like</b> — anything paid comes off the year-end bill
+        <br><br><b>At year end</b> whatever is unpaid is taken at once, from your pocket first and then
+        the bank. If the two together are not enough, <b class="bad">your money goes negative</b> and it
+        becomes an outstanding bill.
+        <br><br><b>After that</b>
+        <br>· Days 1–${TAX_SEIZE_DAYS} — no interest, pay at your own pace
+        <br>· Day ${TAX_SEIZE_DAYS + 1} onward — <b class="bad">${daily}% a day, compounding</b>, and your
+        businesses are seized: their income drops to 0
+        <br>· Unpaid for <b class="bad">${TAX_FATAL_DAYS} days</b> — the run ends
+        <br><br><span class="muted">For scale: owe ${fmtNum(1000000)}, pay nothing for the full
+        ${TAX_FATAL_DAYS} days, and it becomes ${example}</span>`;
+  }
+  return `
+        <b>ภาษีเดินทุกวัน</b> — คิดจากสิ่งที่ถืออยู่จริงในวันนั้น แล้วสะสมไว้
+        ย้ายเงินออกทีหลังไม่ลบของที่สะสมไปแล้ว แต่ทุกวันหลังจากนั้นจะคิดจากกองที่เล็กลง
+        <br><b>จ่ายล่วงหน้าเท่าไหร่ก็ได้ เมื่อไหร่ก็ได้</b> — ที่จ่ายแล้วหักออกจากบิลสิ้นปี
+        <br><br><b>สิ้นปี</b> ส่วนที่ยังไม่ได้จ่ายจะถูกหักทันที จากกระเป๋าก่อนแล้วธนาคาร
+        ถ้ารวมกันยังไม่พอ <b class="bad">เงินจะติดลบ</b> และกลายเป็นบิลค้าง
+        <br><br><b>หลังจากนั้น</b>
+        <br>· วันที่ 1–${TAX_SEIZE_DAYS} — ปลอดดอกเบี้ย จ่ายได้ตามสบาย
+        <br>· วันที่ ${TAX_SEIZE_DAYS + 1} เป็นต้นไป — <b class="bad">ดอกทบต้นทบดอกวันละ ${daily}%</b> และธุรกิจถูกยึด รายได้เป็น 0
+        <br>· ค้างครบ <b class="bad">${TAX_FATAL_DAYS} วัน</b> — จบเกม
+        <br><br><span class="muted">ตัวอย่าง: ค้าง ${fmtNum(1000000)} ไม่จ่ายเลยจนครบ ${TAX_FATAL_DAYS} วัน จะกลายเป็น ${example}</span>`;
+}
 
 function renderTax() {
   $("#skill-title").textContent = "🧾 ภาษี";
@@ -9164,7 +9242,7 @@ function renderTax() {
       <div class="money-stat"><span>${T("จ่ายภาษีสะสมทั้งชีวิต")}</span>
         <b>${fmtNum(Math.round(P.tax?.paidTotal || 0))}</b></div>
       <div class="money-stat"><span>${T("สถานะ")}</span>
-        <b class="${seized ? "bad" : "good"}">${seized ? "🚨 ธุรกิจถูกยึด" : "ปกติ"}</b></div>
+        <b class="${seized ? "bad" : "good"}">${seized ? `🚨 ${T("ธุรกิจถูกยึด")}` : T("ปกติ")}</b></div>
       ${owed > 0 ? `<div class="money-stat"><span>${overdue < TAX_SEIZE_DAYS ? "ปลอดดอกอีก" : "เหลือก่อนจบเกม"}</span>
         <b class="${overdue >= TAX_SEIZE_DAYS ? "bad" : ""}">${overdue < TAX_SEIZE_DAYS
           ? `${TAX_SEIZE_DAYS - overdue} วัน` : `${Math.max(0, TAX_FATAL_DAYS - overdue)} วัน`}</b></div>` : ""}
@@ -9173,18 +9251,7 @@ function renderTax() {
          at year end, the thirty clear days, and what the interest costs after. A rule the player has
          to infer from a countdown is a rule they meet by surprise. -->
     <div class="action-card full-card tax-explain">
-      <div class="detail">
-        <b>ภาษีเดินทุกวัน</b> — คิดจากสิ่งที่ถืออยู่จริงในวันนั้น แล้วสะสมไว้
-        ย้ายเงินออกทีหลังไม่ลบของที่สะสมไปแล้ว แต่ทุกวันหลังจากนั้นจะคิดจากกองที่เล็กลง
-        <br><b>จ่ายล่วงหน้าเท่าไหร่ก็ได้ เมื่อไหร่ก็ได้</b> — ที่จ่ายแล้วหักออกจากบิลสิ้นปี
-        <br><br><b>สิ้นปี</b> ส่วนที่ยังไม่ได้จ่ายจะถูกหักทันที จากกระเป๋าก่อนแล้วธนาคาร
-        ถ้ารวมกันยังไม่พอ <b class="bad">เงินจะติดลบ</b> และกลายเป็นบิลค้าง
-        <br><br><b>หลังจากนั้น</b>
-        <br>· วันที่ 1–${TAX_SEIZE_DAYS} — ปลอดดอกเบี้ย จ่ายได้ตามสบาย
-        <br>· วันที่ ${TAX_SEIZE_DAYS + 1} เป็นต้นไป — <b class="bad">ดอกทบต้นทบดอกวันละ ${Math.round(TAX_LATE_DAILY * 1000) / 10}%</b> และธุรกิจถูกยึด รายได้เป็น 0
-        <br>· ค้างครบ <b class="bad">${TAX_FATAL_DAYS} วัน</b> — จบเกม
-        <br><br><span class="muted">ตัวอย่าง: ค้าง ${fmtNum(1000000)} ไม่จ่ายเลยจนครบ ${TAX_FATAL_DAYS} วัน จะกลายเป็น ${fmtNum(Math.round(1000000 * Math.pow(1 + TAX_LATE_DAILY, TAX_FATAL_DAYS - TAX_SEIZE_DAYS)))}</span>
-      </div>
+      <div class="detail">${taxRulesText()}</div>
     </div>`;
 
   const grid = $("#action-grid");
@@ -9199,7 +9266,9 @@ function renderTax() {
   if (!bills.length) {
     const none = document.createElement("div");
     none.className = "action-card full-card";
-      none.innerHTML = `<div class="detail">ภาษีเดินสะสมทุกวันตามที่ถืออยู่จริงในวันนั้น — จ่ายล่วงหน้าเท่าไหร่ก็ได้ เมื่อไหร่ก็ได้\n<br>ขึ้นปีใหม่ ส่วนที่ยังไม่ได้จ่ายจะถูกหักจากกระเป๋าแล้วธนาคารทันที ถ้าไม่พอจะติดลบ\n<br>หลังประเมิน มีเวลา ${TAX_SEIZE_DAYS} วันก่อนเริ่มคิดดอกทบวันละ ${Math.round(TAX_LATE_DAILY * 1000) / 10}% · ค้างครบ ${TAX_FATAL_DAYS} วันคือจบเกม</div>`;
+      none.innerHTML = `<div class="detail">${currentLang() === "en"
+        ? `Tax accrues daily on what you actually hold that day — pay as much as you like, whenever you like.<br>At new year anything unpaid is taken from your pocket and then the bank at once; if that is not enough your money goes negative.<br>After assessment you have ${TAX_SEIZE_DAYS} days before interest starts compounding at ${Math.round(TAX_LATE_DAILY * 1000) / 10}% a day · unpaid for ${TAX_FATAL_DAYS} days ends the run`
+        : `ภาษีเดินสะสมทุกวันตามที่ถืออยู่จริงในวันนั้น — จ่ายล่วงหน้าเท่าไหร่ก็ได้ เมื่อไหร่ก็ได้\n<br>ขึ้นปีใหม่ ส่วนที่ยังไม่ได้จ่ายจะถูกหักจากกระเป๋าแล้วธนาคารทันที ถ้าไม่พอจะติดลบ\n<br>หลังประเมิน มีเวลา ${TAX_SEIZE_DAYS} วันก่อนเริ่มคิดดอกทบวันละ ${Math.round(TAX_LATE_DAILY * 1000) / 10}% · ค้างครบ ${TAX_FATAL_DAYS} วันคือจบเกม`}</div>`;
     grid.appendChild(none);
   } else {
     const payAll = document.createElement("div");
@@ -9243,7 +9312,7 @@ function renderTax() {
   if (running <= 0) {
     const none = document.createElement("div");
     none.className = "action-card full-card";
-    none.innerHTML = `<div class="detail">ยังไม่ถึงเกณฑ์ของประเภทไหนเลย — ไม่มีอะไรสะสมอยู่ตอนนี้</div>`;
+    none.innerHTML = `<div class="detail">${T("ยังไม่ถึงเกณฑ์ของประเภทไหนเลย — ไม่มีอะไรสะสมอยู่ตอนนี้")}</div>`;
     grid.appendChild(none);
   } else {
     const all = document.createElement("div");
@@ -9280,20 +9349,20 @@ function renderTax() {
   for (const k of TAX_KINDS) {
     const base = taxBaseFor(k.id);
     const would = taxOwedFor(k.id, base);
-    const rows = [`<tr><td>ไม่เกิน ${fmtNum(k.free)}</td><td>${T("ยกเว้น")}</td><td></td></tr>`];
+    const rows = [`<tr><td>${currentLang() === "en" ? `Up to ${fmtNum(k.free)}` : `ไม่เกิน ${fmtNum(k.free)}`}</td><td>${T("ยกเว้น")}</td><td></td></tr>`];
     let floor = k.free;
     for (const b of k.brackets) {
       const hit = base > floor;
       rows.push(`<tr class="${hit ? "band-hit" : ""}"><td>${fmtNum(floor)} – ${
-        b.upTo === Infinity ? "ขึ้นไป" : fmtNum(b.upTo)}</td>
-        <td>${(b.rate * 100).toFixed(1)}%</td><td>${hit ? "◀ ถึงขั้นนี้แล้ว" : ""}</td></tr>`);
+        b.upTo === Infinity ? T("ขึ้นไป") : fmtNum(b.upTo)}</td>
+        <td>${(b.rate * 100).toFixed(1)}%</td><td>${hit ? `◀ ${T("ถึงขั้นนี้แล้ว")}` : ""}</td></tr>`);
       floor = b.upTo;
     }
     const card = document.createElement("div");
     card.className = "action-card ledger-card full-card";
     card.innerHTML = `
       <div class="head"><div class="name">${k.icon} ${k.name}</div>
-        <div class="req">ตอนนี้ ${fmtNum(base)} → ${fmtNum(would)}</div></div>
+        <div class="req">${T("ตอนนี้")} ${fmtNum(base)} → ${fmtNum(would)}</div></div>
       <div class="detail">${escapeHtml(k.what)}</div>
       <table class="tax-table"><tr><th>${T("ช่วง")}</th><th>${T("อัตรา")}</th><th></th></tr>${rows.join("")}</table>`;
     grid.appendChild(card);
@@ -9314,9 +9383,61 @@ function renderTax() {
 
 /* --- Rebirth view ------------------------------------------------------------------- */
 
+/* The rebirth briefing, composed per language.
+ *
+ * Written as one block per language rather than a dozen T() calls threaded through the markup.
+ * Every line here is a full sentence that only makes sense next to the others, and half of them
+ * carry interpolated numbers in positions the two languages do not share — "เหลือ 90%" puts the
+ * figure after the verb, "keeps 90%" before the noun. Splitting it into fragments to translate
+ * would be the mistake this file has already made twice. */
+function rebirthKeepsText() {
+  const keptPct = Math.round(REBIRTH_KEEP * 100);
+  const levels = SKILLS.map((sk) =>
+    `${sk.icon} ${escapeHtml(sk.name)} ${levelFromXp(P.xp[sk.id] || 0)}`).join(" · ");
+  if (currentLang() === "en") {
+    return `
+      <b>Kept:</b> 🏆 every achievement and its bonus · 🎒 everything in your bag ·
+      🏦 <b class="good">${T("เงินฝากในธนาคาร")}</b> · 🪴 garden plots · 🏪 anything bought from the shop ·
+      📖 your record of the pet species you have met<br>
+      <b class="good">Every profession level survives:</b> ${levels}
+      — the mastery you built up stays. A new run does not climb it again; it only has to earn money again.<br>
+      <b>Reduced:</b> all three hunting stats keep ${keptPct}% · children and the pets that follow you keep the same ·
+      the remainder of a level is banked as leftover XP rather than thrown away<br>
+      <b class="bad">Lost entirely:</b> 🐾 every pet is released back to the wild ·
+      💰 <b class="bad">${T("ทองในมือ")}</b> · 📈 <b class="bad">${T("หุ้นทุกตัว")}</b>
+      — only money in the bank comes with you, so <b>${T("ต้องขายแล้วเอาไปฝากก่อน")}</b> before you rebirth<br>
+      <span class="rb-warn">Note: bank interest is earned on years the account is left alone, and a rebirth
+      resets that clock — the principal is untouched but the rate starts over · unpaid tax is not cleared by a rebirth</span>`;
+  }
+  return `
+      <b>สิ่งที่ไม่หาย:</b> 🏆 ความสำเร็จทั้งหมดและโบนัสของมัน · 🎒 ของในกระเป๋าทุกชิ้น ·
+      🏦 <b class="good">${T("เงินฝากในธนาคาร")}</b> · 🪴 แปลงปลูก · 🏪 ของที่ซื้อจากร้าน ·
+      📖 บันทึกสายพันธุ์สัตว์เลี้ยงที่เคยเจอ<br>
+      <b class="good">เลเวลอาชีพทุกสายอยู่ครบ:</b> ${levels}
+      — ความชำนาญที่สะสมไว้ไม่หายไปไหน รอบใหม่ไม่ต้องไต่ใหม่ทั้งหมด แค่ต้องหาเงินใหม่<br>
+      <b>สิ่งที่ลดลง:</b> ค่าสเตตัสการล่าทั้งสามช่อง เหลือ ${keptPct}% · ลูกและสัตว์เลี้ยงที่ตามไปด้วยก็เหลือเท่ากัน · เศษของเลเวลเก็บไว้เป็น XP ค้าง ไม่ทิ้ง<br>
+      <b class="bad">สิ่งที่หายไปทั้งหมด:</b> 🐾 สัตว์เลี้ยงทุกตัวถูกปล่อยคืนธรรมชาติ ·
+      💰 <b class="bad">${T("ทองในมือ")}</b> · 📈 <b class="bad">${T("หุ้นทุกตัว")}</b>
+      — เงินติดตัวได้เฉพาะที่อยู่ในธนาคาร ถ้าจะจุติ <b>${T("ต้องขายแล้วเอาไปฝากก่อน")}</b><br>
+      <span class="rb-warn">หมายเหตุ: ดอกเบี้ยเงินฝากคิดจากจำนวนปีที่ไม่แตะบัญชี และการจุติจะรีเซ็ตนาฬิกานั้น
+      — เงินต้นอยู่ครบ แต่เรทกลับไปเริ่มใหม่ · หนี้ภาษีที่ค้างอยู่ไม่หายไปด้วยการจุติ</span>`;
+}
+
+/* One row of the karma ladder. Its own function because the sentence puts the multiplier in a
+ * different place in each language — Thai trails it after the noun, English leads with it. */
+function karmaRowNote(lv, now) {
+  const gold = T("ทอง");
+  if (lv === now) return `${gold} · ${T("จุติได้เลย")}`;
+  const mult = (karmaGainFor(lv, P.rebirths || 0).xp
+              / Math.max(1e-9, karmaGainFor(now, P.rebirths || 0).xp)).toFixed(1);
+  return currentLang() === "en"
+    ? `${gold} · ${lv - now} more levels → ${mult}× the karma you would get now`
+    : `${gold} · ไต่อีก ${lv - now} เลเวล ได้บุญ ${mult} เท่าของตอนนี้`;
+}
+
 function renderRebirth() {
-  $("#skill-title").textContent = "🌀 การจุติ";
-  $("#skill-flavor").textContent = "เริ่มรอบใหม่โดยไม่ทิ้งสิ่งที่สะสมมา — ความสำเร็จอยู่ครบ ของในกระเป๋าอยู่ครบ";
+  $("#skill-title").textContent = `🌀 ${T("การจุติ")}`;
+  $("#skill-flavor").textContent = T("เริ่มรอบใหม่โดยไม่ทิ้งสิ่งที่สะสมมา — ความสำเร็จอยู่ครบ ของในกระเป๋าอยู่ครบ");
   const pv = rebirthPreview();
   const extra = $("#view-extra");
   extra.innerHTML = "";
@@ -9324,9 +9445,9 @@ function renderRebirth() {
   const keep = document.createElement("div");
   keep.className = "money-summary";
   keep.innerHTML = `
-    <div class="money-stat"><span>${T("จุติมาแล้ว")}</span><b>${P.rebirths || 0} ครั้ง</b></div>
-    <div class="money-stat"><span>บุญเก่า — XP ทุกสาย</span><b class="good">+${(karmaXp() * 100).toFixed(1)}%</b></div>
-    <div class="money-stat"><span>บุญเก่า — ทองที่หาได้</span><b class="good">+${(karmaGold() * 100).toFixed(1)}%</b></div>
+    <div class="money-stat"><span>${T("จุติมาแล้ว")}</span><b>${P.rebirths || 0}</b></div>
+    <div class="money-stat"><span>${T("บุญเก่า — XP ทุกสาย")}</span><b class="good">+${(karmaXp() * 100).toFixed(1)}%</b></div>
+    <div class="money-stat"><span>${T("บุญเก่า — ทองที่หาได้")}</span><b class="good">+${(karmaGold() * 100).toFixed(1)}%</b></div>
     <div class="money-stat"><span>${T("จุติตอนนี้จะได้บุญ")}</span>
       <b class="${canRebirth() ? "good" : "bad"}">+${(karmaGainFor(combatLevel(), P.rebirths || 0).xp * 100).toFixed(1)}% XP</b></div>
     <div class="money-stat"><span>${T("เลเวลรวมตอนนี้")}</span><b>${combatLevel()}</b></div>
@@ -9337,20 +9458,20 @@ function renderRebirth() {
       const k = petRebirthKeeper();
       const kept = k ? petStats(k) : null;
       const lost = P.pets.length - (k ? 1 : 0);
-      return `<div class="money-stat"><span>สัตว์เลี้ยงที่จะไปด้วย</span>
+      return `<div class="money-stat"><span>${T("สัตว์เลี้ยงที่จะไปด้วย")}</span>
         <b class="${kept ? "good" : "bad"}">${kept
-          ? `${kept.icon} ${escapeHtml(kept.name)} ขั้น ${kept.lv} → ${Math.max(1, Math.floor(petLevelExact(k) / 2))}`
-          : `ไม่มี — ต้องพาออกล่า และเกรด ${PET_GRADES.find((g) => g.cls === PET_REBIRTH_MIN_GRADE).name}ขึ้นไป`}</b></div>
-      <div class="money-stat"><span>สัตว์เลี้ยงที่จะเสียไป</span>
-        <b class="${lost ? "bad" : ""}">${lost} ตัว</b></div>`;
+          ? `${kept.icon} ${escapeHtml(kept.name)} ${T("ขั้น")} ${kept.lv} → ${Math.max(1, Math.floor(petLevelExact(k) / 2))}`
+          : (currentLang() === "en" ? `None — take one hunting, and it must be grade ${PET_GRADES.find((g) => g.cls === PET_REBIRTH_MIN_GRADE).name} or better` : `ไม่มี — ต้องพาออกล่า และเกรด ${PET_GRADES.find((g) => g.cls === PET_REBIRTH_MIN_GRADE).name}ขึ้นไป`)}</b></div>
+      <div class="money-stat"><span>${T("สัตว์เลี้ยงที่จะเสียไป")}</span>
+        <b class="${lost ? "bad" : ""}">${lost}</b></div>`;
     })()}
     <div class="money-stat"><span>${T("สายพันธุ์ที่เคยเจอ (เก็บไว้)")}</span>
       <b class="good">${Object.keys(P.seenPets || {}).length}/${PET_SPECIES.length}</b></div>
-    <div class="money-stat"><span>🏦 เงินฝาก (รอด)</span>
+    <div class="money-stat"><span>🏦 ${T("เงินฝาก (รอด)")}</span>
       <b class="good">${fmtNum(Math.floor(bankBalance()))}</b></div>
-    <div class="money-stat"><span>💰 ทองในมือ (จะหาย)</span>
+    <div class="money-stat"><span>💰 ${T("ทองในมือ (จะหาย)")}</span>
       <b class="${P.gold > 0 ? "bad" : ""}">${fmtNum(Math.floor(P.gold || 0))}</b></div>
-    <div class="money-stat"><span>📈 หุ้นที่ถือ (รอด)</span>
+    <div class="money-stat"><span>📈 ${T("หุ้นที่ถือ (รอด)")}</span>
       <b class="good">${fmtNum(Math.round(portfolioValue()))}</b></div>`;
   extra.appendChild(keep);
 
@@ -9358,7 +9479,7 @@ function renderRebirth() {
   grid.innerHTML = "";
   const head = document.createElement("div");
   head.className = "area-head";
-  head.textContent = "ค่าที่จะเปลี่ยนเมื่อจุติ";
+  head.textContent = T("ค่าที่จะเปลี่ยนเมื่อจุติ");
   grid.appendChild(head);
 
   const card = document.createElement("div");
@@ -9378,39 +9499,27 @@ function renderRebirth() {
            round, reading "the floor caught you" as the good outcome. -->
       <span class="rb-num ${r.floored ? "bad" : "good"}">${r.after}</span>
       <span class="rb-note">${r.floored
-        ? `เหลือ ${r.kept} ซึ่งต่ำกว่าพื้นเดิม จึงคงไว้ที่ ${r.floor}`
-        : `เก็บ ${Math.round(REBIRTH_KEEP * 100)}% จาก ${r.cur} · พื้นใหม่จะเป็น ${r.after}`}</span>
+        ? (currentLang() === "en" ? `${r.kept} would be below your old floor, so it stays at ${r.floor}` : `เหลือ ${r.kept} ซึ่งต่ำกว่าพื้นเดิม จึงคงไว้ที่ ${r.floor}`)
+        : (currentLang() === "en" ? `Keeps ${Math.round(REBIRTH_KEEP * 100)}% of ${r.cur} · new floor becomes ${r.after}` : `เก็บ ${Math.round(REBIRTH_KEEP * 100)}% จาก ${r.cur} · พื้นใหม่จะเป็น ${r.after}`)}</span>
     </div>`;
   }).join("");
   card.innerHTML = `
-    <div class="detail keeps">
-      <b>สิ่งที่ไม่หาย:</b> 🏆 ความสำเร็จทั้งหมดและโบนัสของมัน · 🎒 ของในกระเป๋าทุกชิ้น ·
-      🏦 <b class="good">${T("เงินฝากในธนาคาร")}</b> · 🪴 แปลงปลูก · 🏪 ของที่ซื้อจากร้าน ·
-      📖 บันทึกสายพันธุ์สัตว์เลี้ยงที่เคยเจอ<br>
-      <b class="good">เลเวลอาชีพทุกสายอยู่ครบ:</b> ${SKILLS.map((sk) =>
-        `${sk.icon} ${escapeHtml(sk.name)} ${levelFromXp(P.xp[sk.id] || 0)}`).join(" · ")}
-      — ความชำนาญที่สะสมไว้ไม่หายไปไหน รอบใหม่ไม่ต้องไต่ใหม่ทั้งหมด แค่ต้องหาเงินใหม่<br>
-      <b>สิ่งที่ลดลง:</b> ค่าสเตตัสการล่าทั้งสามช่อง เหลือ ${Math.round(REBIRTH_KEEP * 100)}% · ลูกและสัตว์เลี้ยงที่ตามไปด้วยก็เหลือเท่ากัน · เศษของเลเวลเก็บไว้เป็น XP ค้าง ไม่ทิ้ง<br>
-      <b class="bad">สิ่งที่หายไปทั้งหมด:</b> 🐾 สัตว์เลี้ยงทุกตัวถูกปล่อยคืนธรรมชาติ ·
-      💰 <b class="bad">${T("ทองในมือ")}</b> · 📈 <b class="bad">${T("หุ้นทุกตัว")}</b>
-      — เงินติดตัวได้เฉพาะที่อยู่ในธนาคาร ถ้าจะจุติ <b>${T("ต้องขายแล้วเอาไปฝากก่อน")}</b><br>
-      <span class="rb-warn">หมายเหตุ: ดอกเบี้ยเงินฝากคิดจากจำนวนปีที่ไม่แตะบัญชี และการจุติจะรีเซ็ตนาฬิกานั้น
-      — เงินต้นอยู่ครบ แต่เรทกลับไปเริ่มใหม่ · หนี้ภาษีที่ค้างอยู่ไม่หายไปด้วยการจุติ</span>
-    </div>
+    <div class="detail keeps">${rebirthKeepsText()}</div>
     ${rows}
     <div class="detail">
-      พื้นการจุติจะไม่มีวันต่ำลง — ถ้าจุติเร็วเกินไปจนลดแล้วได้น้อยกว่าครั้งก่อน
-      ระบบจะคงค่าของการจุติครั้งล่าสุดไว้ให้ ${canRebirth() ? "" : `<br><b>ต้องถึงเลเวลรวม ${rebirthGate()} ก่อน (ตอนนี้ ${combatLevel()})</b>`}
+      ${T("พื้นการจุติจะไม่มีวันต่ำลง — จุติเร็วเกินไปจนได้น้อยกว่าครั้งก่อน ระบบจะคงค่าเดิมไว้ให้")}${canRebirth() ? "" : `<br><b>${currentLang() === "en"
+        ? `Combat level ${rebirthGate()} required (currently ${combatLevel()})`
+        : `ต้องถึงเลเวลรวม ${rebirthGate()} ก่อน (ตอนนี้ ${combatLevel()})`}</b>`}
     </div>
     <div class="cd-actions">
-      <button class="farm-btn harvest" data-rebirth${canRebirth() ? "" : " disabled"}>🌀 จุติเลย</button>
+      <button class="farm-btn harvest" data-rebirth${canRebirth() ? "" : " disabled"}>🌀 ${T("จุติเลย")}</button>
     </div>`;
   grid.appendChild(card);
   /* 🎯 The point of scaling karma by level is that WAITING becomes a decision, and a decision the
    * player cannot make without seeing the numbers. This table is the whole feature's interface. */
   const kh = document.createElement("div");
   kh.className = "area-head";
-  kh.textContent = "จุติตอนนี้ หรือไต่ต่อ — บุญที่จะได้";
+  kh.textContent = T("จุติตอนนี้ หรือไต่ต่อ — บุญที่จะได้");
   grid.appendChild(kh);
   const ktab = document.createElement("div");
   ktab.className = "action-card full-card";
@@ -9421,18 +9530,24 @@ function renderRebirth() {
     const g = karmaGainFor(lv, P.rebirths || 0);
     const isNow = lv === now;
     return `<div class="reborn-row${isNow ? " karma-now" : ""}">
-      <span class="rb-name">${isNow ? "▶ " : ""}เลเวลรวม ${lv}${isNow ? " (ตอนนี้)" : ""}</span>
+      <span class="rb-name">${isNow ? "▶ " : ""}${T("เลเวลรวม")} ${lv}${isNow ? ` (${T("ตอนนี้")})` : ""}</span>
       <span class="rb-num good">+${(g.xp * 100).toFixed(1)}%</span>
       <span class="rb-arrow">XP</span>
       <span class="rb-num good">+${(g.gold * 100).toFixed(1)}%</span>
-      <span class="rb-note">ทอง · ${lv === now ? "จุติได้เลย" : `ไต่อีก ${lv - now} เลเวล ได้บุญ ${(karmaGainFor(lv, P.rebirths || 0).xp / Math.max(1e-9, karmaGainFor(now, P.rebirths || 0).xp)).toFixed(1)} เท่าของตอนนี้`}</span>
+      <span class="rb-note">${karmaRowNote(lv, now)}</span>
     </div>`;
-  }).join("") + `<div class="detail">
+  }).join("") + `<div class="detail">${currentLang() === "en" ? `
+    Karma is measured from your <b>${T("เลเวลรวมตอนที่จุติ")}</b> against the gate (currently ${gate})
+    — the further you climb before rebirthing, the more you get, and it compounds.
+    It is no longer the same amount every time.<br>
+    The gate rises ${REBIRTH_GATE_STEP} levels with each rebirth (up to ${REBIRTH_GATE_MAX})
+    — so rapid low-level rebirths are not a shortcut any more · total karma caps at +${Math.round(KARMA_CAP * 100)}%
+  ` : `
     บุญคิดจาก <b>${T("เลเวลรวมตอนที่จุติ")}</b> เทียบกับประตู (ตอนนี้ ${gate}) — ยิ่งไต่ไกลก่อนจุติ ยิ่งได้เยอะแบบทวีคูณ
     ไม่ใช่ได้เท่ากันทุกครั้งเหมือนเมื่อก่อน<br>
     ประตูจะขยับขึ้น ${REBIRTH_GATE_STEP} เลเวลทุกครั้งที่จุติ (สูงสุด ${REBIRTH_GATE_MAX})
     — จุติรัว ๆ ที่เลเวลต่ำจึงไม่ใช่ทางลัดอีกต่อไป · เพดานบุญรวม +${Math.round(KARMA_CAP * 100)}%
-  </div>`;
+  `}</div>`;
   grid.appendChild(ktab);
 
   card.querySelector("[data-rebirth]").onclick = () => {
@@ -9443,12 +9558,12 @@ function renderRebirth() {
   if ((P.rebirthLog || []).length) {
     const h2 = document.createElement("div");
     h2.className = "area-head";
-    h2.textContent = "ประวัติการจุติ";
+    h2.textContent = T("ประวัติการจุติ");
     grid.appendChild(h2);
     const hist = document.createElement("div");
     hist.className = "action-card ledger-card full-card";
     hist.innerHTML = `<div class="ledger-list">${P.rebirthLog.map((r, i) => `<div class="ledger-row">
-      <span class="lr-date">ปี ${r.y ?? r.year}/${r.month}/${r.day}</span>
+      <span class="lr-date">${T("ปี")} ${r.y ?? r.year}/${r.month}/${r.day}</span>
       <span class="lr-text">ครั้งที่ ${P.rebirthLog.length - i} · ${COMBAT_STATS.map((st) =>
         `${st.name} ${r.before[st.id]}→${r.after[st.id]}`).join(" · ")}</span>
       <span class="lr-amt"></span></div>`).join("")}</div>`;
@@ -9506,7 +9621,7 @@ function renderCombat() {
         <div class="loc-icon">${loc.icon}</div>
         <div class="loc-body">
           <div class="head"><div class="name">${loc.name}</div>
-            <div class="req">${open ? `${cleared}/${normals} ด่าน${bossDown ? " · 🏆" : ""}` : `🔒 เลเวลล่า ${loc.levelReq}`}</div></div>
+            <div class="req">${open ? `${cleared}/${normals} ${T("ด่าน")}${bossDown ? " · 🏆" : ""}` : `🔒 ${T("เลเวลล่า")} ${loc.levelReq}`}</div></div>
           <div class="detail">${loc.flavor}</div>
           <div class="loc-mobs">${loc.stages.map((s) => `<span class="${stageKills(loc.id, loc.stages.indexOf(s)) > 0 || !s.boss ? "" : "dim"}">${s.icon}</span>`).join(" ")}</div>
         </div>`;
@@ -9633,11 +9748,11 @@ function renderPetPanel(extra) {
                  ${fainted ? `<span class="stat-chip missing">หมดแรง — ให้กินอาหารก่อน</span>` : ""}`
              : P.pets.length
                ? `<span class="stat-chip">😴 ไม่ได้พาตัวไหนลงสนาม — ไม่เสีย XP</span>`
-               : `<span class="stat-chip missing">ยังไม่มีสัตว์เลี้ยง — ล่ามอนสเตอร์เพื่อลุ้นจับ</span>`}
-        <span class="stat-chip">🐾 เก็บได้ ${P.pets.length} ตัว</span>
+               : `<span class="stat-chip missing">${T("ยังไม่มีสัตว์เลี้ยง — ล่ามอนสเตอร์เพื่อลุ้นจับ")}</span>`}
+        <span class="stat-chip">🐾 ${currentLang() === "en" ? `${P.pets.length} caught` : `เก็บได้ ${P.pets.length} ตัว`}</span>
         ${cur ? `<span class="stat-chip${(P.petXpShare ?? PET_XP_DEFAULT) ? " missing" : ""}">📚 กิน XP ${Math.round((P.petXpShare ?? PET_XP_DEFAULT) * 100)}%</span>` : ""}
       </span>
-      <span class="expand-hint">${petOpen ? "ย่อ" : "กดเพื่อจัดการสัตว์เลี้ยง"}</span>
+      <span class="expand-hint">${petOpen ? T("ย่อ") : T("กดเพื่อจัดการสัตว์เลี้ยง")}</span>
     </button>`;
 
   if (!petOpen) {
@@ -9911,22 +10026,22 @@ function renderElitePicker(extra) {
   box.className = "elite-drop";
   const line = (m) => {
     const open = eliteAvailable(m);
-    const detail = m.id === "normal" ? "ค่าพื้นฐาน ไม่มีตัวคูณ"
-      : `เลือด ×${m.hp} · แรง ×${m.dmg} · XP ×${m.xp} · ทอง ×${m.gold} · ของดรอป ×${m.loot}`;
+    const detail = m.id === "normal" ? T("ค่าพื้นฐาน ไม่มีตัวคูณ")
+      : (currentLang() === "en" ? `HP ×${m.hp} · DMG ×${m.dmg} · XP ×${m.xp} · Gold ×${m.gold} · Loot ×${m.loot}` : `เลือด ×${m.hp} · แรง ×${m.dmg} · XP ×${m.xp} · ทอง ×${m.gold} · ของดรอป ×${m.loot}`);
     return `<button class="elite-opt${m.id === P.eliteMode ? " active" : ""}${open ? "" : " shut"}"
         data-elite="${m.id}"${open ? "" : " disabled"}>
       <span class="eo-bullet">◆</span>
       <span class="eo-face">${open ? m.icon : "🔒"}</span>
-      <span class="eo-body"><span class="eo-name">${m.name}</span>
+      <span class="eo-body"><span class="eo-name">${T(m.name)}</span>
         <span class="eo-detail">${open ? detail
-          : `ปราบด่านในระดับก่อนหน้าให้ครบ ${KILLS_TO_UNLOCK_NEXT_STAGE} ตัวก่อน`}</span></span>
+          : (currentLang() === "en" ? `Defeat ${KILLS_TO_UNLOCK_NEXT_STAGE} at the tier below first` : `ปราบด่านในระดับก่อนหน้าให้ครบ ${KILLS_TO_UNLOCK_NEXT_STAGE} ตัวก่อน`)}</span></span>
     </button>`;
   };
   box.innerHTML = `
     <summary class="elite-summary">
-      <span class="train-label">🔥 ระดับความยาก</span>
+      <span class="train-label">🔥 ${T("ระดับความยาก")}</span>
       <span class="elite-current">◆ ${cur.icon} ${cur.name}</span>
-      <span class="elite-mult">${cur.id === "normal" ? "มาตรฐาน" : `×${cur.xp} XP · ×${cur.gold} 💰`}</span>
+      <span class="elite-mult">${cur.id === "normal" ? T("มาตรฐาน") : `×${cur.xp} XP · ×${cur.gold} 💰`}</span>
       <span class="elite-caret">▾</span>
     </summary>
     <div class="elite-list">${ELITE_MODES.map(line).join("")}</div>`;
@@ -9938,7 +10053,7 @@ function renderElitePicker(extra) {
     box.open = false;
     if (mode.id === P.eliteMode) return;
     P.eliteMode = mode.id;
-    toast(`${mode.icon} เปลี่ยนระดับความยากเป็น ${mode.name}`);
+    toast(currentLang() === "en" ? `${mode.icon} Difficulty set to ${mode.name}` : `${mode.icon} เปลี่ยนระดับความยากเป็น ${mode.name}`);
     if (combatSlot() >= 0) { stopCombat(true); toast("หยุดล่าเพื่อเปลี่ยนระดับ — กดด่านใหม่ได้เลย"); }
     renderView();
   });
@@ -9969,10 +10084,10 @@ function renderEquipPanel(extra) {
         <span class="stat-chip">🗡️ ${totalDmg()}</span>
         <span class="stat-chip">🛡️ ${totalDef()}</span>
         <span class="stat-chip">❤️ ${maxHp()}</span>
-        <span class="stat-chip">⚔️ เลเวลล่า ${combatLevel()}</span>
+        <span class="stat-chip">⚔️ ${T("เลเวลล่า")} ${combatLevel()}</span>
         ${sets.length ? `<span class="stat-chip set-on">👕 ${sets.map((x) => x.name).join(", ")}</span>` : ""}
       </span>
-      <span class="expand-hint">${equipOpen ? "ย่อ" : "กดเพื่อปรับอุปกรณ์"}</span>
+      <span class="expand-hint">${equipOpen ? T("ย่อ") : T("กดเพื่อปรับอุปกรณ์")}</span>
     </button>`;
 
   if (!equipOpen) {
@@ -10124,27 +10239,57 @@ function hitFx(sel, dmg, cls) {
   setTimeout(() => f.remove(), 900);
 }
 
+/* 🎯 Every line here is composed per language rather than assembled from translated fragments.
+ *
+ * This one function is the single densest patch of Thai left in the game: the shop screen shows
+ * ~50 items and each one calls it, so "เร็วขึ้น" appeared 29 times and "ต้องมี" 49 on one screen.
+ * They are also exactly the fragments a dictionary must not hold — "ได้", "เพิ่ม", "ถาวร" are
+ * common enough words that an entry for them would also rewrite any table field that happens to
+ * equal one, and the two languages put the number on opposite sides of the noun anyway. */
+/* Two one-line sentences that the shop repeats on nearly every card — "ยังขาดอีก" 50 times and
+ * "ต้องมี ... ก่อน" 49. Kept as functions so there is one copy of each rather than one per call
+ * site, and composed per language because the pieces are far too common to put in the dictionary. */
+function shortBy(gold) {
+  return currentLang() === "en"
+    ? `${gold.toLocaleString()} 💰 short`
+    : `ยังขาดอีก ${gold.toLocaleString()} 💰`;
+}
+function needFirst(name) {
+  return currentLang() === "en" ? `Requires ${name} first` : `ต้องมี ${name} ก่อน`;
+}
+
 function shopEffectText(u) {
+  const en = currentLang() === "en";
+  const pct = (v) => Math.round(v * 100);
   if (u.kind === "tome") {
     const skill = findSkill(u.skill);
-    return `${skill.icon} ${skill.name} ได้ XP เพิ่ม ${Math.round(u.value * 100)}% ถาวร`;
+    return en ? `${skill.icon} ${skill.name}: +${pct(u.value)}% XP, permanently`
+              : `${skill.icon} ${skill.name} ได้ XP เพิ่ม ${pct(u.value)}% ถาวร`;
   }
   if (u.kind === "multi") {
     const n = SHOP.filter((x) => x.kind === "multi").findIndex((x) => x.id === u.id) + 2;
-    return `ทำงานพร้อมกันได้ ${n} อย่าง (สู้ได้ทีละสนามเท่านั้น — เลือดมีชุดเดียว)`;
+    return en ? `Work on ${n} things at once (only one hunt at a time — you have one health bar)`
+              : `ทำงานพร้อมกันได้ ${n} อย่าง (สู้ได้ทีละสนามเท่านั้น — เลือดมีชุดเดียว)`;
   }
   if (u.kind === "plot") {
     const n = SHOP.filter((x) => x.kind === "plot").findIndex((x) => x.id === u.id) + PLOTS_START + 1;
-    return `🌻 เปิดแปลงปลูกที่ ${n} — ปลูกพร้อมกันได้มากขึ้น (สูงสุด ${PLOTS_MAX} แปลง)`;
+    return en ? `🌻 Opens garden plot ${n} — grow more at once (up to ${PLOTS_MAX} plots)`
+              : `🌻 เปิดแปลงปลูกที่ ${n} — ปลูกพร้อมกันได้มากขึ้น (สูงสุด ${PLOTS_MAX} แปลง)`;
   }
   if (u.kind === "charm") {
-    return { luck: `โอกาสของหายากจากทุกสายเพิ่ม ${Math.round(u.value * 100)}%`,
-             gold: `ทองจากการล่าและขโมยเพิ่ม ${Math.round(u.value * 100)}%`,
-             def:  `ป้องกันติดตัว +${u.value} (ไม่ต้องสวมของ)`,
-             hp:   `HP สูงสุดติดตัว +${u.value}` }[u.effect];
+    return (en
+      ? { luck: `+${pct(u.value)}% chance of rare finds from every profession`,
+          gold: `+${pct(u.value)}% gold from hunting and thieving`,
+          def:  `+${u.value} defence, carried (no need to equip anything)`,
+          hp:   `+${u.value} max HP, carried` }
+      : { luck: `โอกาสของหายากจากทุกสายเพิ่ม ${pct(u.value)}%`,
+          gold: `ทองจากการล่าและขโมยเพิ่ม ${pct(u.value)}%`,
+          def:  `ป้องกันติดตัว +${u.value} (ไม่ต้องสวมของ)`,
+          hp:   `HP สูงสุดติดตัว +${u.value}` })[u.effect];
   }
   const skill = findSkill(u.skill);
-  return `${skill.icon} ${skill.name} เร็วขึ้น ${Math.round(u.bonus * 100)}%`;
+  return en ? `${skill.icon} ${skill.name}: ${pct(u.bonus)}% faster`
+            : `${skill.icon} ${skill.name} เร็วขึ้น ${pct(u.bonus)}%`;
 }
 
 /* Compact number formatting — 240,000,000 reads badly next to a progress bar. */
@@ -10160,13 +10305,30 @@ function fmtNum(n) {
 }
 function fmtDuration(ms) {
   const m = Math.floor(ms / 60000);
-  if (m < 60) return `เล่นมา ${m} นาที`;
+  if (m < 60) return currentLang() === "en" ? `${m} min played` : `เล่นมา ${m} นาที`;
   const h = Math.floor(m / 60);
-  return h < 24 ? `เล่นมา ${h} ชม. ${m % 60} น.` : `เล่นมา ${Math.floor(h / 24)} วัน ${h % 24} ชม.`;
+  return currentLang() === "en"
+    ? (h < 24 ? `${h}h ${m % 60}m played` : `${Math.floor(h / 24)}d ${h % 24}h played`)
+    : (h < 24 ? `เล่นมา ${h} ชม. ${m % 60} น.` : `เล่นมา ${Math.floor(h / 24)} วัน ${h % 24} ชม.`);
 }
 
 /* 🎯 [added 2026-08-15, owner's ask] Everything the game already counts, in one place — an idle
  * game lives on watching its own numbers grow, and until now none of them were visible. */
+/* Unit words on the stats screen. They are appended to a number rather than being strings of
+ * their own — "1,234" + " ครั้ง" — so no dictionary entry can reach them, and several ("ตัว",
+ * "คน", "ชิ้น") are far too common to put in one anyway. Some have no English equivalent worth
+ * printing: "3 ตัว" is just "3" in English, and an empty string is the right translation. */
+const STAT_UNITS = {
+  "ครั้ง": "times", "จาน": "dishes", "ชิ้น": "items", "ช่อง": "slots", "ชนิด": "kinds",
+  "ทอง": "gold", "งาน": "jobs", "แปลง": "plots", "รายการ": "items", "ขั้น": "levels",
+  "ตัว": "", "คน": "", "แห่ง": "",
+};
+function unitWord(th) {
+  const en = STAT_UNITS[th];
+  if (currentLang() !== "en") return ` ${th}`;
+  return en ? ` ${en}` : "";
+}
+
 function renderStats() {
   $("#skill-title").textContent = `📊 ${T("สถิติ")}`;
   $("#skill-flavor").textContent = T("ทุกอย่างที่ทำมาตั้งแต่เริ่มโปรไฟล์นี้");
@@ -10198,110 +10360,114 @@ function renderStats() {
     <div class="mastery-summary">
       <span class="m-chip">⏱️ ${fmtDuration(P.playMs || 0)}</span>
       <div class="m-track"><div class="m-nums">
-        โปรไฟล์ "${escapeHtml(P.name)}" · สร้างเมื่อ ${new Date(P.createdAt).toLocaleDateString("th-TH")}
+        ${currentLang() === "en"
+          ? `Profile "${escapeHtml(P.name)}" · created ${new Date(P.createdAt).toLocaleDateString("en-GB")}`
+          : `โปรไฟล์ "${escapeHtml(P.name)}" · สร้างเมื่อ ${new Date(P.createdAt).toLocaleDateString("th-TH")}`}
       </div></div>
     </div>`;
 
   const cards = [
-    { icon: "⚒️", title: "การทำงาน", rows: [
-      ["ทำงานสำเร็จ", fmtNum(P.stats.actions || 0) + " ครั้ง"],
-      ["ปรุงอาหาร", fmtNum(P.stats.cooked || 0) + " จาน"],
-      ["ตีของ/เย็บของ", fmtNum(P.stats.crafted || 0) + " ชิ้น"],
-      ["ขโมยสำเร็จ", fmtNum(P.stats.steals || 0) + " ครั้ง"],
-      ["ช่องงานที่มี", `${maxSlots()} ช่อง`],
+    { icon: "⚒️", title: T("การทำงาน"), rows: [
+      [T("ทำงานสำเร็จ"), fmtNum(P.stats.actions || 0) + unitWord("ครั้ง")],
+      [T("ปรุงอาหาร"), fmtNum(P.stats.cooked || 0) + unitWord("จาน")],
+      [T("ตีของ/เย็บของ"), fmtNum(P.stats.crafted || 0) + unitWord("ชิ้น")],
+      [T("ขโมยสำเร็จ"), fmtNum(P.stats.steals || 0) + unitWord("ครั้ง")],
+      [T("ช่องงานที่มี"), `${maxSlots()} ${unitWord("ช่อง").trim()}`],
     ]},
-    { icon: "⚔️", title: "การล่า", rows: [
-      ["ปราบมอนสเตอร์", fmtNum(killTotal) + " ตัว"],
-      ["โค่นบอส", fmtNum(P.stats.bosses || 0) + " ครั้ง"],
-      ["ชนิดที่เคยเจอ", `${monstersMet}/${allMonsters} ชนิด`],
-      ["ระดับความยาก", eliteMode().name],
-      ["เลเวลล่ารวม", combatLevel()],
+    { icon: "⚔️", title: T("การล่า"), rows: [
+      [T("ปราบมอนสเตอร์"), fmtNum(killTotal) + unitWord("ตัว")],
+      [T("โค่นบอส"), fmtNum(P.stats.bosses || 0) + unitWord("ครั้ง")],
+      [T("ชนิดที่เคยเจอ"), `${monstersMet}/${allMonsters} ${unitWord("ชนิด").trim()}`],
+      [T("ระดับความยาก"), T(eliteMode().name)],
+      [T("เลเวลล่ารวม"), combatLevel()],
     ]},
-    { icon: "💰", title: "ทรัพย์สิน", rows: [
-      ["ทองที่หามาทั้งหมด", fmtNum(P.stats.goldEarned || 0)],
-      ["ทองในมือตอนนี้", fmtNum(P.gold)],
-      ["ขยะที่ขายไป", fmtNum(P.stats.junkSold || 0) + " ชิ้น"],
-      ["ของในกระเป๋า", `${seenItems} ชนิด`],
-      ["ของที่ซื้อจากร้าน", `${Object.keys(P.upgrades).length} รายการ`],
+    { icon: "💰", title: T("ทรัพย์สิน"), rows: [
+      [T("ทองที่หามาทั้งหมด"), fmtNum(P.stats.goldEarned || 0)],
+      [T("ทองในมือตอนนี้"), fmtNum(P.gold)],
+      [T("ขยะที่ขายไป"), fmtNum(P.stats.junkSold || 0) + unitWord("ชิ้น")],
+      [T("ของในกระเป๋า"), `${seenItems} ${unitWord("ชนิด").trim()}`],
+      [T("ของที่ซื้อจากร้าน"), `${Object.keys(P.upgrades).length} ${unitWord("รายการ").trim()}`],
     ]},
     /* 🎯 [owner's ask] The business page shows today's position; this shows the track record —
      * how much is deployed, what it is worth now, and where the income actually came from. The
      * yearly tax figure alone never answers "has investing been worth it". */
-    { icon: "📈", title: "การลงทุน", rows: [
-      ["กิจการที่ถือ", `${heldCount}/${COMPANIES.length} แห่ง` +
+    { icon: "📈", title: T("การลงทุน"), rows: [
+      [T("กิจการที่ถือ"), `${heldCount}/${COMPANIES.length} ${unitWord("แห่ง").trim()}` +
         (ownedCount ? ` · 👑 เจ้าของเต็ม ${ownedCount}` : "")],
-      ["แยกตามขนาด", COMPANY_SIZES.map((sz) =>
+      [T("แยกตามขนาด"), COMPANY_SIZES.map((sz) =>
         `${sz.icon} ${COMPANIES.filter((c) => c.size === sz.id && heldShares(c.id) > 0).length}`).join(" · ")],
-      ["เงินที่ลงไป (ทุน)", fmtNum(Math.round(investedCost))],
-      ["มูลค่าตอนนี้", fmtNum(Math.round(marketNow)) +
+      [T("เงินที่ลงไป (ทุน)"), fmtNum(Math.round(investedCost))],
+      [T("มูลค่าตอนนี้"), fmtNum(Math.round(marketNow)) +
         (investedCost > 0 ? ` (${unrealised >= 0 ? "+" : ""}${(unrealised / investedCost * 100).toFixed(1)}%)` : "")],
-      ["กำไรที่ยังไม่ขาย", fmtNum(Math.round(unrealised))],
-      ["ปันผลที่ได้รับสะสม", fmtNum(Math.round(P.stats.divPaid || 0))],
-      ["กำไรจากการซื้อขายสะสม", fmtNum(Math.round(P.stats.tradeProfit || 0))],
-      ["ดอกเบี้ยธนาคารสะสม", fmtNum(Math.round(P.stats.bankInterest || 0))],
-      ["ฝากธนาคารตอนนี้", fmtNum(Math.floor(bankBalance()))],
-      [`กำไรลงทุนปีที่ ${today().year}`, fmtNum(Math.round(P.tax?.yearProfit || 0))],
-      ["ภาษีที่จ่ายไปแล้ว", fmtNum(Math.round(P.tax?.paidTotal || 0))],
+      [T("กำไรที่ยังไม่ขาย"), fmtNum(Math.round(unrealised))],
+      [T("ปันผลที่ได้รับสะสม"), fmtNum(Math.round(P.stats.divPaid || 0))],
+      [T("กำไรจากการซื้อขายสะสม"), fmtNum(Math.round(P.stats.tradeProfit || 0))],
+      [T("ดอกเบี้ยธนาคารสะสม"), fmtNum(Math.round(P.stats.bankInterest || 0))],
+      [T("ฝากธนาคารตอนนี้"), fmtNum(Math.floor(bankBalance()))],
+      [currentLang() === "en" ? `Investment profit, year ${today().year}` : `กำไรลงทุนปีที่ ${today().year}`, fmtNum(Math.round(P.tax?.yearProfit || 0))],
+      [T("ภาษีที่จ่ายไปแล้ว"), fmtNum(Math.round(P.tax?.paidTotal || 0))],
     ]},
-    { icon: "⭐", title: "ความชำนาญ", rows: [
-      ["ขั้นชำนาญรวม", `${fmtNum(totalMastery)}/${fmtNum(masteryCap)}`],
-      ["ช่องที่ MAX แล้ว", Object.values(P.mastery).filter((xp) => masteryLevelFromXp(xp) >= MASTERY_MAX).length],
-      ["สายที่เก่งสุด", `${bestSkill.sk.icon} ${bestSkill.sk.name} (เลเวล ${bestSkill.lv})`],
-      ["สายพันธุ์ปลาที่เจอ", `${Object.keys(P.seenFish).length} ชนิด`],
-      ["เก็บเกี่ยวไปแล้ว", `${(P.stats.harvests || 0).toLocaleString()} แปลง`],
-      ["พืชที่เคยปลูก", `${Object.keys(P.seenCrops || {}).length}/${findSkill("fa").actions.length} ชนิด`],
+    { icon: "⭐", title: T("ความชำนาญ"), rows: [
+      [T("ขั้นชำนาญรวม"), `${fmtNum(totalMastery)}/${fmtNum(masteryCap)}`],
+      [T("ช่องที่ MAX แล้ว"), Object.values(P.mastery).filter((xp) => masteryLevelFromXp(xp) >= MASTERY_MAX).length],
+      [T("สายที่เก่งสุด"), `${bestSkill.sk.icon} ${bestSkill.sk.name} (${T("เลเวล")} ${bestSkill.lv})`],
+      [T("สายพันธุ์ปลาที่เจอ"), `${Object.keys(P.seenFish).length} ${unitWord("ชนิด").trim()}`],
+      [T("เก็บเกี่ยวไปแล้ว"), `${(P.stats.harvests || 0).toLocaleString()} ${unitWord("แปลง").trim()}`],
+      [T("พืชที่เคยปลูก"), `${Object.keys(P.seenCrops || {}).length}/${findSkill("fa").actions.length} ${unitWord("ชนิด").trim()}`],
       /* 🐛 [2026-08-18] The third site that counted achievements its own way. The sidebar and the
        * achievements page were unified behind achievementProgress() when the owner caught them
        * disagreeing; this one was missed and still read 5/18 while both of those said 5/190. */
-      ["ความสำเร็จ", (() => { const a = achievementProgress(); return `${a.done}/${a.total}`; })()],
+      [T("ความสำเร็จ"), (() => { const a = achievementProgress(); return `${a.done}/${a.total}`; })()],
     ]},
-    { icon: "🐾", title: "สัตว์เลี้ยง", rows: [
-      ["จับได้แล้ว", `${P.pets.length} ตัว`],
-      ["สายพันธุ์ที่มีตอนนี้", `${new Set(P.pets.map((x) => x.species)).size}/${PET_SPECIES.length}`],
-      ["สายพันธุ์ที่เคยเจอ (ไม่หายตอนจุติ)",
+    { icon: "🐾", title: T("สัตว์เลี้ยง"), rows: [
+      [T("จับได้แล้ว"), `${P.pets.length} ${unitWord("ตัว").trim()}`],
+      [T("สายพันธุ์ที่มีตอนนี้"), `${new Set(P.pets.map((x) => x.species)).size}/${PET_SPECIES.length}`],
+      [T("สายพันธุ์ที่เคยเจอ (ไม่หายตอนจุติ)"),
        `${Object.keys(P.seenPets || {}).length}/${PET_SPECIES.length}`],
-      ["ตัวที่พาไปด้วย", activePet() ? `${petStats(activePet()).icon} ${petStats(activePet()).name} ขั้น ${petStats(activePet()).lv}` : "—"],
-      ["ขั้นสูงสุดที่เลี้ยงได้", P.pets.length ? Math.max(...P.pets.map((x) => petLevel(x))) : 0],
+      [T("ตัวที่พาไปด้วย"), activePet() ? `${petStats(activePet()).icon} ${petStats(activePet()).name} ขั้น ${petStats(activePet()).lv}` : "—"],
+      [T("ขั้นสูงสุดที่เลี้ยงได้"), P.pets.length ? Math.max(...P.pets.map((x) => petLevel(x))) : 0],
     ]},
     /* 🎯 [owner 2026-08-22] "เพิ่มสถิติต่างๆ ที่ควรเก็บ เพราะดูหน้าเดียวรู้ทุกอย่าง ทั้งเควส ความสัมพันธ์"
      * Everything the new systems know, on the page that already exists for knowing things. */
-    { icon: "📜", title: "งานจากหมู่บ้าน", rows: [
-      ["ส่งงานสำเร็จ", fmtNum(P.stats.questsDone || 0) + " งาน"],
-      ["ค่าจ้างที่ได้", fmtNum(Math.round(P.stats.questGold || 0)) + " ทอง"],
-      ["งานบนกระดานตอนนี้", `${(P.quests || []).length} งาน`],
-      ["ส่งได้เลยตอนนี้", `${(P.quests || []).filter(questReady).length} งาน`],
+    { icon: "📜", title: T("งานจากหมู่บ้าน"), rows: [
+      [T("ส่งงานสำเร็จ"), fmtNum(P.stats.questsDone || 0) + unitWord("งาน")],
+      [T("ค่าจ้างที่ได้"), fmtNum(Math.round(P.stats.questGold || 0)) + unitWord("ทอง")],
+      [T("งานบนกระดานตอนนี้"), `${(P.quests || []).length} ${unitWord("งาน").trim()}`],
+      [T("ส่งได้เลยตอนนี้"), `${(P.quests || []).filter(questReady).length} ${unitWord("งาน").trim()}`],
     ] },
-    { icon: "💗", title: "ความสัมพันธ์", rows: [
+    { icon: "💗", title: T("ความสัมพันธ์"), rows: [
       ...VILLAGERS.filter((v) => v.romance).map((v) => {
         const r = relOf(v.id);
         return [`${v.icon} ${v.name}`,
                 `${relStage(r.aff).name} (${r.aff}/${REL_MAX})${isSpouse(v.id) ? " 💍" : ""}`];
       }),
-      ["ของขวัญที่ให้ไป", fmtNum(P.stats.giftsGiven || 0) + " ชิ้น"],
+      [T("ของขวัญที่ให้ไป"), fmtNum(P.stats.giftsGiven || 0) + unitWord("ชิ้น")],
     ] },
-    { icon: "👨‍👩‍👧", title: "ครอบครัว", rows: [
-      ["คู่ชีวิต", spouseIds().length
-      ? spouseIds().map((id) => VILLAGERS.find((v) => v.id === id)?.name || "-").join(", ") : "ยังไม่มี"],
-        ["ลูก", `${(P.kids || []).length} คน · รอบจุตินี้เกิดแล้ว ${P.family?.bornThisLife ?? (P.kids || []).length}/${CHILD_MAX}`],
-      ["ลูกที่โตแล้ว", `${(P.kids || []).filter(childIsAdult).length} คน`],
-      ["ขั้นการเรียนรวม", `${(P.kids || []).reduce((t, k) =>
-          t + CHILD_TRACKS.reduce((n, tr) => n + childTrackLevel(k, tr.id), 0), 0)} ขั้น`],
-      ["ลงทุนกับการเรียนไป", fmtNum(Math.round(P.stats.eduSpent || 0)) + " ทอง"],
+    { icon: "👨‍👩‍👧", title: T("ครอบครัว"), rows: [
+      [T("คู่ชีวิต"), spouseIds().length
+      ? spouseIds().map((id) => VILLAGERS.find((v) => v.id === id)?.name || "-").join(", ") : T("ยังไม่มี")],
+        [T("ลูก"), currentLang() === "en"
+        ? `${(P.kids || []).length} · ${P.family?.bornThisLife ?? (P.kids || []).length}/${CHILD_MAX} born this rebirth`
+        : `${(P.kids || []).length} คน · รอบจุตินี้เกิดแล้ว ${P.family?.bornThisLife ?? (P.kids || []).length}/${CHILD_MAX}`],
+      [T("ลูกที่โตแล้ว"), `${(P.kids || []).filter(childIsAdult).length} ${unitWord("คน").trim()}`],
+      [T("ขั้นการเรียนรวม"), `${(P.kids || []).reduce((t, k) =>
+          t + CHILD_TRACKS.reduce((n, tr) => n + childTrackLevel(k, tr.id), 0), 0)} ${unitWord("ขั้น").trim()}`],
+      [T("ลงทุนกับการเรียนไป"), fmtNum(Math.round(P.stats.eduSpent || 0)) + unitWord("ทอง")],
         /* 🎯 [owner 2026-08-22: "อย่าลืมปรับหน้าสถิติ ให้สัมพันธ์กับระบบล่าสุด"] The household now
            costs money every day and can end the run if it goes unpaid, so the page that summarises
            it has to say both. A stats page listing only what a family GIVES is not a summary. */
-        ["ค่าเลี้ยงดูต่อวัน", (() => {
+        [T("ค่าเลี้ยงดูต่อวัน"), (() => {
           const u = familyUpkeep();
           return u.total ? `${fmtNum(u.total)} ทอง · ภรรยา ${fmtNum(u.spouse)}`
             + (u.kids ? ` · ลูก ${fmtNum(u.heads)}` : "")
-            + (u.edu ? ` · ค่าเรียน ${fmtNum(u.edu)}` : "") : "ยังไม่มีค่าใช้จ่าย";
+            + (u.edu ? ` · ${T("ค่าเรียน")} ${fmtNum(u.edu)}` : "") : T("ยังไม่มีค่าใช้จ่าย");
         })()],
-        ["จ่ายไปเดือนนี้", fmtNum(Math.round(P.family?.monthPaid || 0)) + " ทอง"],
-        ["ค้างจ่าย", familyInArrears()
-          ? `${fmtNum(Math.round(P.family.arrears))} ทอง — โบนัสภรรยาและลูกหยุดอยู่` : "ไม่มี"],
+        [T("จ่ายไปเดือนนี้"), fmtNum(Math.round(P.family?.monthPaid || 0)) + unitWord("ทอง")],
+        [T("ค้างจ่าย"), familyInArrears()
+          ? (currentLang() === "en" ? `${fmtNum(Math.round(P.family.arrears))} gold — partner and child bonuses are paused` : `${fmtNum(Math.round(P.family.arrears))} ทอง — โบนัสภรรยาและลูกหยุดอยู่`) : T("ไม่มี")],
     ] },
-    { icon: "📈", title: "เลเวลทุกสาย", rows: SKILLS.map((sk) =>
-      [`${sk.icon} ${sk.name}`, `เลเวล ${levelFromXp(P.xp[sk.id] || 0)}`]) },
+    { icon: "📈", title: T("เลเวลทุกสาย"), rows: SKILLS.map((sk) =>
+      [`${sk.icon} ${sk.name}`, `${T("เลเวล")} ${levelFromXp(P.xp[sk.id] || 0)}`]) },
   ];
 
   const grid = $("#action-grid");
@@ -10338,7 +10504,7 @@ function slayerRowDetail(r) {
 function slayerRowReward(r, rw) {
   return currentLang() === "en"
     ? `Reward: ${rw.icon} +${rw.per[r.ti]} ${rw.name} permanently`
-    : `รางวัล: ${rw.icon} ${rw.name}ถาวร +${rw.per[r.ti]}`;
+    : (currentLang() === "en" ? `${T("รางวัล")}: ${rw.icon} +${rw.per[r.ti]} ${rw.name}, permanent` : `รางวัล: ${rw.icon} ${rw.name}ถาวร +${rw.per[r.ti]}`);
 }
 
 function renderAchievements() {
@@ -10360,7 +10526,7 @@ function renderAchievements() {
       <span class="t-body">
         <b>${escapeHtml(ti.name)}</b>
           <small>${escapeHtml(ti.desc)}${nx
-            ? ` · อีก ${nx.need} เป็น ${nx.icon} ${escapeHtml(nx.name)}`
+            ? (currentLang() === "en" ? ` · ${nx.need} more for ${nx.icon} ${escapeHtml(nx.name)}` : ` · อีก ${nx.need} เป็น ${nx.icon} ${escapeHtml(nx.name)}`)
             : " · ถือครบทุกฉายาแล้ว ไม่มีอะไรเหนือกว่านี้"}</small>
       </span>
     </div>` : "";
@@ -10369,12 +10535,12 @@ function renderAchievements() {
       <span class="m-chip">🏆 ${T("ปลดแล้ว")} ${done}/${total}</span>
       <div class="m-track">
         <div class="m-bar"><div style="width:${done / total * 100}%; background:var(--gold)"></div></div>
-        <div class="m-nums">${perkLine || "ยังไม่มีโบนัสถาวร — ปลดอันแรกแล้วจะเริ่มสะสม"}</div>
+        <div class="m-nums">${perkLine || T("ยังไม่มีโบนัสถาวร — ปลดอันแรกแล้วจะเริ่มสะสม")}</div>
       </div>
     </div>
     <label class="hide-owned">
       <input type="checkbox" id="hide-done"${uiPref("hideDoneAch") ? " checked" : ""}>
-      ซ่อนอันที่ปลดแล้ว (${done}/${total} อัน)
+      ${currentLang() === "en" ? `Hide unlocked (${done}/${total})` : `ซ่อนอันที่ปลดแล้ว (${done}/${total} อัน)`}
     </label>`;
   $("#hide-done").onchange = (e) => { setUiPref("hideDoneAch", e.target.checked); renderAchievements(); };
 
@@ -10401,7 +10567,7 @@ function renderAchievements() {
       <div class="head"><div class="name">${a.icon} ${a.name}</div>
         <div class="req">${got ? `✅ ${T("ปลดแล้ว")}` : `${cur.toLocaleString()}/${a.goal.toLocaleString()}`}</div></div>
       <div class="detail">${a.desc}</div>
-      <div class="io">รางวัล: ${perks}</div>
+      <div class="io">${T("รางวัล")}: ${perks}</div>
       <div class="mastery-row"><div class="m-track">
         <div class="m-bar"><div style="width:${cur / a.goal * 100}%; background:var(--gold)"></div></div>
       </div></div>`;
@@ -10518,13 +10684,13 @@ function setUiPref(key, value) {
 }
 
 function renderShop() {
-  $("#skill-title").textContent = "🏪 ร้านค้านักผจญภัย";
-  $("#skill-flavor").textContent = "เครื่องมือเร่งงาน · คัมภีร์เพิ่ม XP · เครื่องรางติดตัว — ทุกชิ้นถาวร";
+  $("#skill-title").textContent = `🏪 ${T("ร้านค้านักผจญภัย")}`;
+  $("#skill-flavor").textContent = T("เครื่องมือเร่งงาน · คัมภีร์เพิ่ม XP · เครื่องรางติดตัว — ทุกชิ้นถาวร");
   const ownedCount = SHOP.filter((u) => P.upgrades[u.id]).length;
   $("#view-extra").innerHTML = `
     <label class="hide-owned">
       <input type="checkbox" id="hide-owned"${uiPref("hideOwnedShop") ? " checked" : ""}>
-      ซ่อนของที่มีแล้ว (${ownedCount}/${SHOP.length} ชิ้น)
+      ${currentLang() === "en" ? `Hide owned (${ownedCount}/${SHOP.length})` : `ซ่อนของที่มีแล้ว (${ownedCount}/${SHOP.length} ชิ้น)`}
     </label>`;
   $("#hide-owned").onchange = (e) => { setUiPref("hideOwnedShop", e.target.checked); renderShop(); };
   const grid = $("#action-grid");
@@ -10541,21 +10707,21 @@ function renderShop() {
       card.className = "action-card trader-card" + (o.sold ? " locked" : "");
       card.innerHTML = `
         <div class="head"><div class="name">${item.icon} ${item.name} ×${o.n}</div>
-          <div class="req">${o.sold ? "✅ ซื้อแล้ว" : `${o.price.toLocaleString()} 💰`}</div></div>
-        <div class="detail">ปกติต้องไปหาเอง — ราคาเฉลี่ย ${Math.round(o.price / o.n)} 💰 ต่อชิ้น</div>
+          <div class="req">${o.sold ? `✅ ${T("ซื้อแล้ว")}` : `${o.price.toLocaleString()} 💰`}</div></div>
+        <div class="detail">${currentLang() === "en" ? `Normally you go and find these — ${Math.round(o.price / o.n)} 💰 each on average` : `ปกติต้องไปหาเอง — ราคาเฉลี่ย ${Math.round(o.price / o.n)} 💰 ต่อชิ้น`}</div>
         ${!o.sold && P.gold < o.price
-          ? `<div class="detail missing">ยังขาดอีก ${(o.price - P.gold).toLocaleString()} 💰</div>` : ""}`;
+          ? `<div class="detail missing">${shortBy(o.price - P.gold)}</div>` : ""}`;
       if (!o.sold) card.onclick = () => buyTraderOffer(i);
       grid.appendChild(card);
     });
   }
 
   const groups = [
-    { title: "🛠️ เครื่องมือ (ทำงานเร็วขึ้น ซื้อไล่ขั้น)", match: (u) => !u.kind },
-    { title: "📚 คัมภีร์ (XP เพิ่มถาวรทั้งสาย)",          match: (u) => u.kind === "tome" },
-    { title: "🧿 เครื่องราง (ผลติดตัวทุกโหมด)",           match: (u) => u.kind === "charm" },
-    { title: "🪴 กระถางปลูก (เปิดแปลงเพิ่มให้สวน)",        match: (u) => u.kind === "plot" },
-    { title: "⚡ ทำหลายอย่างพร้อมกัน (ของแพงที่สุดในเกม)", match: (u) => u.kind === "multi" },
+    { title: `🛠️ ${T("เครื่องมือ (ทำงานเร็วขึ้น ซื้อไล่ขั้น)")}`, match: (u) => !u.kind },
+    { title: `📚 ${T("คัมภีร์ (XP เพิ่มถาวรทั้งสาย)")}`,   match: (u) => u.kind === "tome" },
+    { title: `🧿 ${T("เครื่องราง (ผลติดตัวทุกโหมด)")}`,    match: (u) => u.kind === "charm" },
+    { title: `🪴 ${T("กระถางปลูก (เปิดแปลงเพิ่มให้สวน)")}`, match: (u) => u.kind === "plot" },
+    { title: `⚡ ${T("ทำหลายอย่างพร้อมกัน (ของแพงที่สุดในเกม)")}`, match: (u) => u.kind === "multi" },
   ];
   for (const g of groups) {
     const all = SHOP.filter(g.match);
@@ -10573,11 +10739,11 @@ function renderShop() {
       card.className = "action-card" + (owned ? " running" : "") + (gated ? " locked" : "");
       card.innerHTML = `
         <div class="head"><div class="name">${u.icon} ${u.name}</div>
-          <div class="req">${owned ? "✅ มีแล้ว" : `${u.price.toLocaleString()} 💰`}</div></div>
+          <div class="req">${owned ? `✅ ${T("มีแล้ว")}` : `${u.price.toLocaleString()} 💰`}</div></div>
         <div class="detail">${shopEffectText(u)}</div>
         ${!owned && !gated && P.gold < u.price
-          ? `<div class="detail missing">ยังขาดอีก ${(u.price - P.gold).toLocaleString()} 💰</div>` : ""}
-        ${gated ? `<div class="detail missing">ต้องมี ${SHOP.find((x) => x.id === u.requires).name} ก่อน</div>` : ""}`;
+          ? `<div class="detail missing">${shortBy(u.price - P.gold)}</div>` : ""}
+        ${gated ? `<div class="detail missing">${needFirst(SHOP.find((x) => x.id === u.requires).name)}</div>` : ""}`;
       if (!owned && !gated) card.onclick = () => {
         if (P.gold < u.price) { toast("ทองไม่พอ", "warn"); return; }
         P.gold -= u.price;
