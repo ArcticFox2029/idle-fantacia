@@ -864,6 +864,13 @@ function migrate(p) {
      * simply runs at 250ms. The version steps for the cache-buster: an old game.js still carries
      * the attack scheduler that rounded every interval up to a tick. */
   }
+  if (p.v === 69) {
+    p.v = 70;
+    /* Nothing stored changes — this release is text and pictures. The version steps purely for the
+     * cache-buster, and it has to: an old game.js still draws the slayer cards with the Thai
+     * sentence baked into the template, so an English player on a cached script would see the
+     * screen this release exists to fix. */
+  }
   return p.v === GAME_VERSION ? p : null;
 }
 
@@ -7843,8 +7850,8 @@ let moneyTab = "ledger";     // ledger | bank | s | m | l
 let openCompany = null;      // the one expanded card
 
 /* 🐛 [owner 2026-08-23: "ส่วนภาษีที่ต้องจ่าย มันต้องรวมทั้งสองภาษี แล้วโชว์"] This priced ONLY the
- * investment ladder, through taxOwedOn — a standalone helper that predates there being more than one
- * kind. The rent tax was invisible here, so the headline number under-reported the year for anyone
+ * investment ladder, through taxOwedOn — a standalone helper that predated there being more than
+ * one kind, and that was deleted in 2026-08-24 once nothing read it any more. The rent tax was invisible here, so the headline number under-reported the year for anyone
  * who owned property. taxAccruedTotal walks every kind and subtracts what has already been paid,
  * which is what "ถ้าจบปีนี้" actually means. */
 function estimatedTaxNow() { return taxAccruedTotal(); }
@@ -10308,6 +10315,32 @@ function renderStats() {
   }
 }
 
+/* 🐛 [2026-08-24] These two sentences were raw Thai inside the slayer card template, and they are
+ * the reason the achievements screen was by far the most untranslated in the game — 10,319 Thai
+ * characters against 1,949 for the next worst. Not because they are long, but because the screen
+ * draws ~196 of these cards and every card repeated the same six fragments: ปราบ, ในระดับ, ตัว,
+ * รางวัล, ถาวร and the tier note. Seven distinct phrases were carrying most of the total.
+ *
+ * Composed per language rather than by translating the fragments. The two languages order this
+ * sentence differently — Thai counts at the end, English counts before the noun — and the pieces
+ * are common enough words that putting them in a dictionary which also does whole-field
+ * replacement is asking for a table entry named exactly "ตัว" to be rewritten somewhere else. */
+function slayerRowDetail(r) {
+  const monster = escapeHtml(r.raw.name), mode = escapeHtml(r.mode.name);
+  const n = r.t.kills.toLocaleString();
+  if (currentLang() === "en") {
+    return `Defeat ${n} ${monster} at ${mode} tier`
+      + (r.ti === 0 ? "" : " · counts only kills at this tier, starting from zero");
+  }
+  return `ปราบ${monster}ในระดับ${mode} ${n} ตัว`
+    + (r.ti === 0 ? "" : " · นับเฉพาะที่ล่าในระดับนี้ เริ่มจากศูนย์");
+}
+function slayerRowReward(r, rw) {
+  return currentLang() === "en"
+    ? `Reward: ${rw.icon} +${rw.per[r.ti]} ${rw.name} permanently`
+    : `รางวัล: ${rw.icon} ${rw.name}ถาวร +${rw.per[r.ti]}`;
+}
+
 function renderAchievements() {
   $("#skill-title").textContent = `🏆 ${T("ความสำเร็จ")}`;
   $("#skill-flavor").textContent = T("ทุกอันที่ปลดได้ให้โบนัสถาวรกับทั้งโปรไฟล์");
@@ -10366,7 +10399,7 @@ function renderAchievements() {
     card.className = "action-card" + (got ? " running" : "");
     card.innerHTML = `
       <div class="head"><div class="name">${a.icon} ${a.name}</div>
-        <div class="req">${got ? "✅ ปลดแล้ว" : `${cur.toLocaleString()}/${a.goal.toLocaleString()}`}</div></div>
+        <div class="req">${got ? `✅ ${T("ปลดแล้ว")}` : `${cur.toLocaleString()}/${a.goal.toLocaleString()}`}</div></div>
       <div class="detail">${a.desc}</div>
       <div class="io">รางวัล: ${perks}</div>
       <div class="mastery-row"><div class="m-track">
@@ -10397,10 +10430,9 @@ function renderAchievements() {
     card.className = "action-card" + (got ? " running" : "");
     card.innerHTML = `
       <div class="head"><div class="name">${r.mode.icon} ${escapeHtml(r.mode.name)}</div>
-        <div class="req">${got ? "✅ ปลดแล้ว" : `${n.toLocaleString()}/${r.t.kills.toLocaleString()}`}</div></div>
-      <div class="detail">ปราบ${escapeHtml(r.raw.name)}ในระดับ${escapeHtml(r.mode.name)} ${r.t.kills.toLocaleString()} ตัว${
-        r.ti === 0 ? "" : " · นับเฉพาะที่ล่าในระดับนี้ เริ่มจากศูนย์"}</div>
-      <div class="io">รางวัล: ${rw.icon} ${rw.name}ถาวร +${rw.per[r.ti]}</div>
+        <div class="req">${got ? `✅ ${T("ปลดแล้ว")}` : `${n.toLocaleString()}/${r.t.kills.toLocaleString()}`}</div></div>
+      <div class="detail">${slayerRowDetail(r)}</div>
+      <div class="io">${slayerRowReward(r, rw)}</div>
       <div class="mastery-row"><div class="m-track">
         <div class="m-bar"><div style="width:${Math.min(100, n / r.t.kills * 100)}%; background:#7cc47f"></div></div>
       </div></div>`;

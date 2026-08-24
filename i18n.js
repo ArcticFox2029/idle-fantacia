@@ -26,6 +26,49 @@ const I18N = (() => {
   /* Thai → English. Everything not listed here stays Thai, on purpose — see decision 1 above.
    * Grouped by where the strings come from so a gap is easy to spot and fill. */
   const EN = {
+    "ปลดแล้ว": "Unlocked",
+
+    /* ---- achievements: the 18 profile-wide ones ----
+       Names are flavour and are translated as flavour; the descriptions are goals and are kept
+       literal, because a player reads them to know exactly what to do next. */
+    "ก้าวแรกในมิธวูด": "First Steps in Mythwood", "ทำงานสำเร็จ 50 ครั้ง": "Complete 50 actions",
+    "มือขยัน": "Diligent Hands", "ทำงานสำเร็จ 1,000 ครั้ง": "Complete 1,000 actions",
+    "ไม่รู้จักเหนื่อย": "Tireless", "ทำงานสำเร็จ 10,000 ครั้ง": "Complete 10,000 actions",
+    "นักล่าหน้าใหม่": "Fledgling Hunter", "ปราบมอนสเตอร์ 100 ตัว": "Defeat 100 monsters",
+    "นักล่าผู้ช่ำชอง": "Seasoned Hunter", "ปราบมอนสเตอร์ 1,000 ตัว": "Defeat 1,000 monsters",
+    "ผู้ปราบตำนาน": "Legend Slayer", "โค่นบอส 5 ตัว": "Defeat 5 bosses",
+    "มือใหม่หัดปลูก": "Budding Grower", "เก็บเกี่ยวสำเร็จ 50 ครั้ง": "Complete 50 harvests",
+    "มือเขียวแห่งมิธวูด": "Green Thumb of Mythwood", "เก็บเกี่ยวสำเร็จ 500 ครั้ง": "Complete 500 harvests",
+    "นักพฤกษศาสตร์": "Botanist", "ปลูกพืชให้ครบทั้ง 8 ชนิด": "Grow all 8 crops",
+    "นักตกปลาตัวจริง": "True Angler", "ตกปลาให้ได้ครบ 12 สายพันธุ์": "Catch all 12 fish species",
+    "เชฟแห่งมิธวูด": "Chef of Mythwood", "ปรุงอาหาร 300 จาน": "Cook 300 dishes",
+    "ช่างตีมือทอง": "Golden-Handed Smith", "ตีของ 200 ชิ้น": "Forge 200 items",
+    "ความชำนาญขั้นต้น": "Early Mastery", "ขั้นชำนาญรวมทุกสาย 100": "100 total mastery levels",
+    "ปรมาจารย์": "Grandmaster", "ขั้นชำนาญรวมทุกสาย 400": "400 total mastery levels",
+    "นักสะสมทอง": "Gold Hoarder", "หาทองสะสมครบ 100,000": "Earn 100,000 gold in total",
+    "นักเก็บของเก่า": "Scrap Collector", "ขายขยะ 500 ชิ้น": "Sell 500 pieces of junk",
+    "เงาในตลาด": "Shadow in the Market", "ขโมยสำเร็จ 250 ครั้ง": "Succeed at 250 thefts",
+    "ผู้ครอบครองชุด": "Set Collector", "มีชุดเกราะครบเซ็ต 3 ชุด": "Complete 3 armour sets",
+
+    /* ---- titles ---- */
+    "คนแปลกหน้าจากนอกป่า": "Stranger from Beyond the Wood", "เพิ่งมาถึงมิธวูด": "Newly arrived in Mythwood",
+    "ผู้มาใหม่แห่งมิธวูด": "Newcomer of Mythwood", "ปลดความสำเร็จ 3 รายการ": "Unlock 3 achievements",
+    "ผู้เริ่มสะสมรอยล่า": "Marked Novice", "เก็บรอยล่า 10 ดวง": "Collect 10 slayer marks",
+    "นักเดินทางผู้ช่ำชอง": "Seasoned Traveller", "ปลดความสำเร็จ 7 รายการ": "Unlock 7 achievements",
+    "มือที่ไม่เคยว่าง": "Hands Never Idle", "ครบทั้งสายทำงาน": "Every profession practised",
+    "ผู้เป็นที่รู้จักทั้งหุบเขา": "Known Throughout the Valley", "ปลดความสำเร็จ 12 รายการ": "Unlock 12 achievements",
+    "นักล่าประจำหุบเขา": "Hunter of the Valley", "เก็บรอยล่า 40 ดวง": "Collect 40 slayer marks",
+    "ผู้กลับมาเสมอ": "The Ever-Returning", "จุติครบ 5 ครั้ง": "Rebirth 5 times",
+    "ผู้ปราบสายพันธุ์แรก": "First Species Conquered", "ล่าสายพันธุ์หนึ่งจนถึงชั้นโกลาหล": "Hunt one species to Chaos tier",
+    "ผู้เก็บครบทุกเรื่องเล่า": "Keeper of Every Tale", "ปลดความสำเร็จครบทั้ง 18 รายการ": "Unlock all 18 achievements",
+    "ผู้ไล่ล่าไม่เลือกหน้า": "Relentless Pursuer", "เก็บรอยล่า 90 ดวง": "Collect 90 slayer marks",
+    "ชื่อที่ถูกเอ่ยด้วยความกลัว": "A Name Spoken in Fear", "ล่า 3 สายพันธุ์จนถึงชั้นโกลาหล": "Hunt 3 species to Chaos tier",
+    "ผู้ที่มอนสเตอร์หวาดกลัว": "Dreaded by Monsters", "ล่า 8 สายพันธุ์จนถึงชั้นโกลาหล": "Hunt 8 species to Chaos tier",
+    "เงาที่ทุกป่าจดจำ": "The Shadow Every Forest Remembers", "เก็บรอยล่า 150 ดวง": "Collect 150 slayer marks",
+    "ฝันร้ายของทั้งหุบเขา": "Nightmare of the Whole Valley", "ล่า 20 สายพันธุ์จนถึงชั้นโกลาหล": "Hunt 20 species to Chaos tier",
+    "ผู้ชำระล้าง": "The Cleanser", "เก็บรอยล่าครบทุกดวง": "Collect every slayer mark",
+    "ผู้พิชิตมิธวูด": "Conqueror of Mythwood", "ล่าครบทุกสายพันธุ์จนถึงชั้นโกลาหล": "Hunt every species to Chaos tier",
+
     /* ---- equipment slots ---- */
     "หมวก": "Helmet", "เกราะ": "Armour", "อาวุธ": "Weapon", "มือรอง": "Off-hand",
     "แหวน": "Ring", "สร้อย": "Amulet",

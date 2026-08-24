@@ -6,7 +6,7 @@
  * v5 combat-stat split shipped with this left at 4: freshProfile stamped v4, migrate pushed
  * it to v5, and the `p.v === GAME_VERSION` guard then rejected every profile — the game
  * silently refused to create or load anything. balance_check.mjs now fails if the two drift. */
-const GAME_VERSION = 69;
+const GAME_VERSION = 70;
 /* 🎯 [owner 2026-08-22] "avatar คน เพดานน่าจะไม่กำหนด เพราะวางไว้ว่าให้โตได้เรื่อยๆ ... จริงๆ อยากให้ถึง 999"
  *
  * 99 was reachable in about four hours of the best XP route, which is the whole reason it felt like
@@ -1696,6 +1696,15 @@ const MONSTER_ACHIEVEMENTS = LOCATIONS.flatMap((loc, li) => loc.stages.map((st, 
   const perk = st.boss
     ? (depth >= 3 ? { dmg: 2, def: 2 } : { dmg: 1, def: 1 })
     : (si % 2 ? { def: 1 } : { dmg: 1 });
+  /* ⚠️ [2026-08-24] This table is MIGRATION-ONLY. The per-monster hunt achievements were removed
+   * in v28→v29 and replaced by slayer marks; the only thing that still reads this array is that
+   * migration step in game.js, and it reads .id and .perk. Nothing renders .name or .desc, and
+   * nothing has since.
+   *
+   * Written down because the text below LOOKS like a translation gap and is not. It holds 2,629
+   * Thai characters that never reach a screen, and this session spent a pass rewriting them into
+   * language-aware getters — a correct fix to a problem no player has. Check who reads a field
+   * before translating it. */
   return {
     id: `hunt_${loc.id}_${st.id}`,
     name: `${st.boss ? "ผู้พิชิต" : "นักล่า"}${st.name}`,
@@ -2575,28 +2584,20 @@ function furniturePrice(kind, f) {
 
 
 /* ---------- Tax ----------
- * Charged once a year on INVESTMENT profit only — dividends, realised trading gains and bank
- * interest. Grinding, crafting and selling loot are untaxed on purpose: the tax exists to keep
- * passive income from running away from the game, not to punish playing it.
+ * Charged once a year, and only on income the player did not swing a sword for: rent, dividends,
+ * realised trading gains and bank interest. Grinding, crafting, shops and selling loot are untaxed
+ * on purpose — the tax exists to keep passive income from running away from the game, not to
+ * punish playing it. bookRentIncome and bookInvestmentProfit in game.js are the only two doors
+ * that income walks through, so nothing can earn untaxed by accident.
  *
- * The ladder is marginal, so crossing a threshold never costs more than it earns. */
-const TAX_FREE_ALLOWANCE = 1000000;
-/* 🎯 [rescaled 2026-08-17, owner: "ปรับ logic เรื่องภาษี ให้สมเหตุผล แล้วเข้ากับรายได้ ... ให้มันผ่าน
- * เงื่อนไข กรณีเล่นระยะยาว"] The ladder used to end at 6m, which was the whole income range when it
- * was written. A full property portfolio now pays 73m of rent a game-year, so everything past the
- * first few million sat in one 40% band — a ladder with no rungs left is a flat tax wearing a
- * ladder's clothes. Three more rungs carry it to the top of the range the game can actually reach,
- * so the effective rate climbs smoothly from 2% at a million to 39% at a hundred and fifty. The
- * bands below 6m are untouched: early play should feel exactly as it did. */
-const TAX_BRACKETS = [
-  { upTo:  10000000, rate: 0.07 },
-  { upTo:  50000000, rate: 0.12 },
-  { upTo: 100000000, rate: 0.20 },
-  { upTo: 150000000, rate: 0.25 },
-  { upTo: 200000000, rate: 0.30 },
-  { upTo: 300000000, rate: 0.35 },
-  { upTo:  Infinity, rate: 0.42 },
-];
+ * Both ladders are marginal, so crossing a threshold never costs more than it earns.
+ *
+ * The rates and thresholds live in TAX_KINDS below, one entry per kind. There used to ALSO be a
+ * standalone TAX_FREE_ALLOWANCE / TAX_BRACKETS / taxOwedOn trio here, from before there was more
+ * than one kind; the 2026-08-17 split superseded them and nothing in the game read them again.
+ * They were deleted 2026-08-24 — but only after the five .mjs harnesses that still imported them
+ * were re-pointed at TAX_KINDS, because until then the test suite was asserting hard against a
+ * ladder (7/12/20/25/30/35/42%) that no player had ever been charged. */
 const TAX_GRACE_DAYS = 90;        // three game months to clear a debt before the run ends
 /* The same three months, counted from the assessment rather than from the balance going negative —
    an unpaid bill ends the run even if the wallet never dipped below zero. */
@@ -2759,21 +2760,6 @@ function taxOwedFor(kindId, base) {
   if (!taxable) return 0;
   let owed = 0, floor = k.free;
   for (const b of k.brackets) {
-    const slice = Math.min(taxable, b.upTo - floor);
-    if (slice <= 0) break;
-    owed += slice * b.rate;
-    taxable -= slice;
-    floor = b.upTo;
-    if (taxable <= 0) break;
-  }
-  return Math.round(owed);
-}
-
-function taxOwedOn(profit) {
-  let taxable = Math.max(0, profit - TAX_FREE_ALLOWANCE);
-  if (!taxable) return 0;
-  let owed = 0, floor = TAX_FREE_ALLOWANCE;
-  for (const b of TAX_BRACKETS) {
     const slice = Math.min(taxable, b.upTo - floor);
     if (slice <= 0) break;
     owed += slice * b.rate;
