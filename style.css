@@ -516,6 +516,9 @@ body {
 .pet-box .pet-stats { font-size: 11px; color: var(--text-dim); margin-bottom: 6px; }
 .pet-box .m-bar { margin-bottom: 6px; }
 .pet-box.fainted { opacity: .55; border-color: var(--danger); }
+/* The dimming says "out of the fight"; the revive button is the way back out of it, so it is the
+   one thing on a fainted card that must not read as disabled. */
+.pet-box.fainted .btn.revive { opacity: 1; background: var(--danger); border-color: var(--danger); color: #fff; }
 .pet-box.fuse-pick { border-color: #8fd0e8; box-shadow: 0 0 0 1px #8fd0e8 inset; }
 .fuse-forecast { border-left: 2px solid #8fd0e8; padding-left: 10px; }
 .pet-box .btn { width: 100%; margin-top: 4px; }
@@ -1405,6 +1408,65 @@ body::after {
 @media (prefers-reduced-motion: reduce) {
   body::before { animation: none; }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════════
+ * 🔋 โหมดประหยัดพลังงาน — 🎯 [owner 2026-08-23] "ปรับค่ากราฟิก โหมดประหยัดพลังงาน อาจลดเอฟเฟกต์ต่างๆ"
+ *
+ * Set by applyGraphicsPrefs() as a class on <html>, so it is on before the first paint.
+ *
+ * Everything switched off below shares one property: it runs whether or not anything is happening.
+ * The backdrop is a full-viewport layer with a 28px blur on a 46-second loop — a blurred element
+ * that large is re-composited every frame it moves, which is the most expensive thing on this page
+ * and it never stops. The grain sits over the whole viewport too. The rest are `infinite` sheens
+ * and pulses on cards, bars and tabs.
+ *
+ * Nothing that ANSWERS an action is touched: damage numbers, the hit shake, toasts, the level-up
+ * flash, view transitions. They are short, they fire because the player did something, and cutting
+ * them would make the game harder to read rather than cheaper to run.
+ *
+ * The backdrop is replaced by a flat colour rather than deleted, or the page would lose its ground
+ * and read as a different design instead of a lighter one.
+ * ═══════════════════════════════════════════════════════════════════════════════════════════════ */
+.eco body::before {
+  animation: none;
+  filter: none;
+  background: var(--bg, #10121a);
+  transition: none;
+}
+.eco body::after { display: none; }              /* the grain layer */
+
+/* The continuous ones, by name — a blanket `animation: none` would also silence the damage numbers
+   and the toasts, which are the two things a player most needs to see. Every selector here is the
+   one the animation is actually declared on; a near-miss would be a rule that quietly does nothing,
+   which on a setting like this nobody would ever notice was broken. */
+.eco .action-card.running::after,        /* card sheen, 2.6s infinite, on every running job   */
+.eco .active-banner .bar > div::after,   /* progress-bar sheen, 1.9s infinite                 */
+.eco .skill-tab.farm-waiting .icon,      /* tab nudge, 2.4s infinite                          */
+.eco .plot-card.ripe,                    /* ripe pulse, 2.2s infinite, once per ready plot    */
+.eco .action-card.plot-card.ripe,        /* and its gold variant, 2.6s infinite               */
+.eco .game-title,                        /* gradient drift, 7s infinite                       */
+.eco .fear-tag { animation: none; }      /* shiver, 2.8s infinite                             */
+
+/* Blur is the other standing cost, and unlike the backdrop there is one per card — a screen of
+   twelve action cards is twelve blurred layers. The phone media query already drops two of these;
+   this drops the rest, on any screen size, because the setting is about the device and not the
+   viewport width. */
+.eco .action-card,
+.eco .sidebar,
+.eco .modal-back,
+.eco .topbar .gold-chip { backdrop-filter: none; }
+
+/* A slower tick means fewer width updates, so each one has to carry further. Without this the bar
+   reaches its new width in 0.3s and then sits still for the rest of the second, which reads as the
+   game freezing rather than as a setting the player chose. */
+.tick-slow .m-bar > div,
+.tick-slow .plot-bar > div,
+.tick-slow .active-banner .bar > div,
+.tick-slow .hp-bar > div { transition: width .5s linear; }
+.tick-slowest .m-bar > div,
+.tick-slowest .plot-bar > div,
+.tick-slowest .active-banner .bar > div,
+.tick-slowest .hp-bar > div { transition: width 1s linear; }
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════════
  * Phone pass (2026-08-21)

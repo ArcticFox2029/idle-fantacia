@@ -6,7 +6,7 @@
  * v5 combat-stat split shipped with this left at 4: freshProfile stamped v4, migrate pushed
  * it to v5, and the `p.v === GAME_VERSION` guard then rejected every profile — the game
  * silently refused to create or load anything. balance_check.mjs now fails if the two drift. */
-const GAME_VERSION = 63;
+const GAME_VERSION = 69;
 /* 🎯 [owner 2026-08-22] "avatar คน เพดานน่าจะไม่กำหนด เพราะวางไว้ว่าให้โตได้เรื่อยๆ ... จริงๆ อยากให้ถึง 999"
  *
  * 99 was reachable in about four hours of the best XP route, which is the whole reason it felt like
@@ -432,10 +432,33 @@ const SHOP = [
   { id: "plot7", name: "กระถางที่ 7", icon: "🪴", kind: "plot", price: 180000,   requires: "plot6" },
   { id: "plot8", name: "กระถางที่ 8", icon: "🪴", kind: "plot", price: 400000,  requires: "plot7" },
   { id: "plot9", name: "กระถางที่ 9", icon: "🪴", kind: "plot", price: 900000,  requires: "plot8" },
-  { id: "multi2", name: "ทำสองอย่างพร้อมกัน", icon: "⚡", kind: "multi", price: 1000000,   requires: null },
-  { id: "multi3", name: "ทำสามอย่างพร้อมกัน", icon: "⚡", kind: "multi", price: 10000000,  requires: "multi2" },
-  { id: "multi4", name: "ทำสี่อย่างพร้อมกัน",  icon: "⚡", kind: "multi", price: 60000000,  requires: "multi3" },
-  { id: "multi5", name: "ทำห้าอย่างพร้อมกัน",  icon: "⚡", kind: "multi", price: 240000000, requires: "multi4" },
+  /* 🎯 [owner 2026-08-23] "กดออกล่า มันบอกช่องเต็ม ... ให้เพิ่มการเก็บอีก 10 เท่า"
+   *
+   * The ceiling now matches what the game actually contains: 9 professions plus one hunt, so the
+   * top of this ladder means "everything at once" rather than an arbitrary stop at five. There is
+   * no eleventh rung because there is no tenth profession — past this you would only be running a
+   * second action of a skill already running.
+   *
+   * The prices were the real complaint, not the ceiling. The old ladder went 1m → 10m → 60m →
+   * 240m — a tenfold jump in cost for the same +1 slot, which is why it stalled dead at two for
+   * the owner, who has 1.55m and a rung 3 priced at 10m.
+   *
+   * A slot is worth what the best job it can run earns. Measured against the owner's own save
+   * (ขโมย lv100, ~45,000 💰/ชม.): rung 2 paid for itself in 22 hours of play, rung 3 in 222, and
+   * rung 5 in over 1,300. Prices are set from that number now, against the income you actually
+   * HAVE when you buy the rung — n-1 slots already running — so payback climbs gently from ~22
+   * hours to ~350 across the whole ladder instead of exploding. The band is deliberately measured
+   * against fixed per-slot income and therefore reads pessimistic: real income also grows with
+   * levels and mastery, so every rung lands sooner than the number says. */
+  { id: "multi2",  name: "ทำสองอย่างพร้อมกัน", icon: "⚡", kind: "multi", price: 1000000,   requires: null },
+  { id: "multi3",  name: "ทำสามอย่างพร้อมกัน", icon: "⚡", kind: "multi", price: 2800000,   requires: "multi2" },
+  { id: "multi4",  name: "ทำสี่อย่างพร้อมกัน",  icon: "⚡", kind: "multi", price: 6000000,   requires: "multi3" },
+  { id: "multi5",  name: "ทำห้าอย่างพร้อมกัน",  icon: "⚡", kind: "multi", price: 11000000,  requires: "multi4" },
+  { id: "multi6",  name: "ทำหกอย่างพร้อมกัน",   icon: "⚡", kind: "multi", price: 20000000,  requires: "multi5" },
+  { id: "multi7",  name: "ทำเจ็ดอย่างพร้อมกัน", icon: "⚡", kind: "multi", price: 34000000,  requires: "multi6" },
+  { id: "multi8",  name: "ทำแปดอย่างพร้อมกัน",  icon: "⚡", kind: "multi", price: 55000000,  requires: "multi7" },
+  { id: "multi9",  name: "ทำเก้าอย่างพร้อมกัน", icon: "⚡", kind: "multi", price: 90000000,  requires: "multi8" },
+  { id: "multi10", name: "ทำสิบอย่างพร้อมกัน",  icon: "⚡", kind: "multi", price: 142000000, requires: "multi9" },
 ];
 
 /* Every skill is a list of actions: level gate, duration, xp, and what goes in/out.
@@ -2404,6 +2427,40 @@ const KARMA_LEVEL_POWER  = 2.0;     // (level / gate) ^ this — measured agains
 const KARMA_CAP = 1.0;
 
 /* And the gate itself rises, so the cheapest rebirth cannot be farmed forever. */
+/* 🎯 [owner 2026-08-23] "ปรับพลังหลังจุติ ... จากการหารครึ่ง ให้เป็น 90% ... เพราะมองในมุม
+ * ระยะยาว เช่น lv 80-90 หารครึ่ง คงเล่นเป็นวันเป็นเดือน กว่าจะเลเวลเท่าเดิม"
+ *
+ * Halving is cheap early and brutal late, because the level curve is superlinear: the XP between
+ * lv45 and lv90 is not half a climb, it is most of one. Measured on this game's own curve, the
+ * climb back after a rebirth at lv90 was 708,887 XP; keeping 90% makes it 207,346 — 3.4x lighter,
+ * and the ratio holds from lv30 to lv99 rather than punishing exactly the players who got furthest.
+ *
+ * Applied to all four things a rebirth reduces — the player, their companion, their children and
+ * the children's companions — through this one constant, because the owner's rule has always been
+ * that a child's companion matches the player's, and four copies of 0.9 would drift.
+ *
+ * Rebirthing does not become free: karma still takes 40+ rebirths to cap either way (measured),
+ * and the gate still rises 3 levels per rebirth. What changes is that the climb back is a session
+ * rather than a month. */
+/* 🎯 [owner 2026-08-23] "งั้นมองเป็น fps ละ 30 / 50 หรือใดๆ เพื่อประหยัดแบท"
+ *
+ * This game has no frame loop — there is no requestAnimationFrame anywhere in it. Everything runs
+ * on one setInterval, so its real "frame rate" is 4 a second, not 60, and there is no 60 to cap.
+ * What the setting can honestly offer is that number, which is why the labels say times-per-second
+ * rather than FPS: naming it FPS would imply a 60 that does not exist and a saving that is not
+ * there.
+ *
+ * Safe to lower only because nextAt() now carries the remainder — before that, a slower tick bought
+ * battery with damage (measured: 6.4% of all hits lost at 500ms, 13.6% at 1000ms). */
+const TICK_RATES = [
+  { ms: 250,  name: "ปกติ",         note: "4 ครั้ง/วินาที — ลื่นที่สุด" },
+  { ms: 500,  name: "ประหยัด",       note: "2 ครั้ง/วินาที" },
+  { ms: 1000, name: "ประหยัดมาก",    note: "1 ครั้ง/วินาที — แถบจะขยับเป็นช่วง ๆ" },
+];
+const TICK_MS_DEFAULT = 250;
+
+const REBIRTH_KEEP = 0.9;
+
 const REBIRTH_MIN_LEVEL = 20;
 const REBIRTH_GATE_STEP = 3;
 const REBIRTH_GATE_MAX  = 50;
@@ -2586,7 +2643,18 @@ const TAX_FATAL_DAYS = 90;
  * not the run's. */
 const CRYPTO_FLOOR = 0.08;        // a coin may fall to 8% of base — near-total loss is possible
 const CRYPTO_CEIL = 12;           // and 12x is reachable, which is what pays for the risk
-const CRYPTO_MAX_UNITS = 100000;  // per coin, so one holding cannot become the whole economy
+/* 🎯 [owner 2026-08-23] "ขยายเพดานกระเป๋า ให้เพิ่มของได้อีกสิบเท่า เพราะมันเต็มไวไป"
+ *
+ * The old ceiling bound the wrong end of the market. It is a flat unit count, so what it actually
+ * limits is COST, and cost runs across three orders of magnitude here: filling up on เวอร์แดนท์
+ * (ฐาน 4.97) took 497,000 gold — pocket change by the time coins unlock — while filling up on
+ * ฮอลโลว์สกาย (ฐาน 2,844) would take 284 million. The cheap coins, which are the volatile ones
+ * worth speculating on, were the only ones anyone could ever hit.
+ *
+ * Ten times the units moves the cheap end to ~5m and leaves the expensive end where it already was
+ * — nowhere near binding. The rule it protects still holds: even at the new ceiling, cornering all
+ * 50 coins costs 30 billion, so no single holding becomes the whole economy. */
+const CRYPTO_MAX_UNITS = 1000000;  // per coin
 const CRYPTOS = [
   { id: "moonbit", name: "มูนบิต", icon: "🌙", base: 8.89, vol: 0.194, rev: 0.04 },
   { id: "starcoin", name: "สตาร์คอยน์", icon: "⭐", base: 63.6, vol: 0.124, rev: 0.029 },

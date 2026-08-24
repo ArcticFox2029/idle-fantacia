@@ -367,6 +367,9 @@ const I18N = (() => {
     "หัวใจโอ๊คโบราณ": "Heart of the Old Oak", "หัวใจมังกรนิรันดร์": "Eternal Dragon Heart",
     "ทำสองอย่างพร้อมกัน": "Two jobs at once", "ทำสามอย่างพร้อมกัน": "Three jobs at once",
     "ทำสี่อย่างพร้อมกัน": "Four jobs at once", "ทำห้าอย่างพร้อมกัน": "Five jobs at once",
+    "ทำหกอย่างพร้อมกัน": "Six jobs at once", "ทำเจ็ดอย่างพร้อมกัน": "Seven jobs at once",
+    "ทำแปดอย่างพร้อมกัน": "Eight jobs at once", "ทำเก้าอย่างพร้อมกัน": "Nine jobs at once",
+    "ทำสิบอย่างพร้อมกัน": "Ten jobs at once",
     "กระถางที่ 4": "Plot 4", "กระถางที่ 5": "Plot 5", "กระถางที่ 6": "Plot 6",
     "กระถางที่ 7": "Plot 7", "กระถางที่ 8": "Plot 8", "กระถางที่ 9": "Plot 9",
 
@@ -834,6 +837,7 @@ const I18N = (() => {
     "ยังไม่คืนทุน": "not yet repaid", "กำไรสุทธิ": "net profit",
     "เอากลับ": "Take back", "ปล่อย": "Release", "พาตัวนี้ไป": "Take this one",
     "กำลังพาไป": "out with you", "คุณภาพ": "quality", "พา": "Taking", "ออกล่าด้วย": "along on hunts",
+    "ปลุกให้ฟื้น": "Revive",
     "ให้ลูก": "Give to a child",
     "ลูก": "children", "คน ออกทำงาน": "went to work",
     "ล่า": "hunted", "หาของ": "gathered", "ชิ้น": "items", "บาดเจ็บ": "hurt",
@@ -867,6 +871,22 @@ const I18N = (() => {
       "Pause game time (jobs, crops, calendar, combat)",
     "ตั้งค่า — เสียง เพลง และการแจ้งเตือน": "Settings — sound, music and notifications",
     "ออกจากโหมดเต็มจอ": "Leave fullscreen", "ขยายเต็มจอ": "Go fullscreen",
+    "กราฟิก": "Graphics",
+    "อัตราอัปเดตหน้าจอ": "Update rate",
+    "เกมนี้ไม่ได้วาดที่ 60 เฟรม/วินาที แต่เดินด้วยรอบอัปเดตวินาทีละ 4 ครั้ง ลดลงได้เพื่อให้เครื่องทำงานน้อยลง":
+      "This game has no 60fps render loop — it runs on one update cycle, 4 times a second. Lower it to make the device work less.",
+    "ความเร็วต่อสู้และการผลิตไม่เปลี่ยน ไม่ว่าจะเลือกอันไหน":
+      "Combat and production speed are identical at every setting.",
+    "ปกติ": "Normal", "ประหยัด": "Saver", "ประหยัดมาก": "Max saver",
+    "4 ครั้ง/วินาที — ลื่นที่สุด": "4 updates a second — smoothest",
+    "2 ครั้ง/วินาที": "2 updates a second",
+    "1 ครั้ง/วินาที — แถบจะขยับเป็นช่วง ๆ": "1 update a second — bars move in steps",
+    "🔋 โหมดประหยัดพลังงาน": "🔋 Power saver",
+    "ปิดพื้นหลังเบลอที่ขยับตลอดเวลา ผิวหนังการ์ด และแถบวิ่ง — พวกที่ทำงานทิ้งไว้แม้ไม่มีอะไรเกิดขึ้น เครื่องร้อนน้อยลงและแบตอยู่นานขึ้น":
+      "Turns off the drifting blurred backdrop, card sheens and running bars — the effects that keep working when nothing is happening. Cooler phone, longer battery.",
+    "ตัวเลขดาเมจ ข้อความเด้ง และเอฟเฟกต์ตอนเลเวลอัพยังอยู่ครบ — พวกนั้นบอกว่าเพิ่งเกิดอะไรขึ้น ปิดแล้วเกมจะอ่านยากกว่าเดิม":
+      "Damage numbers, toasts and level-up effects all stay — those tell you what just happened, and hiding them would make the game harder to read, not cheaper to run.",
+    "ความเร็วเกมและแถบความคืบหน้าไม่ถูกลดลง": "Game speed and progress bars are not slowed down.",
     "ทุกอย่างที่ทำมาตั้งแต่เริ่มโปรไฟล์นี้": "Everything this profile has done",
     "ทุกอันที่ปลดได้ให้โบนัสถาวรกับทั้งโปรไฟล์": "Each one unlocked is a permanent bonus for the whole profile",
     "บ้านของเรา — คู่ชีวิต ลูก และเพื่อนร่วมทาง": "Your household — partner, children and companions",

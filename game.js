@@ -806,6 +806,64 @@ function migrate(p) {
      * Nothing stored changes: a house already furnished keeps exactly the pieces it has, and the
      * new kinds simply become buyable. The version steps for the cache-buster. */
   }
+  if (p.v === 63) {
+    p.v = 64;
+    /* 🐛 [owner 2026-08-23] Companions had no rebirth floor while their owners did, so every
+     * rebirth compounded on the last and a pet decayed toward level 1 beside a child that had
+     * stopped falling. The floor is added below; this repays what the missing one already cost.
+     *
+     * Each rebirth halved, so the level lost is the level it still has: doubling restores the most
+     * recent halving, which is the one the floor would have prevented. Earlier rebirths are not
+     * reconstructed — nothing recorded what the pet was before them, and inventing a number is
+     * worse than repaying the part that can be known. The floor is then set to the restored level,
+     * so it cannot happen again. */
+    const repay = (pet) => {
+      if (!pet || pet.lvFloor != null) return;      // already carries a floor: nothing owed
+      const lv = Math.max(1, Math.min(PET_MAX_LEVEL, petLevel(pet) * 2));
+      pet.xp = Math.max(pet.xp || 0, petXpToReach(lv));
+      pet.lvFloor = Math.floor(lv / 2);
+    };
+    if ((p.rebirths || 0) > 0) {
+      for (const k of p.kids || []) repay(k.pet);
+      for (const pet of p.pets || []) repay(pet);
+    }
+  }
+  if (p.v === 64) {
+    p.v = 65;
+    /* 🐛 [owner 2026-08-23] "ไม่มีปุ่มฮีลให้ หลังมันตาย" — feeding could not reach a fainted
+     * companion, so one lost fight benched it forever. Nothing stored needs changing: a pet sitting
+     * at hp 0 becomes feedable the moment the new code runs. The version steps for the cache-buster
+     * and so a player on the old file is not left tapping a button that still cannot work. */
+  }
+  if (p.v === 65) {
+    p.v = 66;
+    /* 🎯 [owner 2026-08-23] "กดออกล่า มันบอกช่องเต็ม" — the multi ladder grew from 5 rungs to
+     * 10 and was repriced. Upgrades are stored as plain id keys, so a save keeps exactly the rungs
+     * it bought and simply sees the new ones for sale; nothing owned is revalued or refunded. */
+  }
+  if (p.v === 66) {
+    p.v = 67;
+    /* 🎯 [owner 2026-08-23] "ปรับพลังหลังจุติ ... ให้เป็น 90%" — nothing stored changes. The
+     * rule applies from the next rebirth onward; a level already reduced by an earlier halving is
+     * not retroactively topped up, because there is no record of what it was before and inventing
+     * one would hand out levels nobody earned. Existing lvFloor/rebirthFloor values were computed
+     * at 50% and are therefore LOWER than the new rule would produce, so they are harmless: both
+     * floors are applied with Math.max and simply stop binding. */
+  }
+  if (p.v === 67) {
+    p.v = 68;
+    /* Two additions, neither of which stores anything new that needs a default: the typing guard
+     * is pure runtime, and ecoMode reads through uiPref(), which treats a missing key as off. The
+     * version steps for the cache-buster — an old game.js still holding the 100-second repaint is
+     * exactly what the fix is for. */
+  }
+  if (p.v === 68) {
+    p.v = 69;
+    /* Nothing stored changes. tickMs is read through tickMs(), which validates against TICK_RATES
+     * and falls back to the default, so a save without the key — or with a rate no longer offered —
+     * simply runs at 250ms. The version steps for the cache-buster: an old game.js still carries
+     * the attack scheduler that rounded every interval up to a tick. */
+  }
   return p.v === GAME_VERSION ? p : null;
 }
 
@@ -2223,23 +2281,24 @@ function childrenRebirth() {
   /* 🎯 [owner 2026-08-23] "การจุติ ให้เหมือนพ่อ ค่า lv โดนลดตาม โจมตี ป้องกัน hp ลดตาม" — halve the
    * LEVEL and the stats follow, because they are derived from it. Same floor rule the father has:
    * a second rebirth in quick succession must never compute something lower than the last one left
-   * behind. XP is halved rather than zeroed, so an odd level keeps its remainder instead of
-   * throwing away most of a level's progress. */
+   * behind. The level is reduced rather than zeroed, and its fractional part is kept as leftover
+   * XP, so a level in progress is not thrown away. */
   for (const k of P.kids || []) {
     const wasLv = childLevel(k);
-    k.xp = Math.floor((k.xp || 0) / 2);
-    k.lvFloor = Math.max(k.lvFloor || 1, Math.floor(wasLv / 2));
+    /* Reduced through the LEVEL, like everything else a rebirth touches, not by halving the raw XP
+       the way this used to. Children ride the same curve as companions (petXpToReach, ceiling 99),
+       so the same exact-level helpers apply and the remainder survives as leftover XP. Cutting the
+       stored XP instead quietly cut something different: on a superlinear curve half the XP is not
+       half the level, so a child fell by a different amount than its father and its own pet. */
+    k.xp = petXpAtExact(petLevelExact({ xp: k.xp || 0 }) * REBIRTH_KEEP);
+    k.lvFloor = Math.max(k.lvFloor || 1, Math.floor(wasLv * REBIRTH_KEEP));
     const floorXp = petXpToReach(Math.max(1, k.lvFloor));
     if ((k.xp || 0) < floorXp) k.xp = floorXp;
     k.nextHunt = null;          // a new life, a new schedule
     /* 🎯 [owner 2026-08-23] "เมื่อจุติ pet ของลูกๆ ก็จะยังไม่หาย แต่ค่าจะเหมือน pet เราที่โดนหารครึ่ง
        ซึ่งมันตรงกับลูกเรา ที่เมื่อเราจุติ ค่าก็โดนหารครึ่ง" — the same three lines doRebirth runs on the
-       keeper, so the child's companion and the player's are halved by one rule, not two that drift. */
-    const pet = childPet(k);
-    if (pet) {
-      pet.xp = petXpAtExact(petLevelExact(pet) / 2);
-      pet.hp = petStats(pet).maxHp;      // read AFTER the xp change, or it heals to the old cap
-    }
+       keeper, so the child's companion and the player's are reduced by one rule, not two that drift. */
+    petRebirthReduce(childPet(k));
   }
 
   const repaired = P.family?.kidsRepaired;
@@ -3083,6 +3142,9 @@ function startGame(n) {
   show("#screen-game");
   // Browsers refuse to start audio before a gesture, and picking a profile is one.
   if (typeof Audio !== "undefined" && Audio.unlock) { Audio.unlock(); applySoundPrefs(); }
+  /* Before the first paint, not after: applying it later would show one frame of the full effects
+     to a player who turned them off, on the device least able to afford them. */
+  applyGraphicsPrefs();
   refreshWakeLock();
   buildSidebar();
   renderView();
@@ -3092,15 +3154,26 @@ function startGame(n) {
   if (offline) openOfflinePopup(offline);
 
   clearInterval(logicTimer);
-  logicTimer = setInterval(tick, 250);
+  startLogicTimer();
   clearInterval(autosaveTimer);
   autosaveTimer = setInterval(() => save("อัตโนมัติ"), AUTOSAVE_MINUTES * 60 * 1000);
 
   clearInterval(presenceTimer);
   if (n === 1) {
     sendPresence(document.visibilityState === "visible" && !paused);
-    presenceTimer = setInterval(
-      () => sendPresence(document.visibilityState === "visible" && !paused), 4000);
+    /* 🐛 [found 2026-08-23 while measuring what actually costs battery] This fired every 4 seconds
+     * unconditionally — 900 requests an hour, 21,600 a day — and kept firing with the tab hidden
+     * and the phone in a pocket, where it was reporting "not here" over and over. Waking the radio
+     * on a schedule costs far more battery than anything on screen does, and every one of those
+     * calls was already redundant: visibilitychange sends the state the moment it changes, which
+     * is the only moment the answer is new.
+     *
+     * Skipped rather than stopped, so nothing has to restart it: coming back to the tab fires
+     * visibilitychange, which reports the state, and the next tick resumes on its own. */
+    presenceTimer = setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      sendPresence(!paused);
+    }, 4000);
   }
 }
 
@@ -3651,17 +3724,37 @@ function releasePet(i) {
   renderView();
 }
 
-/* Feeds the companion from the SAME provision slots the player packs. */
+/* Feeds the companion from the SAME provision slots the player packs.
+ *
+ * 🐛 [owner 2026-08-23] "ไม่มีปุ่มฮีลให้ หลังมันตาย" — there WAS a button; it could never work.
+ * This read petReady(), which is defined as "carried AND hp > 0", so the one state feeding exists
+ * to undo was the one state it refused to act in. A fainted companion therefore had no way back at
+ * all: onKill also gates XP behind petReady(), so it could not level out of it either, and no
+ * daily tick restores pet HP. Measured: hp 0 stayed 0 through 30 in-game days with 99 loaves in
+ * the pack. Only a rebirth or fusing it away cleared it — permanent, from one lost fight.
+ *
+ * Both the faint toast and the pet card already told the player to feed it. The promise was right;
+ * the gate was wrong. It reads activePet() now, so "พักจนกว่าจะได้กินอาหาร" is literally true.
+ *
+ * The sit-out penalty survives: combat's own auto-eat only fires on a companion that is still
+ * standing (see the petHits block and the damage split), so nothing revives itself mid-fight.
+ * Coming back costs a deliberate tap on the button. */
 function petEat() {
-  const pet = petReady();
+  const pet = activePet();
   if (!pet) return false;
   const st = petStats(pet);
   if (pet.hp >= st.maxHp) return false;
   const idx = nextFoodSlot();
   if (idx < 0) return false;
   const id = P.food[idx];
+  const wasDown = pet.hp <= 0;
   P.inv[id] -= 1;
   pet.hp = Math.min(st.maxHp, pet.hp + ITEMS[id].heal);
+  if (wasDown) {
+    toast(`${st.icon} ${st.name} ฟื้นแล้ว — ออกสนามต่อได้ (❤️ ${pet.hp}/${st.maxHp})`, "levelup");
+    if ((P.inv[id] || 0) === 0) P.food = P.food.map((f) => (f === id ? null : f));
+    return true;
+  }
   /* 🎯 [owner 2026-08-23] "ถ้าปิด มันควรปิดค่า pet และคนกินอาหารด้วย มันระบบต่อสู้เดียวกัน" —
      eating only ever happens because something is hitting you, so it belongs to the switch that
      silences the fight rather than being unmutable on its own. */
@@ -3739,7 +3832,7 @@ function calendarTick(dtSeconds) {
    *
    * One repaint after the whole catch-up, and only for the pages a daily system actually changes.
    * Anything else is picked up when the player opens it. */
-  if (DAILY_VIEWS.has(view.kind)) renderView();
+  if (DAILY_VIEWS.has(view.kind)) renderViewAuto();
 }
 
 /* One game day passed. Kept deliberately small: each subsystem gets its own function so a new
@@ -4059,7 +4152,7 @@ function runGuildDay() {
   }
 
   if (anyHunted && P.guild.autoCollect) guildCollect(true);
-  if (view.kind === "guild") renderView();
+  if (view.kind === "guild") renderViewAuto();
 }
 
 function guildCollect(quiet = false) {
@@ -4393,7 +4486,7 @@ function runShopsDay(date) {
 }
 
 /* ---------- Rebirth (จุติ) ----------
- * Keeps achievements, keeps the whole bag, halves the three combat stats — and never drops a
+ * Keeps achievements, keeps the whole bag, reduces the three combat stats to REBIRTH_KEEP — and never drops a
  * stat below what the PREVIOUS rebirth left behind (owner's rule: a quick rebirth that would
  * compute a lower number keeps the last rebirth's value instead). That floor only ever rises,
  * so rebirthing early can waste progress but can never set you back. */
@@ -4402,20 +4495,42 @@ function rebirthPreview() {
   const out = {};
   for (const st of COMBAT_STATS) {
     const cur = statLevel(st.id);
-    /* Halve the level WITH its progress, not the whole number — level 33 becomes 16 and a half,
-     * not a bare 16. `halved` stays the displayed integer; `xpAfter` is what actually gets stored,
-     * and it is the only place the leftover survives. */
-    const exactAfter = levelExactFromXp(P.cb[st.id] || 0) / 2;
-    const halved = Math.floor(exactAfter);
+    /* Reduce the level WITH its progress, not the whole number — at REBIRTH_KEEP a level 33 becomes
+     * 29.7, which is level 29 carrying seven tenths of the next one, not a bare 29. `kept` is the
+     * displayed integer; `xpAfter` is what actually gets stored, and it is the only place the
+     * leftover survives. The owner asked for exactly this: "หากเป็นเศษ ให้แปลงเป็น exp ที่เหลือ". */
+    const exactAfter = levelExactFromXp(P.cb[st.id] || 0) * REBIRTH_KEEP;
+    const kept = Math.floor(exactAfter);
     const floor = (P.rebirthFloor || {})[st.id] || 1;
-    const after = Math.max(1, halved, floor);
-    out[st.id] = { cur, halved, floor, after, floored: floor > halved,
+    const after = Math.max(1, kept, floor);
+    out[st.id] = { cur, kept, halved: kept, floor, after, floored: floor > kept,
                    /* A floor that lifts the level also lifts the XP to that level's start: the
                     * leftover belongs to the halved figure, not to a number handed back by the
                     * floor rule. */
-                   xpAfter: after > halved ? xpToReach(after) : xpAtExactLevel(exactAfter) };
+                   xpAfter: after > kept ? xpToReach(after) : xpAtExactLevel(exactAfter) };
   }
   return out;
+}
+
+/* 🐛 [owner 2026-08-23: "รู้สึกว่า pet ของลูกหลังจุติโดน reset ขั้น 1 มันผิด มันควรหารครึ่ง"]
+ *
+ * Each rebirth halved correctly — measured 4 → 2 on his own save. What was missing is the FLOOR the
+ * child itself has had since "จุติเร็วเกินไปไม่ทำให้สเตตัสต่ำลง": a child never drops below half its
+ * best-ever level, so it settles. Its companion had no such rule, so halving compounded — a level-32
+ * pet beside a level-32 child went 16, 8, 4, 2, 1 across five rebirths while the child stopped at
+ * 16. Correct arithmetic each time, and a reset in effect.
+ *
+ * One function for the player's kept companion and for a child's, because the owner's rule for the
+ * child's pet is that it matches the player's ("ค่าจะเหมือน pet เราที่โดนหารครึ่ง") and two copies
+ * would drift the moment either is retuned. */
+function petRebirthReduce(pet) {
+  if (!pet) return;
+  const wasLv = petLevel(pet);
+  pet.lvFloor = Math.max(pet.lvFloor || 1, Math.floor(wasLv * REBIRTH_KEEP));
+  const kept = petXpAtExact(petLevelExact(pet) * REBIRTH_KEEP);
+  const floorXp = petXpToReach(Math.max(1, Math.min(PET_MAX_LEVEL, pet.lvFloor)));
+  pet.xp = Math.max(kept, floorXp);
+  pet.hp = petStats(pet).maxHp;          // read AFTER the xp change, or it heals to the old cap
 }
 
 /* The pet a rebirth would carry over, or null. Read by the rebirth screen as well as by doRebirth,
@@ -4543,15 +4658,14 @@ function doRebirth() {
   if (P.bank) P.bank.yearInterest = 0;   // the year it belonged to no longer exists
   /* Staff keep the seniority and loyalty they earned — the business did not start over. */
   for (const sh of P.shops || []) for (const w of sh.staff || []) w.hiredDay -= clockShift;
-  /* The companion you were fielding comes with you if it earned the right to, and it is halved the
+  /* The companion you were fielding comes with you if it earned the right to, and it is reduced the
    * same way you are — a rebirth for it too, not a free ride. Everything else is released. */
   const keeper = petRebirthKeeper();
   const released = P.pets.length - (keeper ? 1 : 0);
   let keptPet = null;
   if (keeper) {
     const wasLv = petLevel(keeper);
-    keeper.xp = petXpAtExact(petLevelExact(keeper) / 2);   // odd levels keep the leftover half
-    keeper.hp = petStats(keeper).maxHp;   // read AFTER the xp change, or it heals to the old cap
+    petRebirthReduce(keeper);              // the fractional level survives as XP; a floor stops the decay
     keptPet = { st: petStats(keeper), wasLv };
     P.pets = [keeper];
     P.activePet = 0;
@@ -4856,6 +4970,9 @@ function sellCoin(id, units) {
   const px = coinPrice(id);
   const got = Math.floor(px * units);
   const basis = coinCost(id) * units;
+  /* no-goldBonus: this is a liquidation at market price, not gold FOUND. Paying a gold perk on it
+     would make a buy-then-sell round trip profitable by the size of the perk alone — an infinite
+     money printer that needs no market movement at all. Same rule as selling shares and property. */
   P.gold += got;
   const left = coinHeld(id) - units;
   if (left > 0) P.coins[id] = { units: left, cost: coinCost(id) };   // average survives a part sale
@@ -5683,7 +5800,7 @@ function skillTick(now, slotIdx) {
     if (mAfter > mBefore) toast(`⭐ ชำนาญ "${action.name}" ขั้น ${mAfter} — เร็วขึ้น ของหายากดรอปง่ายขึ้น`, "levelup", "level");
     refreshSidebar();
     renderInventory();
-    if (a > b) renderView();
+    if (a > b) renderViewAuto();
     else updateMasteryBar(skillId, actionId);
     updateProgressBars(slotIdx, 0);
     return;
@@ -5750,7 +5867,7 @@ function skillTick(now, slotIdx) {
   rollEvent(skillId, actionId);
   refreshSidebar();
   renderInventory();
-  if (after > before || mAfter > mBefore || action.inputs) renderView();
+  if (after > before || mAfter > mBefore || action.inputs) renderViewAuto();
   else updateMasteryBar(skillId, actionId);   // no re-render this cycle — repaint the bar in place
   updateProgressBars(slotIdx, 0);
 }
@@ -5839,6 +5956,29 @@ function tryEat(auto) {
   return true;
 }
 
+/* 🐛 [owner 2026-08-23, while asking for an FPS setting to save battery] Attack scheduling
+ * used to be `next = now + interval`, and `now` is whatever moment the 250ms tick happened to land
+ * on — so every interval was silently rounded UP to the next tick. Measured against this game's ten
+ * real attack intervals: 2.9% of all damage lost on average, 7.1% on the worst one, for the whole
+ * history of the game. Nobody could see it; it just meant a 2.8s weapon swung every 3.0s.
+ *
+ * Worse for what was being asked for: the loss scales with the tick, so a slower tick to save
+ * battery would have quietly bought that battery with damage — 6.4% average at 500ms, 13.6% at
+ * 1000ms. A setting that costs you damage without saying so is not a setting, it is a nerf.
+ *
+ * Carrying the remainder instead of discarding it decouples the two: the average rate is now exact
+ * whatever the tick rate is, so the battery setting is genuinely free AND the existing 250ms tick
+ * gets its 2.9% back.
+ *
+ * The clamp is what stops that from becoming a different bug. A backgrounded tab throttles timers
+ * to once a minute or stops them, and on return an uncarried schedule would be minutes behind and
+ * fire every queued attack in one tick. Falling more than one full interval behind re-bases, which
+ * is the old behaviour exactly where the old behaviour was right. */
+function nextAt(prev, now, interval) {
+  const carried = prev + interval;
+  return now - carried > interval ? now + interval : carried;
+}
+
 function combatTick(now, slotIdx) {
   const C = slotRT(slotIdx).fight;
   noteActivity(`combat:${C.locId}:${C.stageIdx}`);
@@ -5854,7 +5994,7 @@ function combatTick(now, slotIdx) {
     const dmg = Math.max(1, Math.round(totalDmg() * rand(0.7, 1.3) * armorMult()));
     C.monHp -= dmg;
     C.streak++;
-    C.pNext = now + PLAYER_ATTACK_INTERVAL * 1000;
+    C.pNext = nextAt(C.pNext, now, PLAYER_ATTACK_INTERVAL * 1000);
     hitFx("#f-mon", dmg, "dmg-out");
     if (traits.armored && C.streak === traits.armored.hits) toast(`🛡️ เกราะของ ${stage.name} แตกแล้ว!`, "", "combat");
     if (C.monHp <= 0) { onKill(loc, stage, C, slotIdx); return; }
@@ -5882,7 +6022,7 @@ function combatTick(now, slotIdx) {
       pdmg += Math.max(1, Math.round(ps.atk * rand(0.7, 1.3) * armorMult() * mult));
     }
     C.monHp -= pdmg;
-    C.petNext = now + petAttackInterval(ps.lv);
+    C.petNext = nextAt(C.petNext, now, petAttackInterval(ps.lv));
     hitFx("#f-mon", pdmg, "dmg-pet");
     if (combo) toast(`${combo.icon} ${ps.name} ปล่อย${combo.name}! ${pdmg} ดาเมจ`, "", "combat");
     else if (heavy) toast(`${heavy.icon} ${ps.name} ปล่อย${heavy.name}! ${pdmg} ดาเมจ`, "", "combat");
@@ -5926,7 +6066,7 @@ function combatTick(now, slotIdx) {
     const fear = baneDamageMult(C.locId, C.stageIdx);
     const raw = Math.max(1, Math.round(stage.dmg * rand(0.7, 1.3) * rage * fear));
     C.streak = 0;                       // being hit resets the armour-breaking streak
-    C.mNext = now + stage.interval * 1000;
+    C.mNext = nextAt(C.mNext, now, stage.interval * 1000);
 
     // A living companion soaks a share of the blow against its own defence and HP.
     let toPlayer = raw;
@@ -6054,7 +6194,7 @@ function onKill(loc, stage, C, slotIdx) {
   C.enraged = false;
   refreshSidebar();
   renderInventory();
-  if (after > before || P.kills[key] === KILLS_TO_UNLOCK_NEXT_STAGE) renderView();
+  if (after > before || P.kills[key] === KILLS_TO_UNLOCK_NEXT_STAGE) renderViewAuto();
   updateCombatPanel();
   updateTopbar();
 }
@@ -6103,7 +6243,7 @@ function tick() {
       P.trader = null;
       toast("🧙 พ่อค้าเร่เก็บแผงเดินทางต่อแล้ว", "", "trader");
       refreshSidebar();
-      if (view.kind === "shop") renderView();
+      if (view.kind === "shop") renderViewAuto();
     } else {
       const clock = $("#trader-clock");
       if (clock) clock.textContent = traderSecondsLeft();
@@ -6441,7 +6581,7 @@ function vitalsModel() {
       // max HP does not, because gear, charms and achievement perks survive. Two numbers that look
       // contradictory need the explanation next to the rule, not next to the styling.
       title: COMBAT_STATS.map((st) => `${st.icon} ${st.name} ${statLevel(st.id)}`).join(" · ")
-        + (P.rebirths ? `\nจุติมาแล้ว ${P.rebirths} ครั้ง — เลเวลถูกหารครึ่ง แต่ของสวมใส่ เครื่องราง`
+        + (P.rebirths ? `\nจุติมาแล้ว ${P.rebirths} ครั้ง — เลเวลเหลือ ${Math.round(REBIRTH_KEEP * 100)}% แต่ของสวมใส่ เครื่องราง`
                       + ` และโบนัสความสำเร็จไม่หาย เลือดสูงสุดจึงไม่ลดตามเลเวล` : ""),
     },
     gold: { text: `${P.gold < 0 ? "-" : ""}${fmtNum(Math.abs(P.gold))}`, debt: P.gold < 0 },
@@ -6627,7 +6767,7 @@ function updateTopbar() {
   if (lvlChip) {
     lvlChip.textContent = `⚔️ lv ${combatLevel()}`;
     lvlChip.title = COMBAT_STATS.map((st) => `${st.icon} ${st.name} ${statLevel(st.id)}`).join(" · ")
-      + (P.rebirths ? `\nจุติมาแล้ว ${P.rebirths} ครั้ง — เลเวลถูกหารครึ่ง แต่ของสวมใส่ เครื่องราง`
+      + (P.rebirths ? `\nจุติมาแล้ว ${P.rebirths} ครั้ง — เลเวลเหลือ ${Math.round(REBIRTH_KEEP * 100)}% แต่ของสวมใส่ เครื่องราง`
                     + ` และโบนัสความสำเร็จไม่หาย เลือดสูงสุดจึงไม่ลดตามเลเวล` : "");
   }
   const bagCount = $("#bag-count");
@@ -7167,6 +7307,65 @@ function renderFamily() {
 
   $("#action-grid").querySelectorAll("[data-train]").forEach((b) => {
     b.onclick = () => { if (trainChild(b.dataset.train, b.dataset.track)) renderView(); };
+  });
+}
+
+/* 🐛 [owner 2026-08-23] "ในตอนพิมพ์ เช่น จะฝากเงิน หรือ จะขายของ พิมพ์ตัวเลขได้ แต่ซักพัก
+ * ตัวเลขจะหาย ทำให้บางทีพิมพ์ไม่ครบ"
+ *
+ * Not the notifications — a repaint. Every page rebuild does `grid.innerHTML = ""`, which destroys
+ * the <input> node along with whatever is half-typed in it. The bank page is rebuilt on a TIMER:
+ * calendarTick fires a render once per game-day, and a game-day is 100 real seconds, so an amount
+ * being typed had a fixed deadline nobody could see. On a phone it is worse than losing the digits
+ * — rebuilding the focused element under an open keyboard makes the keyboard drop too, so the
+ * rest of what you type goes nowhere.
+ *
+ * The rule is about WHO asked for the repaint. A render the player caused — pressing ฝาก, opening
+ * a tab, buying something — must always run: they are looking at the result of their own action.
+ * A render the CLOCK caused must not interrupt them mid-number. So the automatic ones come through
+ * here, and while a text field has focus they are held and replayed the moment it is released.
+ *
+ * Held, not dropped: `renderPending` is what makes this different from simply skipping. Whatever
+ * the day did — interest, dividends, a new share price — is on screen as soon as the field is no
+ * longer being typed in. */
+let renderPending = false;
+
+/* Only fields you TYPE into. A checkbox or a button holding focus is not someone entering a value,
+   and blocking a daily repaint for the rest of the session because a checkbox was clicked would be
+   a worse bug than the one this fixes. */
+function isTypingInField() {
+  const el = document.activeElement;
+  if (!el) return false;
+  const tag = (el.tagName || "").toLowerCase();
+  if (tag === "textarea") return true;
+  if (tag !== "input") return false;
+  const type = (el.type || "text").toLowerCase();
+  return type === "number" || type === "text" || type === "search" || type === "tel";
+}
+
+function renderViewAuto() {
+  if (isTypingInField()) { renderPending = true; return; }
+  renderPending = false;
+  renderView();
+}
+
+/* The replay: run the render the clock asked for, now that nobody is typing. */
+function flushPendingRender() {
+  if (!renderPending || isTypingInField()) return;
+  renderPending = false;
+  if (P && !P.dead) renderView();
+}
+
+/* focusout fires as the field is released — including when the player taps ฝาก on the same page,
+   which is exactly when they want to see the current numbers.
+
+   The deferral to the next frame is load-bearing, not tidiness: focusout fires BEFORE click, so
+   repainting on the blur itself would rebuild the page — button included — out from under a tap
+   that has not landed yet, and the deposit would simply not happen. Fixing a lost number by
+   swallowing the button press would be the worse bug. */
+if (typeof document !== "undefined" && document.addEventListener) {
+  document.addEventListener("focusout", () => {
+    if (renderPending) setTimeout(flushPendingRender, 0);
   });
 }
 
@@ -9166,14 +9365,14 @@ function renderRebirth() {
       <!-- 🎯 [owner 2026-08-23] "ค่าที่แสดงมากกว่าจุติเดิม มันควรเป็นสีเขียวไม่ใช่สีแดง · ค่าที่จุติ
            แล้วค่าต่ำ ได้ค่าจุติเดิม ควรเป็นสีแดง · สีมันสลับกัน" — and they were, exactly.
 
-           floored means halving landed BELOW the floor the last rebirth left, so this run hands
-           back the old number: no progress, red. Not floored means the halved level clears that
+           floored means the reduction landed BELOW the floor the last rebirth left, so this run
+           hands back the old number: no progress, red. Not floored means the kept level clears that
            floor and becomes a new, higher one: green. The colours had been written the other way
            round, reading "the floor caught you" as the good outcome. -->
       <span class="rb-num ${r.floored ? "bad" : "good"}">${r.after}</span>
       <span class="rb-note">${r.floored
-        ? `หารครึ่งได้ ${r.halved} ซึ่งต่ำกว่าพื้นเดิม จึงคงไว้ที่ ${r.floor}`
-        : `หารครึ่งจาก ${r.cur} · พื้นใหม่จะเป็น ${r.after}`}</span>
+        ? `เหลือ ${r.kept} ซึ่งต่ำกว่าพื้นเดิม จึงคงไว้ที่ ${r.floor}`
+        : `เก็บ ${Math.round(REBIRTH_KEEP * 100)}% จาก ${r.cur} · พื้นใหม่จะเป็น ${r.after}`}</span>
     </div>`;
   }).join("");
   card.innerHTML = `
@@ -9184,7 +9383,7 @@ function renderRebirth() {
       <b class="good">เลเวลอาชีพทุกสายอยู่ครบ:</b> ${SKILLS.map((sk) =>
         `${sk.icon} ${escapeHtml(sk.name)} ${levelFromXp(P.xp[sk.id] || 0)}`).join(" · ")}
       — ความชำนาญที่สะสมไว้ไม่หายไปไหน รอบใหม่ไม่ต้องไต่ใหม่ทั้งหมด แค่ต้องหาเงินใหม่<br>
-      <b>สิ่งที่ลดลง:</b> ค่าสเตตัสการล่าทั้งสามช่อง หารครึ่ง<br>
+      <b>สิ่งที่ลดลง:</b> ค่าสเตตัสการล่าทั้งสามช่อง เหลือ ${Math.round(REBIRTH_KEEP * 100)}% · ลูกและสัตว์เลี้ยงที่ตามไปด้วยก็เหลือเท่ากัน · เศษของเลเวลเก็บไว้เป็น XP ค้าง ไม่ทิ้ง<br>
       <b class="bad">สิ่งที่หายไปทั้งหมด:</b> 🐾 สัตว์เลี้ยงทุกตัวถูกปล่อยคืนธรรมชาติ ·
       💰 <b class="bad">${T("ทองในมือ")}</b> · 📈 <b class="bad">${T("หุ้นทุกตัว")}</b>
       — เงินติดตัวได้เฉพาะที่อยู่ในธนาคาร ถ้าจะจุติ <b>${T("ต้องขายแล้วเอาไปฝากก่อน")}</b><br>
@@ -9193,7 +9392,7 @@ function renderRebirth() {
     </div>
     ${rows}
     <div class="detail">
-      พื้นการจุติจะไม่มีวันต่ำลง — ถ้าจุติเร็วเกินไปจนหารครึ่งแล้วได้น้อยกว่าครั้งก่อน
+      พื้นการจุติจะไม่มีวันต่ำลง — ถ้าจุติเร็วเกินไปจนลดแล้วได้น้อยกว่าครั้งก่อน
       ระบบจะคงค่าของการจุติครั้งล่าสุดไว้ให้ ${canRebirth() ? "" : `<br><b>ต้องถึงเลเวลรวม ${rebirthGate()} ก่อน (ตอนนี้ ${combatLevel()})</b>`}
     </div>
     <div class="cd-actions">
@@ -9493,7 +9692,9 @@ function renderPetPanel(extra) {
                  ${picked ? "✓ เลือกแล้ว" : "เลือกผสม"}</button>`
             : `<button class="btn small" data-pet="${i}">${i === P.activePet ? "กำลังพาไป" : "พาตัวนี้ไป"}</button>
                ${i === P.activePet ? `<button class="btn ghost small" data-rest="${i}">😴 ให้พัก</button>` : ""}
-               ${pet.hp < st.maxHp ? `<button class="btn ghost small" data-feed="${i}">🍴 ให้อาหาร</button>` : ""}
+               ${pet.hp <= 0
+                 ? `<button class="btn small revive" data-feed="${i}">🍖 ${T("ปลุกให้ฟื้น")}</button>`
+                 : pet.hp < st.maxHp ? `<button class="btn ghost small" data-feed="${i}">🍴 ให้อาหาร</button>` : ""}
                ${childPetHeir() ? `<button class="btn ghost small" data-givekid="${i}">🎁 ${T("ให้ลูก")}</button>` : ""}
                <button class="btn ghost small" data-release="${i}">🕊️ ปล่อย</button>`}
         </div>`;
@@ -9590,7 +9791,7 @@ function renderPetPanel(extra) {
     if (!confirm(`ให้ ${st.name} (ขั้น ${st.lv} · คุณภาพ ${st.grade.name}) กับ ${heir.name}?\n\n`
         + `· ${heir.name} จะพามันออกล่าทุกวัน และมันจะขึ้นขั้นไปด้วย\n`
         + `· ออกจากคอกของคุณถาวร เอากลับมาไม่ได้\n`
-        + `· จุติแล้วมันไม่หาย แต่ค่าจะโดนหารครึ่งเหมือนลูก`)) return;
+        + `· จุติแล้วมันไม่หาย แต่จะเหลือ ${Math.round(REBIRTH_KEEP * 100)}% เหมือนลูก`)) return;
     givePetToChild(i);
     toast(`🎁 ${st.icon} ${st.name} ไปอยู่กับ ${heir.name} แล้ว — ออกล่าด้วยกันตั้งแต่พรุ่งนี้`, "levelup", "family");
     save("ให้สัตว์เลี้ยงกับลูก");
@@ -10222,6 +10423,52 @@ function soundPref(key, fallback) {
   if (!P || !P.ui || P.ui[key] === undefined) return fallback;
   return !!P.ui[key];
 }
+/* 🎯 [owner 2026-08-23] "ในปุ่มตั้งค่า มีปรับค่ากราฟิก โหมดประหยัดพลังงาน อาจลดเอฟเฟกต์ต่างๆ"
+ *
+ * One switch, not a slider with three quality tiers — there is exactly one decision here ("make the
+ * phone work less") and every extra step would be a setting the player has to form an opinion about.
+ *
+ * What it turns off is chosen by COST, not by how decorative it looks. The expensive things in this
+ * page are the ones that never stop: a full-viewport blurred backdrop animating on a 46-second loop,
+ * a grain layer over the top of it, and the sheens and pulses that run `infinite` on cards, bars and
+ * tabs. A blurred element the size of the screen is re-composited every frame it moves, which is the
+ * single most expensive thing a CSS page can ask a phone to do, and it is doing it whether or not
+ * anything is happening in the game.
+ *
+ * What it keeps is everything that ANSWERS something: damage numbers, the hit shake, toasts, the
+ * level-up flash. Those are short, they fire because you did something, and removing them would make
+ * the game harder to read rather than cheaper to run — a power saver that hides what just happened
+ * has stopped being a graphics setting.
+ *
+ * The tick rate is deliberately untouched. The game still simulates at 250ms and progress bars still
+ * move at full smoothness; this saves GPU compositing, not simulation. Saying so matters, because a
+ * "power saving" toggle that quietly slowed the game down would be a different feature. */
+function ecoOn() { return uiPref("ecoMode"); }
+
+/* The tick rate the player chose, validated against the table rather than trusted: a save carrying
+   a number that is no longer offered would otherwise set the game to it forever. */
+function tickMs() {
+  const want = P && P.ui && P.ui.tickMs;
+  return TICK_RATES.some((r) => r.ms === want) ? want : TICK_MS_DEFAULT;
+}
+
+function startLogicTimer() {
+  if (logicTimer) clearInterval(logicTimer);
+  logicTimer = setInterval(tick, tickMs());
+}
+
+function applyGraphicsPrefs() {
+  const el = typeof document !== "undefined" && document.documentElement;
+  if (!el || !el.classList) return;      // headless DOM, and nothing to paint anyway
+  el.classList.toggle("eco", ecoOn());
+  /* Progress bars are smoothed by a CSS transition between ticks. At 250ms the default lengths
+     hide the steps; at 1000ms they finish long before the next update and the bar visibly stops
+     and jumps. Lengthening the transition to match the rate is what keeps a slower tick reading as
+     "slower updates" rather than "the game is stuttering". */
+  el.classList.toggle("tick-slow", tickMs() >= 500);
+  el.classList.toggle("tick-slowest", tickMs() >= 1000);
+}
+
 function applySoundPrefs() {
   if (typeof Audio === "undefined" || !Audio.available || !Audio.available()) return;
   Audio.setSfx(soundPref("sfxOn", true));
@@ -10752,6 +10999,22 @@ function openSettings() {
               : "เบราว์เซอร์นี้ไม่รองรับ"}</span>
         </label>
       </div>
+      <div class="modal-head" style="font-size:16px; margin-top:18px">${T("กราฟิก")}</div>
+      <div class="modal-sub">${T("อัตราอัปเดตหน้าจอ")} — ${T("เกมนี้ไม่ได้วาดที่ 60 เฟรม/วินาที แต่เดินด้วยรอบอัปเดตวินาทีละ 4 ครั้ง ลดลงได้เพื่อให้เครื่องทำงานน้อยลง")}<br><b>${T("ความเร็วต่อสู้และการผลิตไม่เปลี่ยน ไม่ว่าจะเลือกอันไหน")}</b></div>
+      <div class="lang-row">
+        ${TICK_RATES.map((r) => `<button class="btn lang-btn${tickMs() === r.ms ? " primary" : ""}" data-tick="${r.ms}"
+          title="${escapeHtml(T(r.note))}">${T(r.name)}</button>`).join("")}
+      </div>
+      <div class="modal-sub">${escapeHtml(T(TICK_RATES.find((r) => r.ms === tickMs()).note))}</div>
+
+      <div class="notif-list">
+        <label class="notif-row">
+          <input type="checkbox" data-gfx="ecoMode"${ecoOn() ? " checked" : ""}>
+          <span class="notif-name">${T("🔋 โหมดประหยัดพลังงาน")}</span>
+          <span class="notif-note">${T("ปิดพื้นหลังเบลอที่ขยับตลอดเวลา ผิวหนังการ์ด และแถบวิ่ง — พวกที่ทำงานทิ้งไว้แม้ไม่มีอะไรเกิดขึ้น เครื่องร้อนน้อยลงและแบตอยู่นานขึ้น")}<br>${T("ตัวเลขดาเมจ ข้อความเด้ง และเอฟเฟกต์ตอนเลเวลอัพยังอยู่ครบ — พวกนั้นบอกว่าเพิ่งเกิดอะไรขึ้น ปิดแล้วเกมจะอ่านยากกว่าเดิม")}<br>${T("ความเร็วเกมและแถบความคืบหน้าไม่ถูกลดลง")}</span>
+        </label>
+      </div>
+
       <div class="modal-actions">
         <button class="btn ghost" data-notif-all="off">${T("ปิดทั้งหมด")}</button>
         <button class="btn ghost" data-notif-all="on">${T("เปิดทั้งหมด")}</button>
@@ -10772,6 +11035,23 @@ function openSettings() {
       // Play the thing being switched on, so the tick is its own confirmation. Switching music on
       // is otherwise silent for up to a second, which reads as a control that did nothing.
       if (el.checked && el.dataset.sound === "sfxOn") Audio.play("gain");
+    };
+  });
+  back.querySelectorAll("[data-tick]").forEach((b) => b.onclick = () => {
+    P.ui = P.ui || {};
+    P.ui.tickMs = Number(b.dataset.tick);
+    startLogicTimer();
+    applyGraphicsPrefs();
+    save("ตั้งค่าอัตราอัปเดต");
+    back.remove();
+    openSettings();            // reopen so the selected button shows as selected
+  });
+  back.querySelectorAll("[data-gfx]").forEach((el) => {
+    el.onchange = () => {
+      P.ui = P.ui || {};
+      P.ui[el.dataset.gfx] = el.checked;
+      applyGraphicsPrefs();          // takes effect behind the open panel, so the switch shows its own result
+      save("ตั้งค่ากราฟิก");
     };
   });
   back.querySelectorAll("[data-lang]").forEach((b) => b.onclick = () => {
