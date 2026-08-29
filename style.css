@@ -71,6 +71,16 @@ body {
 .btn.ghost { background: transparent; border: 1px solid var(--line); color: var(--text-dim); }
 .btn.ghost:hover { border-color: var(--danger); color: var(--danger); }
 .btn.small { padding: 6px 12px; font-size: 13px; }
+/* 🐛 [audit 2026-08-28] `class="btn primary"` was on the propose-marriage button and styled by
+ * nothing, so the one action that opens the entire family line — marriage, then children — looked
+ * exactly like the gift button beside it. Verified before styling it that the chain itself works:
+ * propose records the spouse, the birth roll produces a child, and the child's record names its
+ * mother. Only the emphasis was missing.
+ *
+ * Follows .btn.revive's shape (swap the background for a semantic colour, leave everything else),
+ * rather than introducing a second button language. The rose reads as the romance line the way
+ * .grade-ss's pink already does elsewhere. */
+.btn.primary { background: linear-gradient(120deg, #ff9ad2, #d95fa4); color: #2a0a1d; }
 .btn:disabled { filter: grayscale(.8) brightness(.7); cursor: not-allowed; }
 
 /* ---------- Game layout ---------- */

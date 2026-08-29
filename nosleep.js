@@ -78,6 +78,15 @@ const NoSleepVideo = (() => {
 
   async function attempt() {
     const v = element();
+    // 🐛 [2026-08-28] Unmuted FIRST, every time. The muted fallback below sets `v.muted = true` and
+    // nothing ever set it back, so one early refusal — the ordinary case, since the first attempt
+    // happens before any gesture — latched the element muted for the rest of the session. Every
+    // later retry then "succeeded" while muted, cleared lastError, and status() reported the
+    // fallback as working. Muted playback is exactly the case Android ignores, which is the
+    // original complaint ("จอกันดับยังใช้ไม่ได้", reported three times) coming back by a second
+    // route. Reproduced in a stub: after the gesture retry the element was playing, muted, and
+    // reporting no error.
+    v.muted = false;
     try {
       await v.play();
       lastError = "";

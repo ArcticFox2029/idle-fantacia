@@ -50,9 +50,17 @@ const I18N_TABLES = () => [
   MOMENTUM_TIERS, EVENTS, VILLAGERS, REL_STAGES, REL_BONUS, CHILD_TRACKS, TITLES,
   ACHIEVEMENTS, ARMOR_SETS, SLAYER_TIERS, SLAYER_REWARDS, ELITE_MODES,
   COMBAT_STATS, AUTO_EAT_OPTIONS, PET_SPECIES, PET_GRADES, COMPANY_SIZES, COMPANIES,
-  SHOP_TYPES, SHOP_TIERS, STAFF_ROLES, PROPERTIES, FURNITURE, TAX_KINDS, AUTO_CATEGORIES,
+  SHOP_TYPES, SHOP_TIERS, STAFF_ROLES, PROPERTIES, FURNITURE, TAX_KINDS,
   GUILD_TIERS, GUILD_RANKS, NOTIF_KINDS, CRYPTOS,
 ];
+/* 🐛 [audit-qa 2026-08-28] AUTO_CATEGORIES used to be on that list and must NOT go back on it.
+ * Its `name` is not display text — it is the bag's IDENTITY. `categoryOf()` returns it, `invTab`
+ * holds it, and `P.itemCat[itemId]` writes it into the save. Translating those names in place
+ * therefore rewrote the key while the copies of it did not move: with the ปลา tab open, switching
+ * to English left invTab = "ปลา" against a tab now called "Fish", so the bag rendered
+ * "หมวดนี้ยังว่าง" with three fish in it; and an item filed by hand in English kept "Food" in the
+ * save, which no Thai tab ever shows again. The names are translated at DISPLAY time through T()
+ * instead — see activeTabs()/catOptions() — so the identity stays Thai in every language. */
 
 /* Short name for the one call every hand-written UI string goes through. */
 function T(s) { return typeof I18N === "undefined" ? s : I18N.t(s); }
@@ -693,10 +701,6 @@ function migrate(p) {
      *
      * The version still moves: ?v= in index.html is the only cache-buster the published site has,
      * and this batch changed game.js heavily. */
-  }
-  if (p.v === 52) {
-    p.v = 53;
-    /* Nothing to move — the version stepped for the cache-buster while this batch was in flight. */
   }
   if (p.v === 53) {
     p.v = 54;
@@ -7464,7 +7468,7 @@ function statBadge(item) {
   if (item.dmg) bits.push(`🗡️+${item.dmg}`);
   if (item.def) bits.push(`🛡️+${item.def}`);
   if (item.hpBonus) bits.push(`❤️+${item.hpBonus}`);
-  if (item.heal) bits.push(`❤️ฟื้น ${item.heal}`);
+  if (item.heal) bits.push(`❤️${T("ฟื้น")} ${item.heal}`);
   return bits.join(" ");
 }
 
@@ -7947,19 +7951,10 @@ function sellProperty(i) {
   save("ขายอสังหา");
 }
 
-function canPayCost(cost) {
-  return Object.entries(cost).every(([id, n]) => sellableCount(id) >= n);
-}
-function payCost(cost) {
-  for (const [id, n] of Object.entries(cost)) {
-    P.inv[id] -= n;
-    if (P.inv[id] <= 0) delete P.inv[id];
-  }
-}
-function costText(cost) {
-  return Object.entries(cost).map(([id, n]) =>
-    `${ITEMS[id].icon} ${escapeHtml(ITEMS[id].name)} ${sellableCount(id)}/${n}`).join(" · ");
-}
+// [removed 2026-08-25] canPayCost / payCost / costText lived here — a complete item-cost payment
+// helper set (check you can afford it, spend the items, render the requirement) that nothing called.
+// Every cost the game actually charges is gold (P.gold -= ...), not inventory items. Removed as a
+// set: leaving one of the three would read as a system that is still half wired up.
 
 function installFurniture(i, fid) {
   const es = P.estates[i];
@@ -10892,7 +10887,7 @@ function activeTabs() {
   const holding = Object.entries(P.inv).filter(([, n]) => n > 0).map(([id]) => id);
   const autos = AUTO_CATEGORIES
     .filter((c) => holding.some((id) => categoryOf(id) === c.name))
-    .map((c) => ({ label: `${c.icon} ${c.name}`, name: c.name }));
+    .map((c) => ({ label: `${c.icon} ${T(c.name)}`, name: c.name }));
   return [...autos, ...P.cats.map((c) => ({ label: c, name: c }))];
 }
 
@@ -10903,13 +10898,13 @@ function renderInvTabs() {
   const tab = (t) =>
     `<button class="inv-tab${t.name === invTab ? " active" : ""}" data-tab="${escapeHtml(t.name)}">${escapeHtml(t.label)}</button>`;
   bar.innerHTML = activeTabs().map(tab).join("")
-    + `<button class="inv-tab add" id="inv-add">+ หมวดใหม่</button>`
-    + (junkOnHand().n ? `<button class="inv-tab junk" id="inv-junk">🗑️ ขายขยะทั้งหมด (${junkOnHand().n} ชิ้น / ${junkOnHand().gold.toLocaleString()} 💰)</button>` : "")
-    + tab({ label: "ทั้งหมด", name: "ทั้งหมด" })
+    + `<button class="inv-tab add" id="inv-add">+ ${T("หมวดใหม่")}</button>`
+    + (junkOnHand().n ? `<button class="inv-tab junk" id="inv-junk">🗑️ ${T("ขายขยะทั้งหมด")} (${junkOnHand().n} ${T("ชิ้น")} / ${junkOnHand().gold.toLocaleString()} 💰)</button>` : "")
+    + tab({ label: T("ทั้งหมด"), name: "ทั้งหมด" })
     + (P.cats.includes(invTab) ? `<button class="inv-tab del" id="inv-del">${T("ลบหมวดนี้")}</button>` : "");
   bar.querySelectorAll("[data-tab]").forEach((b) => b.onclick = () => { invTab = b.dataset.tab; renderInventory(); });
   $("#inv-add").onclick = () => {
-    const name = (prompt("ตั้งชื่อหมวดใหม่ (เช่น ของขาย / เก็บไว้คราฟต์)") || "").trim();
+    const name = (prompt(T("ตั้งชื่อหมวดใหม่ (เช่น ของขาย / เก็บไว้คราฟต์)")) || "").trim();
     if (!name || P.cats.includes(name) || name === "ทั้งหมด"
         || AUTO_CATEGORIES.some((c) => c.name === name)) return;
     P.cats.push(name);
@@ -10956,7 +10951,7 @@ function renderInventory() {
   const entries = Object.entries(P.inv).filter(([id, n]) =>
     n > 0 && (invTab === "ทั้งหมด" || categoryOf(id) === invTab));
   if (!entries.length) {
-    grid.innerHTML = `<div class="inv-empty">${invTab === "ทั้งหมด" ? "ยังไม่มีของ — เริ่มเก็บวัตถุดิบกันเลย" : "หมวดนี้ยังว่าง"}</div>`;
+    grid.innerHTML = `<div class="inv-empty">${T(invTab === "ทั้งหมด" ? "ยังไม่มีของ — เริ่มเก็บวัตถุดิบกันเลย" : "หมวดนี้ยังว่าง")}</div>`;
     return;
   }
   grid.innerHTML = "";
@@ -10964,8 +10959,12 @@ function renderInventory() {
     const cur = P.itemCat[id];
     const auto = AUTO_CATEGORIES.find((c) => c.match(id, ITEMS[id]));
     const names = [...AUTO_CATEGORIES.map((c) => c.name), ...P.cats];
-    return [`<option value="">${auto ? `อัตโนมัติ · ${auto.name}` : "ไม่จัดหมวด"}</option>`,
-      ...names.map((c) => `<option value="${escapeHtml(c)}" ${cur === c ? "selected" : ""}>${escapeHtml(c)}</option>`)].join("");
+    /* The VALUE is the Thai name — that is the identity the save keeps (see the note beside
+     * I18N_TABLES). Only the label a player reads goes through T(). A hand-made category is not in
+     * the dictionary, so T() returns it untouched, which is what should happen to the player's own
+     * words. */
+    return [`<option value="">${auto ? `${T("อัตโนมัติ")} · ${T(auto.name)}` : T("ไม่จัดหมวด")}</option>`,
+      ...names.map((c) => `<option value="${escapeHtml(c)}" ${cur === c ? "selected" : ""}>${escapeHtml(T(c))}</option>`)].join("");
   };
   for (const [id, n] of entries) {
     const item = ITEMS[id];
@@ -10976,11 +10975,11 @@ function renderInventory() {
       <div class="icon">${iconArt("item", id, item.icon, item.name)}</div>
       <div class="inv-main">
         <div class="nm">${item.name}</div>
-        <div class="sell">ขาย ${item.sell} 💰${badge ? " · " + badge : ""}</div>
+        <div class="sell">${T("ขาย")} ${item.sell} 💰${badge ? " · " + badge : ""}</div>
         <select class="cat-pick" data-cat="${id}">${catOptions(id)}</select>
       </div>
       <div class="inv-side">
-        <div class="qty">×${n}${reservedCount(id) ? `<span class="lock-badge" title="สวมใส่อยู่ ${reservedCount(id)} ชิ้น">🔒${reservedCount(id)}</span>` : ""}</div>
+        <div class="qty">×${n}${reservedCount(id) ? `<span class="lock-badge" title="${T("สวมใส่อยู่")} ${reservedCount(id)} ${T("ชิ้น")}">🔒${reservedCount(id)}</span>` : ""}</div>
         <button class="btn small" data-sell="${id}">${T("ขาย")}</button>
       </div>`;
     el.querySelector("[data-sell]").onclick = () => openSellDialog(id);

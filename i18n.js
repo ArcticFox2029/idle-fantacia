@@ -1148,6 +1148,17 @@ const I18N = (() => {
     "เข้าใจแล้ว": "Got it", "เสร็จ": "Done", "ปิด": "Close", "ยกเลิก": "Cancel",
     "ขาย": "Sell", "ว่าง": "Empty",
 
+    /* ---- the bag ----
+     * 🐛 [audit-qa 2026-08-28] The inventory panel is not one of the eleven views the
+     * untranslated-Thai ratchet in smoke_render measures, so it sat at 303 Thai characters in
+     * English mode while the total read zero. Measured, not guessed. */
+    "หมวดใหม่": "New category", "ทั้งหมด": "All", "หมวดนี้ยังว่าง": "This category is empty",
+    "ยังไม่มีของ — เริ่มเก็บวัตถุดิบกันเลย": "Nothing here yet — go and gather something",
+    "ขายขยะทั้งหมด": "Sell all junk", "อัตโนมัติ": "Automatic", "ไม่จัดหมวด": "Uncategorised",
+    "สวมใส่อยู่": "equipped", "ฟื้น": "heals",
+    "ตั้งชื่อหมวดใหม่ (เช่น ของขาย / เก็บไว้คราฟต์)":
+      "Name the new category (e.g. To sell / Keep for crafting)",
+
     /* ---- titles ---- */
     "คนแปลกหน้าจากนอกป่า": "Stranger from Beyond the Wood",
     "ผู้มาใหม่แห่งมิธวูด": "Newcomer of Mythwood",
