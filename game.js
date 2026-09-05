@@ -8512,8 +8512,31 @@ function renderGuildIntake(grid) {
   head.innerHTML = `<div class="detail">
     ผู้สมัครรอบใหม่มาทุก ${GUILD_APPLICANT_DAYS} วันในเกม · เตียงว่าง ${Math.max(0, t.beds - g.roster.length)} เตียง<br>
     ทุกคนเข้ามาที่ขั้น F เหมือนกันหมด — สิ่งที่ต้องตัดสินใจคือ<b>${T("รับกี่คน")}</b> ไม่ใช่รับใคร
-    เพราะทุกปากที่รับเข้ามากินค่าอาหารทุกวัน ตั้งแต่วันแรกที่ยังหาเงินไม่ได้</div>`;
+    เพราะทุกปากที่รับเข้ามากินค่าอาหารทุกวัน ตั้งแต่วันแรกที่ยังหาเงินไม่ได้</div>
+    <div class="cd-actions"><button class="farm-btn" data-gapp-refresh>
+      🔄 ${T("ประกาศรับใหม่")} · ${GUILD_REROLL_COST.toLocaleString()} 💰</button></div>`;
   grid.appendChild(head);
+  /* 🎯 [owner 2026-09-05] "rank f กด รีเฟรช ได้เหมือน พนักงาน ว่าจะรับใครเพิ่มบ้าง มีให้สุ่มเรื่อยๆ"
+   *
+   * The intake used to arrive on a 30-day clock and nothing else, so a player who took everyone on
+   * the board sat looking at an empty tab for a game-month with beds free and no way to act.
+   *
+   * It costs money, and that is the whole design of the button. Recruits are deliberately identical
+   * — the note above `guildRefreshApplicants` says per-person rolls would make rerolling the real
+   * game — so a reroll buys COUNT and NAMES, never a better hunter. Free, it would be a button you
+   * mash until the roll is 10; priced, it is "I have beds and money, bring me more mouths", which is
+   * the decision this tab is about. */
+  const refresh = head.querySelector("[data-gapp-refresh]");
+  if (refresh) {
+    refresh.disabled = P.gold < GUILD_REROLL_COST;
+    refresh.onclick = () => {
+      if (P.gold < GUILD_REROLL_COST) { toast("เงินไม่พอ", "warn"); return; }
+      P.gold -= GUILD_REROLL_COST;
+      guildRefreshApplicants(true);
+      toast(`ประกาศรับใหม่ — มีผู้สมัคร ${(P.guild.applicants || []).length} คน`, "good");
+      save(); renderGuild();
+    };
+  }
   for (const a of g.applicants || []) {
     const c = document.createElement("div");
     c.className = "action-card";

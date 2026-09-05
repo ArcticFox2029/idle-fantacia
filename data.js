@@ -2829,7 +2829,12 @@ function findLocation(locId) { return LOCATIONS.find((l) => l.id === locId); }
 const GUILD_TIERS = [
   { id: 1, name: "โรงเรียนล่าเล็ก",   cost:  2500000, beds:  8, squads: 1, zones: 4, upkeepMult: 1.00, fixed:  600 },
   { id: 2, name: "สถาบันประจำเมือง",  cost: 12000000, beds: 16, squads: 2, zones: 6, upkeepMult: 0.92, fixed: 3000 },
-  { id: 3, name: "สำนักนักล่าใหญ่",    cost: 40000000, beds: 26, squads: 3, zones: 8, upkeepMult: 0.85, fixed: 9000 },
+  /* 🎯 [owner 2026-09-05] 26 beds and 3 squads -> 50 and 10. He had 25 people and room for three
+   * teams of five: fifteen seats for twenty-five hunters, so ten of them were paid to sit at home
+   * eating. The top tier is the end of the line, and at the end of the line the building should
+   * hold the school you actually built — ten teams of five is fifty, and the beds match it exactly
+   * rather than leaving a remainder nobody can field. */
+  { id: 3, name: "สำนักนักล่าใหญ่",    cost: 40000000, beds: 50, squads: 10, zones: 8, upkeepMult: 0.85, fixed: 9000 },
 ];
 
 /* Rank is what a trainee becomes, and it is the only thing that raises their power. Wage is per
@@ -2924,6 +2929,10 @@ function guildBounty(stage) { return Math.max(1, Math.round(GUILD_BOUNTY * guild
  * items are the real ones; only how many arrive is bounded. */
 const GUILD_LOOT_SHARE = 0.45;
 const GUILD_SQUAD_MAX = 5;
+/* What one "ประกาศรับใหม่" costs. Recruits are identical by design, so a reroll buys how MANY and
+ * what they are called, never a better hunter — priced so it is a decision rather than a button to
+ * mash until the roll comes up ten. Roughly a day of upkeep for a full top-tier school. */
+const GUILD_REROLL_COST = 15000;
 /* Power needed to clear a target comfortably. Calibrated against the squads that should be facing
  * it, not guessed: a four-strong squad of F handles the meadow, of C the volcano, of S the rift —
  * which is what makes rank the thing you buy and the target list the thing you read. */
