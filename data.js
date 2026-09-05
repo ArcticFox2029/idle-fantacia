@@ -1417,8 +1417,15 @@ const REL_BONUS = {
 /* 🎯 [owner 2026-08-22] 3% → 1%. A game-day is 100 real seconds, so 3% filled the household's
  * four slots in under half an hour of play — children arrived faster than any of them could
  * grow up, which made the growing-up the player was meant to watch invisible. At 1% the wait
- * between births is roughly the time a child needs to reach adulthood. */
-const CHILD_BIRTH_CHANCE = 0.01;      // per game-day, only while married
+ * between births is roughly the time a child needs to reach adulthood.
+ *
+ * 🎯 [owner 2026-09-05] 1% → 10%. What made 3% wrong in August no longer applies the same way:
+ * the one-child-per-partner-per-YEAR rule went in afterwards, and that rule, not this chance, is
+ * what now spaces births out. This number only decides how long a partner waits once she is
+ * eligible again — a median of about 7 game-days at 10%, against ~69 at 1% — so raising it stops
+ * an eligible partner sitting idle for most of the year she is allowed a child in. The household
+ * cap and the yearly rule are untouched, so the total children per rebirth does not move. */
+const CHILD_BIRTH_CHANCE = 0.10;      // per game-day, only while married
 const CHILD_STAT_DIVISOR = 2;         // a child starts at half of what we were when they were born
 /* 🎯 [owner 2026-08-22: "ภรรยา + ลูก ตามจำนวน ... ดึงเงินจากกระเป๋าระบบเดียวกัน แต่ของภรรยากับลูกดึงทุกวัน"]
  * A household costs money every game-day. Before this, marriage and children were pure bonus with
@@ -2295,7 +2302,7 @@ const COMPANIES = [
 
 
 /* ---------- Your own shops ----------
- * Every number here was tuned in game/shop_sim.mjs before a line of this shipped, because six
+ * Every number here was tuned in idle-fantacia/shop_sim.mjs before a line of this shipped, because six
  * interacting variables (headcount per role, wage ratio, hidden traits, loyalty, reputation,
  * season) cannot be balanced by reading code. Change a value here and re-run that file.
  *
@@ -2803,7 +2810,7 @@ function findLocation(locId) { return LOCATIONS.find((l) => l.id === locId); }
 // ACHIEVEMENTS.push(...MONSTER_ACHIEVEMENTS);   ← replaced by SLAYER_TIERS, see migrate v28→v29
 
 /* ---------- 🏹 สถาบันฮันเตอร์ (Hunter Guild) ----------
- * เจ้าของเสนอ 2026-08-17 · ดีไซน์เต็มอยู่ใน game/HUNTER_GUILD.md
+ * เจ้าของเสนอ 2026-08-17 · ดีไซน์เต็มอยู่ใน idle-fantacia/HUNTER_GUILD.md
  *
  * The late-game money sink: you build a school, take in trainees, feed and arm and train them, and
  * send squads out to hunt named monsters while you are doing something else. It pays in materials

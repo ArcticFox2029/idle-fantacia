@@ -25,7 +25,7 @@ const SLOT_KEY = (n) => `idlemyth_profile_${n}`;
 /* ---------- Where saves live ----------
  * Two backends, chosen once at boot:
  *
- *   "server" — server.py is running, so saves are files in game/saves/. This is the good case:
+ *   "server" — server.py is running, so saves are files in idle-fantacia/saves/. This is the good case:
  *              the folder can be backed up, copied between machines and inspected, and nothing
  *              depends on the browser's willingness to store anything. It is also what makes the
  *              game work in Brave, which refuses page storage outright on a file:// page.
@@ -113,7 +113,7 @@ async function initStorage() {
       /* Newest art mtime, appended to every image URL below. Boot awaits this before the first
        * render, so no picture is ever requested without the stamp the server just gave us. */
       if (info?.art) ART_STAMP = String(info.art);
-      console.log("[save] เก็บลงโฟลเดอร์:", info?.saveDir || "game/saves/");
+      console.log("[save] เก็บลงโฟลเดอร์:", info?.saveDir || "idle-fantacia/saves/");
       await adoptBrowserSaves();
       return;
     }
@@ -923,7 +923,7 @@ function storageWorks() {
 
 /* ---------- Watching the save folder ----------
  * 🎯 [added 2026-08-17, owner: "มันยังไม่ reload ให้ อยากให้มันวิ่งไป call เอง"] Once a save is a
- * FILE, the obvious way to restore one is to drop it into game/saves/ — but the profile screen
+ * FILE, the obvious way to restore one is to drop it into idle-fantacia/saves/ — but the profile screen
  * had already read the folder at boot and had no reason to look again, so a file copied in sat
  * there invisible until a manual refresh.
  *
@@ -989,7 +989,7 @@ function deleteSlot(n) {
   if (saveBackend === "server") {
     delete slotCache[n];
     // The server keeps a timestamped copy before unlinking, so a mis-click is recoverable
-    // from game/saves/backups/ rather than gone.
+    // from idle-fantacia/saves/backups/ rather than gone.
     fetch(`api/save/${n}`, { method: "DELETE" })
       .catch((e) => toast(`ลบไฟล์เซฟบนดิสก์ไม่สำเร็จ: ${e.message}`, "warn"));
     return;
@@ -2699,7 +2699,7 @@ function renderProfiles() {
       const viaFile = String(location.protocol) === "file:";
       warn.innerHTML = `🚨 <b>เบราว์เซอร์นี้ไม่ยอมให้เกมเก็บเซฟ — เล่นไปก็จะหายหมด</b><br>
         วิธีที่ตรงที่สุดคือเสิร์ฟโฟลเดอร์นี้ด้วย <code>python3 -m http.server</code>
-        แล้วเซฟจะไปอยู่ในโฟลเดอร์ <code>game/saves/</code> แทน ไม่ต้องพึ่งเบราว์เซอร์เลย<br><br>
+        แล้วเซฟจะไปอยู่ในโฟลเดอร์ <code>idle-fantacia/saves/</code> แทน ไม่ต้องพึ่งเบราว์เซอร์เลย<br><br>
         สาเหตุที่ระบบแจ้งกลับมา: <code>${escapeHtml(storageError || "ไม่ทราบ")}</code><br><br>
         ${viaFile
           ? `ตอนนี้เปิดจากไฟล์ตรง ๆ (<code>file://</code>) ซึ่งเบราว์เซอร์หลายตัวบล็อกที่เก็บข้อมูล<br>
@@ -2763,15 +2763,15 @@ function renderProfiles() {
     where.classList.toggle("is-warn", saveBackend !== "server");
     // 🐛 [fixed 2026-08-18] This used to `return` here, which skipped every handler-attachment
     // call below (data-create/data-play/data-import/...) entirely. On a genuinely empty
-    // game/saves/ — a brand-new install before the first-ever profile, or any time both slots
+    // idle-fantacia/saves/ — a brand-new install before the first-ever profile, or any time both slots
     // are wiped for a fresh restart — !anySave is true, so this branch ran and every button on
     // the profile screen was silently dead: "สร้างโปรไฟล์" did nothing, forever, with no error.
     if (saveBackend === "server" && !anySave) {
-      where.innerHTML = `📁 ยังไม่มีไฟล์เซฟใน <code>game/saves/</code><br>
+      where.innerHTML = `📁 ยังไม่มีไฟล์เซฟใน <code>idle-fantacia/saves/</code><br>
         <span class="dim">ถ้าเคยเล่นค้างไว้แล้วไม่เห็นตรงนี้ แปลว่าเซฟนั้นอยู่ในเบราว์เซอร์ของ
         <b>${T("ที่อยู่อื่น")}</b> — เซฟผูกกับที่อยู่ที่เปิด และหน้านี้อ่านข้ามที่อยู่ไม่ได้<br>
-        ให้เปิดเกมแบบเดิมที่เคยเล่น (ดับเบิลคลิก <code>game/index.html</code>) ในเบราว์เซอร์ตัวเดิม
-        กด <b>⬇️ ส่งออกเซฟ</b> แล้วก๊อปไฟล์นั้นมาวางใน <code>game/saves/</code> —
+        ให้เปิดเกมแบบเดิมที่เคยเล่น (ดับเบิลคลิก <code>idle-fantacia/index.html</code>) ในเบราว์เซอร์ตัวเดิม
+        กด <b>⬇️ ส่งออกเซฟ</b> แล้วก๊อปไฟล์นั้นมาวางใน <code>idle-fantacia/saves/</code> —
         ชื่อไฟล์อะไรก็ได้ เดี๋ยวระบบรับเข้าช่องให้เอง</span>`;
     } else if (saveBackend !== "server") {
       where.innerHTML = `⚠️ <b>${T("เซฟอยู่ในเบราว์เซอร์นี้เท่านั้น")}</b> — ${
@@ -2780,9 +2780,9 @@ function renderProfiles() {
         ${T("ก่อนย้าย ให้กด")} <b>⬇️ ${T("ส่งออกเซฟ")}</b> ${T("เก็บไฟล์ไว้ แล้วใช้")}
         <b>⬆️ ${T("นำเข้าไฟล์เซฟ")}</b> ${T("ที่เครื่องใหม่")}</span>`;
     } else if (saveBackend === "server") {
-      where.innerHTML = `📁 เซฟเก็บเป็นไฟล์ใน <code>game/saves/</code> — คัดลอก สำรอง หรือย้ายเครื่องได้เหมือนไฟล์ทั่วไป
+      where.innerHTML = `📁 เซฟเก็บเป็นไฟล์ใน <code>idle-fantacia/saves/</code> — คัดลอก สำรอง หรือย้ายเครื่องได้เหมือนไฟล์ทั่วไป
         <span class="dim">(สำรองอัตโนมัติทุกครั้งที่เขียนทับ เก็บไว้ใน <code>saves/backups/</code>)</span><br>
-        <span class="dim">${T("จะนำเข้าด้วยปุ่มก็ได้ หรือก๊อปไฟล์ไปวางเป็น ")}<code>game/saves/slot1.json</code>
+        <span class="dim">${T("จะนำเข้าด้วยปุ่มก็ได้ หรือก๊อปไฟล์ไปวางเป็น ")}<code>idle-fantacia/saves/slot1.json</code>
         แล้วรีเฟรชหน้านี้ก็ได้เหมือนกัน</span>`;
     }
   }
@@ -3610,7 +3610,7 @@ function rollPetDrop(loc, stage) {
 }
 
 /* ---------- 🧬 ผสมพันธุ์ (pet fusion) ----------
- * Design and balance: game/pet_fusion_sim.mjs (15 checks) — this is the same arithmetic wired to a
+ * Design and balance: idle-fantacia/pet_fusion_sim.mjs (15 checks) — this is the same arithmetic wired to a
  * profile and a screen; if the two ever disagree, the sim is right.
  *
  * Two same-grade companions merge into one. There is a chance to move up one quality grade; on a
@@ -3974,7 +3974,7 @@ function onNewYear(date) {
 
 
 /* ---------- 🏹 สถาบันฮันเตอร์ (Hunter Guild) ----------
- * Design note: game/HUNTER_GUILD.md. Model and balance: game/guild_sim.mjs (38 checks), which owns
+ * Design note: idle-fantacia/HUNTER_GUILD.md. Model and balance: idle-fantacia/guild_sim.mjs (38 checks), which owns
  * every number below — if this file and the sim ever disagree, the sim is right.
  *
  * What it is: the late-game money sink that pays back like a house. You buy a school, take in
@@ -4316,7 +4316,7 @@ function guildSetAutoRepeat(squadIdx, on) {
 }
 
 /* ---------- Your own shops ----------
- * The whole model lives in game/shop_sim.mjs, which tunes and asserts it (56 checks). This is the
+ * The whole model lives in idle-fantacia/shop_sim.mjs, which tunes and asserts it (56 checks). This is the
  * same arithmetic wired to a profile and a screen; if the two ever disagree, the sim is right.
  *
  * One game-day of a shop, in order: hunters produce raw, crafters convert it, customers arrive
@@ -4596,7 +4596,13 @@ function rebirthConfirmMessage(pv) {
   const cash = Math.floor(P.gold || 0);
   const atRisk = cash > 0 ? `\n\n⚠️ จะหายไปทันที: ทองในมือ ${fmtNum(cash)} — ฝากธนาคารก่อนจะเก็บไว้ได้ทั้งหมด` : "";
   const kg = karmaGainFor(combatLevel(), P.rebirths || 0);
-  return `ยืนยันการจุติ?\n\n${after}${pets}${atRisk}`
+  /* 🎯 [owner 2026-08-30] Now that the year in progress is assessed on the way out, the player has
+   * to be told BEFORE the click — a bill that appears in a new life unannounced reads as a bug,
+   * which is precisely how the opposite behaviour was reported. */
+  const owed = taxOwedTotal() + taxAccruedTotal();
+  const tax = owed > 0
+    ? `\n\n🧾 ภาษีค้าง ${fmtNum(owed)} จะตามไปชาติหน้า — จุติหนีภาษีไม่ได้` : "";
+  return `ยืนยันการจุติ?\n\n${after}${pets}${atRisk}${tax}`
     + `\n\n🌀 ได้บุญ +${(kg.xp * 100).toFixed(1)}% XP · +${(kg.gold * 100).toFixed(1)}% ทอง`
     + ` (จากเลเวลรวม ${combatLevel()})`
     + `\n\nติดตัวไปแน่นอน: ความสำเร็จ · ของในกระเป๋า · เลเวลอาชีพทุกสาย · หุ้น · ร้านค้า · อสังหา · กิลด์`
@@ -4647,6 +4653,19 @@ function doRebirth() {
    * outrun a tax bill: the bills follow you, because the wealth that raised them does. */
   const lostGold = Math.max(0, Math.floor(P.gold || 0));
   P.gold = Math.min(0, P.gold || 0);
+  /* 🐛 [owner 2026-08-30: "ถ้ามีภาษีค้าง แล้วจุติ หนี้ภาษีหาย มันไม่ควรโดนล้าง"] Measured on his own
+   * save: ~12,000 accrued, gone the moment he rebirthed. The note below was true about BILLS and
+   * blind to the year in progress — "ปีนี้สะสมถึงวันนี้" on the tax page is taxAccruedTotal(), which
+   * is DERIVED from yearProfit and yearRent, so zeroing those two counters erased the liability
+   * itself rather than carrying it. That is exactly the escape hatch he closed in August
+   * ("จุติหนีภาษีไม่ได้") reopened by a different door.
+   *
+   * So the life that is ending is assessed on its way out, the same way a year end assesses: what
+   * it accrued becomes a real dated bill, and only THEN do the counters reset. The new life starts
+   * on zero without the old one going untaxed, and nothing is charged twice. Runs before the clock
+   * shift on purpose — the bill is dated in the calendar that raised it, and re-anchored with every
+   * other absolute day below. */
+  assessTaxOnRebirth();
   /* 🎯 [owner 2026-08-17] "เพิ่งกด จุติ เวลาควรเริ่มต้นใหม่ แต่ หากดอกยังฝากอยู่ มันต้องเดินต่อได้."
    * A new life gets its own calendar — year 1, day 1 — but every value that stored an ABSOLUTE day
    * has to be re-anchored against the new zero or it breaks quietly. Left alone, the bank would
@@ -4660,6 +4679,20 @@ function doRebirth() {
   if (P.bank) P.bank.sinceDay = 0;
   /* Elapsed grace is preserved deliberately: rebirth must not be a way to buy three fresh months. */
   if (P.tax?.debtSinceDay != null) P.tax.debtSinceDay -= clockShift;
+  /* 🐛 [same report] debtSinceDay was re-anchored and `assessedDay` was not — and assessedDay is
+   * the one the current tax system actually reads. taxOverdueDays() is `floor(P.gameDays) -
+   * assessedDay`, so a rebirth dropped gameDays to 0 and handed every unpaid bill a large NEGATIVE
+   * age: no late interest, no seizure at 30 days, no game over at 90, for as many days as the old
+   * life had lasted. The line above says elapsed grace is preserved deliberately; this is what
+   * makes that true of the bills as well as of the legacy counter.
+   * Shifted by the FLOOR of clockShift rather than by clockShift itself, which is not a rounding
+   * detail: assessedDay is an integer day and the tax card counts against it with
+   * `Math.floor(P.gameDays) - b.assessedDay`. Subtracting the fractional live clock would leave
+   * every carried bill reporting "ค้างมา 0.4 วัน" for the rest of the run — and because P.gameDays
+   * is exactly clockShift at this point, the floor preserves the bill's age to the day. */
+  const dayShift = Math.floor(clockShift);
+  for (const b of P.tax?.bills || []) b.assessedDay -= dayShift;
+  if (P.tax?.seizeNotedDay != null) P.tax.seizeNotedDay -= dayShift;
 
     /* 🐛 [owner 2026-08-22: "ภารกิจ 3 ตัวล่าง cool down นาน ไม่ยอมเปลี่ยนภารกิจให้"] Quests expire by
      * absolute day — `until = day + QUEST_DAYS` — and the calendar restarting at 0 left every board
@@ -4680,8 +4713,11 @@ function doRebirth() {
    * exists — and the next year-end would bill it against the savings, which is the one thing
    * rebirth lets you keep. The gold and shares that profit was made on are confiscated a few lines
    * below; taxing their gains afterwards charges twice for the same run. New calendar, new ledger.
-   * A debt already owed is NOT cleared — that is the grace period above, and it still stands. */
-  if (P.tax) { P.tax.yearProfit = 0; P.tax.lastBill = null; }
+   * A debt already owed is NOT cleared — that is the grace period above, and it still stands.
+   *
+   * The reset itself moved into assessTaxOnRebirth() at the top of this function: the counters may
+   * only be cleared once what they owe has been written down as a bill, and doing both in one place
+   * is what stops the two halves drifting apart again. */
   if (P.bank) P.bank.yearInterest = 0;   // the year it belonged to no longer exists
   /* Staff keep the seniority and loyalty they earned — the business did not start over. */
   for (const sh of P.shops || []) for (const w of sh.staff || []) w.hiredDay -= clockShift;
@@ -5261,6 +5297,60 @@ function payTaxAccrued(kindId, amount) {
   return paid;
 }
 
+/* One id per bill, and never two the same.
+ *
+ * settleTaxYear used to name a bill `${kind}-${year}` outright, which is unique only while there is
+ * one calendar. A rebirth restarts the calendar, so a second life reaching the same year would raise
+ * a bill with an id an unpaid one already had — and payTaxBill finds by id with `.find()`, so the
+ * older bill would have been unpayable and the newer one invisible to every payment. The rebirth
+ * assessment below makes that reachable, so the naming is closed here rather than worked around. */
+function taxBillId(kindId, year) {
+  const bills = P.tax?.bills || [];
+  const base = (P.rebirths || 0) > 0 ? `${kindId}-${year}-r${P.rebirths}` : `${kindId}-${year}`;
+  let id = base;
+  for (let n = 2; bills.some((b) => b.id === id); n++) id = `${base}-${n}`;
+  return id;
+}
+
+/* 🎯 [owner 2026-08-30] "ถ้ามีภาษีค้าง แล้วจุติ หนี้ภาษีหาย มันไม่ควรโดนล้าง"
+ *
+ * A rebirth ends the tax year early. Everything the life just lived has accrued — taxAccruedFor is
+ * `ladder(base) - prepaid`, on year-to-date income that only ever grows — and it is assessed here
+ * exactly as a year end would assess it, then the counters are reset so the new life starts clean.
+ *
+ * Both halves matter and neither works alone. Assessing without resetting would tax the previous
+ * life's earnings a second time at the new year's end; resetting without assessing is the bug this
+ * fixes. It is deliberately NOT collected the way collectAssessedTax does at a year end: the pocket
+ * gold is confiscated a few lines earlier anyway, and the whole design of this system is that a
+ * bill is settled by hand ("ประเมินปีละครั้ง · ชำระเอง"). The new life gets the same thirty clear
+ * days every other bill gets, and the same teeth after them. */
+function assessTaxOnRebirth() {
+  if (!P.tax) return;
+  P.tax.bills = P.tax.bills || [];
+  const year = today().year;
+  const raised = [];
+  let total = 0;
+  for (const k of TAX_KINDS) {
+    const amount = taxAccruedFor(k.id);
+    if (amount <= 0) continue;
+    P.tax.bills.push({ id: taxBillId(k.id, year), kind: k.id, year, base: taxBaseFor(k.id),
+                       amount, paid: 0, assessedDay: Math.floor(P.gameDays), pastLife: true });
+    raised.push(`${k.icon} ${amount.toLocaleString()}`);
+    total += amount;
+  }
+  /* Reset AFTER the assessment, never before — these three are what the figure above is derived
+   * from, so clearing them first is the same as forgiving the bill. */
+  P.tax.yearProfit = 0;
+  P.tax.yearRent = 0;
+  P.tax.prepaid = {};
+  P.tax.accrued = {};
+  P.tax.lastBill = total > 0 ? { year, profit: 0, bill: total, pastLife: true } : null;
+  if (total > 0) {
+    toast(`🧾 ประเมินภาษีค้างของชาติก่อน ${total.toLocaleString()} — ${raised.join(" · ")}`
+          + ` · ตามมาด้วย ต้องชำระภายใน ${TAX_FATAL_DAYS} วัน`, "warn");
+  }
+}
+
 function settleTaxYear(date) {
   /* 🎯 [owner 2026-08-17] The year end ASSESSES; it no longer collects. Three bills are raised —
    * on what you hold, on what you made, and on what you own — and they sit on the tax page until
@@ -5283,7 +5373,7 @@ function settleTaxYear(date) {
     const full = taxOwedFor(k.id, base);
     const amount = Math.max(0, full - taxPrepaid(k.id));
     if (amount <= 0) continue;
-    P.tax.bills.push({ id: `${k.id}-${year}`, kind: k.id, year, base, amount, paid: 0,
+    P.tax.bills.push({ id: taxBillId(k.id, year), kind: k.id, year, base, amount, paid: 0,
                        assessedDay: Math.floor(P.gameDays) });
     raised.push(`${k.icon} ${amount.toLocaleString()}`);
   }
@@ -9281,7 +9371,8 @@ function renderTax() {
       const card = document.createElement("div");
       card.className = "action-card" + (late >= TAX_SEIZE_DAYS ? " dead-card" : "");
       card.innerHTML = `
-        <div class="head"><div class="name">${k.icon} ${k.name} · ปีที่ ${b.year}</div>
+        <div class="head"><div class="name">${k.icon} ${k.name} · ปีที่ ${b.year}${
+          b.pastLife ? " (ชาติก่อน)" : ""}</div>
           <div class="req ${late >= TAX_SEIZE_DAYS ? "bad" : ""}">${fmtNum(b.amount - b.paid)}</div></div>
         <div class="detail">ประเมินจาก ${fmtNum(b.base)} (${escapeHtml(k.what)})
           ${b.paid ? `<br>จ่ายไปแล้ว ${fmtNum(b.paid)} จาก ${fmtNum(b.amount)}` : ""}
@@ -9759,7 +9850,7 @@ function renderPetPanel(extra) {
 
   /* 🎯 [owner 2026-08-18] "เพิ่มระบบผสมพันธุ์ รวมร่าง" — a mode, not a page: picking a pair replaces
    * the usual per-pet buttons with one selection toggle, so nothing else can be clicked by accident
-   * mid-pick. Model: game/pet_fusion_sim.mjs. */
+   * mid-pick. Model: idle-fantacia/pet_fusion_sim.mjs. */
   const pickedGrade = petFusePick.length ? petStats(P.pets[petFusePick[0]]).grade.cls : null;
   panel.innerHTML = summary + (P.pets.length ? `
     ${P.pets.length >= 2 ? `
