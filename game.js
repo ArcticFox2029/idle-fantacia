@@ -8586,7 +8586,37 @@ function renderShops() {
 
   if (!P.shops?.length) { renderShopOpening(grid, extra); return; }
   if (shopTab >= P.shops.length) shopTab = 0;
-  const sh = P.shops[shopTab];
+  /* 🐛 [owner 2026-09-05: "พอจะเปิดร้านใหม่ เมนูมันไม่ขึ้นมา"] The "＋ เปิดร้านใหม่" button sets
+     shopTab = -1 and re-renders. The clamp above only catches an index that is too HIGH, so -1
+     survived it, `P.shops[-1]` was undefined, and `shopType(sh.type)` threw one line later — 33
+     lines before the `if (shopTab < 0)` branch written to handle exactly this. The whole panel
+     rendered nothing: no summary, no shop tabs, no opening form, and no error the player could see.
+
+     The sentinel is checked where it is SET rather than where it was eventually read. A negative
+     index is not an out-of-range shop, it is "no shop selected". The shop bar is built FIRST now,
+     so the opening form still comes with a way back to the shop you already own — losing that was
+     the first fix's own cost, and a screen with no way out is a second bug rather than a fix. */
+  const sh = shopTab >= 0 ? P.shops[shopTab] : null;
+
+  {
+    const bar = document.createElement("div");
+    bar.className = "area-tabs";
+    bar.innerHTML = P.shops.map((x, i) => {
+      const xt = shopType(x.type);
+      return `<button class="area-tab${i === shopTab ? " active" : ""}" data-shoptab="${i}">
+        <span style="color:#7cc47f">◆</span> ${xt.icon} ${xt.name}
+        <span class="area-count">${SHOP_TIERS[x.tier].name}</span></button>`;
+    }).join("") + `<button class="area-tab" data-newshop>＋ ${T("เปิดร้านใหม่")}</button>`;
+    extra.appendChild(bar);
+    bar.querySelectorAll("[data-shoptab]").forEach((b) => b.onclick = () => {
+      shopTab = Number(b.dataset.shoptab); renderShops();
+    });
+    bar.querySelector("[data-newshop]").onclick = () => { shopTab = -1; renderShops(); };
+  }
+
+  // Answered after the bar is on screen and before anything reads `sh`, so the opening form keeps
+  // a way back to the shop you already own.
+  if (shopTab < 0) { renderShopOpening(grid, extra); return; }
   const t = shopType(sh.type);
   const tier = shopTier(sh);
 
@@ -8603,22 +8633,7 @@ function renderShops() {
     <div class="money-stat"><span>${T("พนักงาน")}</span><b>${sh.staff.length}/${tier.slots}</b></div>`;
   extra.appendChild(summary);
 
-  if (P.shops.length > 1 || SHOP_TIERS[sh.tier + 1] || true) {
-    const bar = document.createElement("div");
-    bar.className = "area-tabs";
-    bar.innerHTML = P.shops.map((x, i) => {
-      const xt = shopType(x.type);
-      return `<button class="area-tab${i === shopTab ? " active" : ""}" data-shoptab="${i}">
-        <span style="color:#7cc47f">◆</span> ${xt.icon} ${xt.name}
-        <span class="area-count">${SHOP_TIERS[x.tier].name}</span></button>`;
-    }).join("") + `<button class="area-tab" data-newshop>＋ ${T("เปิดร้านใหม่")}</button>`;
-    extra.appendChild(bar);
-    bar.querySelectorAll("[data-shoptab]").forEach((b) => b.onclick = () => {
-      shopTab = Number(b.dataset.shoptab); renderShops();
-    });
-    bar.querySelector("[data-newshop]").onclick = () => { shopTab = -1; renderShops(); };
-  }
-  if (shopTab < 0) { renderShopOpening(grid, extra); return; }
+
 
   const panels = document.createElement("div");
   panels.className = "area-tabs";
