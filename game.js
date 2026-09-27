@@ -153,9 +153,17 @@ async function adoptBrowserSaves() {
   toast(`📥 ย้ายเซฟจากเบราว์เซอร์มาเก็บเป็นไฟล์แล้ว: ${moved.join(", ")}`, "levelup");
 }
 
+// n -> setTimeout id of a scheduled retry, so at most one pending retry per slot ever exists.
+const pendingRetries = {};
+
+function cancelPendingRetry(n) {
+  if (pendingRetries[n]) { clearTimeout(pendingRetries[n]); delete pendingRetries[n]; }
+}
+
 /* Push one slot to disk. Deliberately not awaited by the caller: a save must feel instant, and
- * the cache is already correct by the time this starts. */
-function pushSlot(n, raw) {
+ * the cache is already correct by the time this starts.
+ * `attempt` counts retries of a network failure only (0 = the original call). */
+function pushSlot(n, raw, attempt = 0) {
   pendingWrites++;
   fetch(`api/save/${n}`, {
     method: "PUT",
@@ -165,9 +173,26 @@ function pushSlot(n, raw) {
     if (!r.ok) {
       const msg = await r.json().catch(() => ({}));
       toast(`💾❌ เขียนไฟล์เซฟไม่สำเร็จ: ${msg.error || r.status}`, "warn");
+      return;   // a server-side error response is not retried
     }
+    // Any successful push makes an outstanding retry for this slot stale — drop it.
+    cancelPendingRetry(n);
+    if (attempt > 0) toast("💾✅ เซฟสำเร็จหลังลองใหม่", "levelup");
   }).catch((e) => {
     toast(`💾❌ ติดต่อตัวเก็บเซฟไม่ได้: ${e.message} — ข้อมูลยังอยู่ในหน้านี้ อย่าเพิ่งปิด`, "warn");
+    /* 🐛 (R178, 2026-09-27) A network failure used to give up silently until the next autosave
+     * (10 min). Retry at most twice, backing off 15s then 60s, and resend `slotCache[n]` — the
+     * slot's state at retry time — rather than this closed-over `raw`, which may be stale by
+     * then. cancelPendingRetry keeps this to one timer per slot: a fresh failure here replaces
+     * any earlier one, and a successful push (above, or a normal autosave) cancels it outright. */
+    if (attempt < 2) {
+      cancelPendingRetry(n);
+      const delayMs = attempt === 0 ? 15000 : 60000;
+      pendingRetries[n] = setTimeout(() => {
+        delete pendingRetries[n];
+        pushSlot(n, slotCache[n], attempt + 1);
+      }, delayMs);
+    }
   }).finally(() => { pendingWrites--; });
 }
 
@@ -3249,6 +3274,12 @@ document.addEventListener("visibilitychange", () => {
   // returning has to ask again. Without this the screen keeps its own idle timer after the first
   // app switch and the setting silently stops working.
   refreshWakeLock();
+  /* 🐛 (R219, 2026-09-27) Backgrounding a phone can leave the AudioContext suspended/interrupted
+   * well past the next foreground, since only a user gesture used to call unlock(). Ask again on
+   * return — unlock() itself now swallows a rejected resume (see audio.js). */
+  if (document.visibilityState === "visible" && typeof Audio !== "undefined" && Audio.unlock) {
+    Audio.unlock();
+  }
 });
 
 /* ---------- "Where do I get this?" index ----------

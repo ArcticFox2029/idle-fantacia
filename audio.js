@@ -47,7 +47,10 @@ const Audio = (() => {
 
   function unlock() {
     const c = ensure();
-    if (c && c.state === "suspended") c.resume();
+    // 🐛 (R219, 2026-09-27) Also called on visibilitychange (game.js) to re-arm a context a
+    // backgrounded phone left suspended. Outside a fresh gesture, resume() can still refuse —
+    // that must stay silent, not surface as an unhandled promise rejection.
+    if (c && c.state === "suspended") c.resume().catch(() => {});
   }
 
   /* A single plucked note. `type` picks the timbre; the envelope is what stops it sounding like a
